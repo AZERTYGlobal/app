@@ -1,0 +1,509 @@
+{
+  "layout_name": "AZERTY Global",
+  "version": "2026",
+  "release_date": "2026-01-01",
+  "author": "Antoine OLIVIER",
+  "website": "https://azerty.global",
+  "license": {
+    "name": "European Union Public Licence 1.2",
+    "spdx_id": "EUPL-1.2",
+    "url": "https://eupl.eu/1.2/fr/",
+    "summary": "Licence libre européenne. Usage commercial autorisé. Les modifications doivent être partagées sous licence compatible."
+  },
+  "standard": "ISO/ANSI",
+  "country": "France",
+  "description": "Final version of the AZERTY Global keyboard layout, created by Antoine OLIVIER",
+  "philosophy": {
+    "ambition": "Become the new French AZERTY standard across all operating systems, replacing AZERTY AFNOR within 5 years",
+    "target_audience": [
+      "French-speaking general public and writers needing proper French typography (goal: millions of users)",
+      "Developers needing easy access to programming symbols",
+      "Anyone typing in European languages (foreign residents in France, French speakers learning languages)"
+    ],
+    "design_principles": [
+      "Minimal changes from classic Windows AZERTY: fix flaws without revolution",
+      "Smart Caps Lock that only affects letters, with easy access to É, È, Ç, À",
+      "Programming symbols on AltGr home row ({ } [ ] | \\)",
+      "Full support for French and European languages",
+      "Intuitive placement: no stickers needed, easy to remember",
+      "Sparse AltGr layer to limit Ctrl+Alt conflicts; rare characters via dead keys"
+    ],
+    "not_goals": [
+      "Radical ergonomic optimization (this is not a Bépo or Dvorak)",
+      "Compatibility with the AFNOR NF Z71-300 standard"
+    ]
+  },
+  "changes_from_traditional_azerty": {
+    "Period and semicolon swapped on B08": "Period is more frequent than semicolon",
+    "Smart Caps Lock: only affects letters": "Easy access to É, È, Ç, À without Shift",
+    "Programming symbols on AltGr home row": "{ } [ ] | \\ ` ~ easily accessible for developers",
+    "@ and # on E00": "Copies Mac AZERTY, @ much more accessible for emails",
+    "ù and % moved to place acute and grave accents on C11": "Direct access to very common European accents",
+    "µ, § and ¤ become dead keys for Greek alphabet, punctuation and currency": "Access to many more characters via these dead keys"
+  },
+  "conventions": {
+    "caps_lock_behavior": "Caps Lock only affects keys that produce letters (accented or not)",
+    "caps": "If absent, use the base value (Caps lock does not affect symbols)",
+    "caps_shift": "If absent, use the shift value (Caps lock does not affect symbols)",
+    "caps_alt_gr": "If absent, use the alt_gr value (Caps Lock does not affect symbols)",
+    "caps_shift_alt_gr": "If absent, use the shift_alt_gr value (Caps Lock does not affect symbols)",
+    "null_meaning": "No output for this key combination"
+  },
+  "rows": [
+    {
+      "row_id": 1,
+      "row_name": "Number Row",
+      "keys": [
+        { "position": "E00", "scancode": "SC029", "base": "@",  "shift": "#", "alt_gr": "dk_misc_symbols", "shift_alt_gr": null, "finger": "left_pinky" },
+        { "position": "E01", "scancode": "SC002", "base": "&",  "shift": "1", "alt_gr": "dk_dot_above", "shift_alt_gr": "dk_dot_below", "finger": "left_pinky" },
+        { "position": "E02", "scancode": "SC003", "base": "é",  "shift": "2", "caps": "É", "alt_gr": "dk_double_acute", "shift_alt_gr": "dk_double_grave", "finger": "left_ring" },
+        { "position": "E03", "scancode": "SC004", "base": "\"", "shift": "3", "alt_gr": "dk_horn", "shift_alt_gr": "dk_hook", "finger": "left_middle" },
+        { "position": "E04", "scancode": "SC005", "base": "'",  "shift": "4", "alt_gr": "\u2019", "shift_alt_gr": "\u2018", "finger": "left_index" },
+        { "position": "E05", "scancode": "SC006", "base": "(",  "shift": "5", "alt_gr": "dk_breve", "shift_alt_gr": "dk_inverted_breve", "finger": "left_index" },
+        { "position": "E06", "scancode": "SC007", "base": "-",  "shift": "6", "alt_gr": "\u2011", "shift_alt_gr": "\u00AD", "finger": "right_index" },
+        { "position": "E07", "scancode": "SC008", "base": "è",  "shift": "7", "caps": "È", "alt_gr": "dk_stroke", "shift_alt_gr": "dk_horizontal_stroke", "finger": "right_index" },
+        { "position": "E08", "scancode": "SC009", "base": "_",  "shift": "8", "alt_gr": "dk_macron", "shift_alt_gr": "dk_extended_latin", "finger": "right_middle" },
+        { "position": "E09", "scancode": "SC00A", "base": "ç",  "shift": "9", "caps": "Ç", "alt_gr": "dk_cedilla", "shift_alt_gr": "dk_comma", "finger": "right_ring" },
+        { "position": "E10", "scancode": "SC00B", "base": "à",  "shift": "0", "caps": "À", "alt_gr": "@", "shift_alt_gr": "dk_phonetic", "finger": "right_pinky" },
+        { "position": "E11", "scancode": "SC00C", "base": ")",  "shift": "%", "alt_gr": "°", "shift_alt_gr": "dk_ring_above", "finger": "right_pinky" },
+        { "position": "E12", "scancode": "SC00D", "base": "=",  "shift": "+", "alt_gr": "dk_scientific", "shift_alt_gr": null, "finger": "right_pinky" }
+      ]
+    },
+    {
+      "row_id": 2,
+      "row_name": "Top Letter Row",
+      "keys": [
+        { "position": "D01", "scancode": "SC010", "base": "a", "shift": "A", "caps": "A", "caps_shift": "a", "alt_gr": "æ", "shift_alt_gr": "Æ", "caps_alt_gr": "Æ", "caps_shift_alt_gr": "æ", "finger": "left_pinky" },
+        { "position": "D02", "scancode": "SC011", "base": "z", "shift": "Z", "caps": "Z", "caps_shift": "z", "alt_gr": null, "shift_alt_gr": null, "finger": "left_ring" },
+        { "position": "D03", "scancode": "SC012", "base": "e", "shift": "E", "caps": "E", "caps_shift": "e", "alt_gr": "€", "shift_alt_gr": null, "finger": "left_middle" },
+        { "position": "D04", "scancode": "SC013", "base": "r", "shift": "R", "caps": "R", "caps_shift": "r", "alt_gr": null, "shift_alt_gr": null, "finger": "left_index" },
+        { "position": "D05", "scancode": "SC014", "base": "t", "shift": "T", "caps": "T", "caps_shift": "t", "alt_gr": "\u2013", "shift_alt_gr": "\u2014", "finger": "left_index" },
+        { "position": "D06", "scancode": "SC015", "base": "y", "shift": "Y", "caps": "Y", "caps_shift": "y", "alt_gr": null, "shift_alt_gr": null, "finger": "right_index" },
+        { "position": "D07", "scancode": "SC016", "base": "u", "shift": "U", "caps": "U", "caps_shift": "u", "alt_gr": "ù", "shift_alt_gr": "Ù", "caps_alt_gr": "Ù", "caps_shift_alt_gr": "ù", "finger": "right_index" },
+        { "position": "D08", "scancode": "SC017", "base": "i", "shift": "I", "caps": "I", "caps_shift": "i", "alt_gr": null, "shift_alt_gr": null, "finger": "right_middle" },
+        { "position": "D09", "scancode": "SC018", "base": "o", "shift": "O", "caps": "O", "caps_shift": "o", "alt_gr": "œ", "shift_alt_gr": "Œ", "caps_alt_gr": "Œ", "caps_shift_alt_gr": "œ", "finger": "right_ring" },
+        { "position": "D10", "scancode": "SC019", "base": "p", "shift": "P", "caps": "P", "caps_shift": "p", "alt_gr": null, "shift_alt_gr": null, "finger": "right_pinky" },
+        { "position": "D11", "scancode": "SC01A", "base": "dk_circumflex", "shift": "dk_diaeresis", "alt_gr": "dk_caron", "shift_alt_gr": "dk_ogonek", "finger": "right_pinky" },
+        { "position": "D12", "scancode": "SC01B", "base": "$", "shift": "£", "alt_gr": "¥", "shift_alt_gr": "dk_currencies", "finger": "right_pinky" }
+      ]
+    },
+    {
+      "row_id": 3,
+      "row_name": "Home Row",
+      "keys": [
+        { "position": "C01", "scancode": "SC01E", "base": "q", "shift": "Q", "caps": "Q", "caps_shift": "q", "alt_gr": null, "shift_alt_gr": null, "finger": "left_pinky" },
+        { "position": "C02", "scancode": "SC01F", "base": "s", "shift": "S", "caps": "S", "caps_shift": "s", "alt_gr": null, "shift_alt_gr": null, "finger": "left_ring" },
+        { "position": "C03", "scancode": "SC020", "base": "d", "shift": "D", "caps": "D", "caps_shift": "d", "alt_gr": "{", "shift_alt_gr": null, "finger": "left_middle" },
+        { "position": "C04", "scancode": "SC021", "base": "f", "shift": "F", "caps": "F", "caps_shift": "f", "alt_gr": "}", "shift_alt_gr": null, "finger": "left_index" },
+        { "position": "C05", "scancode": "SC022", "base": "g", "shift": "G", "caps": "G", "caps_shift": "g", "alt_gr": "\\", "shift_alt_gr": null, "finger": "left_index" },
+        { "position": "C06", "scancode": "SC023", "base": "h", "shift": "H", "caps": "H", "caps_shift": "h", "alt_gr": "|", "shift_alt_gr": null, "finger": "right_index" },
+        { "position": "C07", "scancode": "SC024", "base": "j", "shift": "J", "caps": "J", "caps_shift": "j", "alt_gr": "[", "shift_alt_gr": null, "finger": "right_index" },
+        { "position": "C08", "scancode": "SC025", "base": "k", "shift": "K", "caps": "K", "caps_shift": "k", "alt_gr": "]", "shift_alt_gr": null, "finger": "right_middle" },
+        { "position": "C09", "scancode": "SC026", "base": "l", "shift": "L", "caps": "L", "caps_shift": "l", "alt_gr": null, "shift_alt_gr": null, "finger": "right_ring" },
+        { "position": "C10", "scancode": "SC027", "base": "m", "shift": "M", "caps": "M", "caps_shift": "m", "alt_gr": null, "shift_alt_gr": null, "finger": "right_pinky" },
+        { "position": "C11", "scancode": "SC028", "base": "dk_acute", "shift": "dk_grave", "alt_gr": "dk_tilde", "shift_alt_gr": null, "finger": "right_pinky" },
+        { "position": "C12", "scancode": "SC02B", "base": "*", "shift": "dk_greek", "alt_gr": "dk_cyrillic", "shift_alt_gr": null, "finger": "right_pinky" }
+      ]
+    },
+    {
+      "row_id": 4,
+      "row_name": "Bottom Row",
+      "keys": [
+        { "position": "B00", "scancode": "SC056", "base": "<", "shift": ">", "alt_gr": "≤", "shift_alt_gr": "≥", "finger": "left_pinky" },
+        { "position": "B01", "scancode": "SC02C", "base": "w", "shift": "W", "caps": "W", "caps_shift": "w", "alt_gr": "«", "shift_alt_gr": "\u201C", "finger": "left_pinky" },
+        { "position": "B02", "scancode": "SC02D", "base": "x", "shift": "X", "caps": "X", "caps_shift": "x", "alt_gr": "»", "shift_alt_gr": "\u201D", "finger": "left_ring" },
+        { "position": "B03", "scancode": "SC02E", "base": "c", "shift": "C", "caps": "C", "caps_shift": "c", "alt_gr": null, "shift_alt_gr": null, "finger": "left_middle" },
+        { "position": "B04", "scancode": "SC02F", "base": "v", "shift": "V", "caps": "V", "caps_shift": "v", "alt_gr": null, "shift_alt_gr": null, "finger": "left_index" },
+        { "position": "B05", "scancode": "SC030", "base": "b", "shift": "B", "caps": "B", "caps_shift": "b", "alt_gr": "ß", "shift_alt_gr": "ẞ", "caps_alt_gr": "ẞ", "caps_shift_alt_gr": "ß", "finger": "left_index" },
+        { "position": "B06", "scancode": "SC031", "base": "n", "shift": "N", "caps": "N", "caps_shift": "n", "alt_gr": "~", "shift_alt_gr": "\u0060", "finger": "right_index" },
+        { "position": "B07", "scancode": "SC032", "base": ",", "shift": "?", "alt_gr": "<", "shift_alt_gr": "¿", "finger": "right_index" },
+        { "position": "B08", "scancode": "SC033", "base": ".", "shift": ";", "alt_gr": ">", "shift_alt_gr": "·", "finger": "right_middle" },
+        { "position": "B09", "scancode": "SC034", "base": ":", "shift": "/", "alt_gr": null, "shift_alt_gr": null, "finger": "right_ring" },
+        { "position": "B10", "scancode": "SC035", "base": "!", "shift": "dk_punctuation", "alt_gr": "¡", "shift_alt_gr": null, "finger": "right_pinky" }
+      ]
+    },
+    {
+      "row_id": 5,
+      "row_name": "Space Row",
+      "keys": [
+        { "position": "A03", "scancode": "SC039", "base": "\u0020", "shift": "\u0020", "alt_gr": "\u00A0", "shift_alt_gr": "\u202F", "finger": "thumb" }
+      ]
+    }
+  ],
+  "dead_keys": {
+    "dk_circumflex": {
+      "description": "Circumflex accent",
+      "example": "e → ê",
+      "design_notes": [
+        "Primary: letters with circumflex accent",
+        "Shortcuts for frequent letters with secondary diacritics: Polish (ę ł ż ą), Czech (č š), Romanian (ă ș), Spanish & Portuguese (ñ ã)",
+        "Quick uppercase for French accented letters: é/è/ç/à → É/È/Ç/À",
+        "Bonus: superscripts (⁰-⁹, ⁺⁻⁼⁽⁾) for x²"
+      ],
+      "table": {
+        "a": "â", "A": "Â", "c": "ĉ", "C": "Ĉ", "e": "ê", "E": "Ê",
+        "g": "ĝ", "G": "Ĝ", "h": "ĥ", "H": "Ĥ", "i": "î", "I": "Î",
+        "j": "ĵ", "J": "Ĵ", "o": "ô", "O": "Ô", "s": "ŝ", "S": "Ŝ",
+        "u": "û", "U": "Û", "w": "ŵ", "W": "Ŵ", "y": "ŷ", "Y": "Ŷ",
+        "z": "ẑ", "Z": "Ẑ", 
+        "é": "É", "è": "È", "ç": "Ç", "à": "À",
+        "d": "ę", "D": "Ę", "f": "č", "F": "Č", "l": "ł", "L": "Ł",
+        "m": "ż", "M": "Ż", "n": "ñ", "N": "Ñ", "p": "ã", "P": "Ã", 
+        "q": "ą", "Q": "Ą", "r": "ă", "R": "Ă", "t": "\u0219", "T": "\u0218",
+        "x": "š", "X": "Š", 
+        "0": "\u2070", "1": "\u00B9", "2": "\u00B2", "3": "\u00B3", "4": "\u2074", "5": "\u2075",
+        "6": "\u2076", "7": "\u2077", "8": "\u2078", "9": "\u2079", 
+        "+": "\u207A", "-": "\u207B", "=": "\u207C", "(": "\u207D", ")": "\u207E", "\u005E": "\u0302", "\u0020": "\u005E"
+      }
+    },
+    "dk_diaeresis": {
+      "description": "Diaeresis/Umlaut",
+      "example": "e → ë",
+      "table": {
+        "a": "ä", "A": "Ä", "e": "ë", "E": "Ë", "h": "ḧ", "H": "Ḧ",
+        "i": "ï", "I": "Ï", "o": "ö", "O": "Ö", "t": "ẗ", "u": "ü",
+        "U": "Ü", "w": "ẅ", "W": "Ẅ", "x": "ẍ", "X": "Ẍ", "y": "ÿ",
+        "Y": "Ÿ", "\u00A8": "\u0308", "\u0020": "\u00A8"
+      }
+    },
+    "dk_acute": {
+      "description": "Acute accent",
+      "example": "e → é",
+      "design_notes": [
+        "Primary: letters with acute accent",
+        "Shortcuts for frequent letters with secondary diacritics: French (ù), Turkish (ş ğ ı), Nordic (ø å), other (ə)",
+        "Bonus: subscripts (₀-₉, ₊₋₌₍₎) for H₂O"
+      ],
+      "table": {
+        "a": "á", "A": "Á", "c": "ć", "C": "Ć", "e": "é", "E": "É",
+        "g": "ǵ", "G": "Ǵ", "i": "í", "I": "Í", "k": "ḱ", "K": "Ḱ",
+        "l": "ĺ", "L": "Ĺ", "m": "ḿ", "M": "Ḿ", "n": "ń", "N": "Ń",
+        "o": "ó", "O": "Ó", "p": "ṕ", "P": "Ṕ", "r": "ŕ", "R": "Ŕ",
+        "s": "ś", "S": "Ś", "u": "ú", "U": "Ú", "w": "ẃ", "W": "Ẃ",
+        "y": "ý", "Y": "Ý", "z": "ź", "Z": "Ź", "æ": "ǽ", "Æ": "Ǽ",
+        "d": "\u015F", "D": "\u015E", "f": "ğ", "F": "Ğ", "j": "ə", "J": "Ə",
+        "q": "ø", "Q": "Ø", "t": "\u0131", "T": "\u0130", "v": "ù", "V": "Ù",
+        "x": "å", "X": "Å",
+        "0": "\u2080", "1": "\u2081", "2": "\u2082", "3": "\u2083", "4": "\u2084", "5": "\u2085",
+        "6": "\u2086", "7": "\u2087", "8": "\u2088", "9": "\u2089",
+        "+": "\u208A", "-": "\u208B", "=": "\u208C", "(": "\u208D", ")": "\u208E",
+        "\u00B4": "\u0301", "\u0020": "\u00B4"
+      }
+    },
+    "dk_grave": {
+      "description": "Grave accent",
+      "example": "e → è",
+      "table": {
+        "a": "à", "A": "À", "e": "è", "E": "È", "i": "ì", "I": "Ì",
+        "n": "ǹ", "N": "Ǹ", "o": "ò", "O": "Ò", "u": "ù", "U": "Ù",
+        "w": "ẁ", "W": "Ẁ", "y": "ỳ", "Y": "Ỳ", 
+        "\u0060": "\u0300", "\u0020": "\u0060"
+      }
+    },
+    "dk_tilde": {
+      "description": "Tilde",
+      "example": "n → ñ",
+      "table": {
+        "a": "ã", "A": "Ã", "e": "ẽ", "E": "Ẽ", "i": "ĩ", "I": "Ĩ",
+        "n": "ñ", "N": "Ñ", "o": "õ", "O": "Õ", "u": "ũ", "U": "Ũ",
+        "v": "ṽ", "V": "Ṽ", "y": "ỹ", "Y": "Ỹ",
+        "-": "≃", "_": "≃", "=": "≈",
+        "\u007E": "\u0303", "\u0020": "\u007E"
+      }
+    },
+    "dk_dot_above": {
+      "description": "Dot above",
+      "example": "z → ż",
+      "table": {
+        "a": "ȧ", "A": "Ȧ", "b": "ḃ", "B": "Ḃ", "c": "ċ", "C": "Ċ",
+        "d": "ḋ", "D": "Ḋ", "e": "ė", "E": "Ė", "f": "ḟ", "F": "Ḟ",
+        "g": "ġ", "G": "Ġ", "h": "ḣ", "H": "Ḣ", "i": "\u0131", "I": "\u0130",
+        "m": "ṁ", "M": "Ṁ", "n": "ṅ", "N": "Ṅ", "o": "ȯ", "O": "Ȯ",
+        "p": "ṗ", "P": "Ṗ", "r": "ṙ", "R": "Ṙ", "s": "ṡ", "S": "Ṡ",
+        "t": "ṫ", "T": "Ṫ", "w": "ẇ", "W": "Ẇ", "x": "ẋ", "X": "Ẋ",
+        "y": "ẏ", "Y": "Ẏ", "z": "ż", "Z": "Ż", "\u02D9": "\u0307", "\u0020": "\u02D9"
+      }
+    },
+    "dk_dot_below": {
+      "description": "Dot below",
+      "example": "a → ạ",
+      "table": {
+        "a": "ạ", "A": "Ạ", "b": "ḅ", "B": "Ḅ", "d": "ḍ", "D": "Ḍ",
+        "e": "ẹ", "E": "Ẹ", "h": "ḥ", "H": "Ḥ", "i": "ị", "I": "Ị",
+        "k": "ḳ", "K": "Ḳ", "l": "ḷ", "L": "Ḷ", "m": "ṃ", "M": "Ṃ",
+        "n": "ṇ", "N": "Ṇ", "o": "ọ", "O": "Ọ", "r": "ṛ", "R": "Ṛ",
+        "s": "ṣ", "S": "Ṣ", "t": "ṭ", "T": "Ṭ", "u": "ụ", "U": "Ụ",
+        "v": "ṿ", "V": "Ṿ", "w": "ẉ", "W": "Ẉ", "y": "ỵ", "Y": "Ỵ",
+        "z": "ẓ", "Z": "Ẓ", "\u0323": "\u0323", "\u0020": "\u0323"
+      }
+    },
+    "dk_double_acute": {
+      "description": "Double acute",
+      "example": "o → ő",
+      "table": {
+        "o": "ő", "O": "Ő", "u": "ű", "U": "Ű", 
+        "\u02DD": "\u030B", "\u0020": "\u02DD"
+      }
+    },
+    "dk_double_grave": {
+      "description": "Double grave",
+      "example": "o → ȍ",
+      "table": {
+        "a": "ȁ", "A": "Ȁ", "e": "ȅ", "E": "Ȅ", "i": "ȉ", "I": "Ȉ",
+        "o": "ȍ", "O": "Ȍ", "r": "ȑ", "R": "Ȑ", "u": "ȕ", "U": "Ȕ",
+        "\u030F": "\u030F", "\u0020": "\u030F"
+      }
+    },
+    "dk_horn": {
+      "description": "Horn",
+      "example": "o → ơ",
+      "table": {
+        "o": "ơ", "O": "Ơ", "u": "ư", "U": "Ư",
+        "\u031B": "\u031B", "\u0020": "\u031B"
+      }
+    },
+    "dk_hook": {
+      "description": "Hook above / African hooktop letters",
+      "example": "u → ủ, b → ɓ",
+      "table": {
+        "a": "ả", "A": "Ả", "e": "ẻ", "E": "Ẻ", "i": "ỉ", "I": "Ỉ",
+        "o": "ỏ", "O": "Ỏ", "u": "ủ", "U": "Ủ", "y": "ỷ", "Y": "Ỷ",
+        "b": "ɓ", "B": "Ɓ", "d": "ɗ", "D": "Ɗ", "f": "ƒ", "F": "Ƒ",
+        "g": "ɠ", "G": "Ɠ", "k": "ƙ", "K": "Ƙ", "t": "ƭ", "T": "Ƭ",
+        "\u0309": "\u0309", "\u0020": "\u0309"
+      }
+    },
+    "dk_caron": {
+      "description": "Caron/Háček",
+      "example": "c → č",
+      "table": {
+        "a": "ǎ", "A": "Ǎ", "c": "č", "C": "Č", "d": "ď", "D": "Ď",
+        "e": "ě", "E": "Ě", "g": "ǧ", "G": "Ǧ", "h": "ȟ", "H": "Ȟ",
+        "i": "ǐ", "I": "Ǐ", "j": "ǰ", "k": "ǩ", "K": "Ǩ", "l": "ľ",
+        "L": "Ľ", "n": "ň", "N": "Ň", "o": "ǒ", "O": "Ǒ", "r": "ř",
+        "R": "Ř", "s": "š", "S": "Š", "t": "ť", "T": "Ť", "u": "ǔ",
+        "U": "Ǔ", "z": "ž", "Z": "Ž",
+        "\u02C7": "\u030C", "\u0020": "\u02C7"
+      }
+    },
+    "dk_ogonek": {
+      "description": "Ogonek",
+      "example": "e → ę",
+      "table": {
+        "a": "ą", "A": "Ą", "e": "ę", "E": "Ę", "i": "į", "I": "Į",
+        "o": "ǫ", "O": "Ǫ", "u": "ų", "U": "Ų",
+        "\u02DB": "\u0328", "\u0020": "\u02DB"
+      }
+    },
+    "dk_breve": {
+      "description": "Breve",
+      "example": "a → ă",
+      "table": {
+        "a": "ă", "A": "Ă", "e": "ĕ", "E": "Ĕ", "g": "ğ", "G": "Ğ",
+        "i": "ĭ", "I": "Ĭ", "o": "ŏ", "O": "Ŏ", "u": "ŭ", "U": "Ŭ",
+        "\u02D8": "\u0306", "\u0020": "\u02D8"
+      }
+    },
+    "dk_inverted_breve": {
+      "description": "Inverted breve",
+      "example": "a → ȃ",
+      "table": {
+        "a": "ȃ", "A": "Ȃ", "e": "ȇ", "E": "Ȇ", "i": "ȋ", "I": "Ȋ",
+        "o": "ȏ", "O": "Ȏ", "r": "ȓ", "R": "Ȓ", "u": "ȗ", "U": "Ȗ",
+        "\u0311": "\u0311", "\u0020": "\u0311"
+      }
+    },
+    "dk_stroke": {
+      "description": "Stroke/Slash (diagonal)",
+      "example": "o → ø",
+      "table": {
+        "a": "ⱥ", "A": "Ⱥ", "c": "ȼ", "C": "Ȼ", "e": "ɇ", "E": "Ɇ",
+        "l": "ł", "L": "Ł", "o": "ø", "O": "Ø", "t": "ⱦ", "T": "Ⱦ",
+        "=": "≠", "/": "\u0337", "\u0020": "/"
+      }
+    },
+    "dk_horizontal_stroke": {
+      "description": "Horizontal stroke",
+      "example": "d → đ",
+      "table": {
+        "b": "ƀ", "B": "Ƀ", "d": "đ", "D": "Đ", "g": "ǥ", "G": "Ǥ",
+        "h": "ħ", "H": "Ħ", "i": "ɨ", "I": "Ɨ", "j": "ɉ", "J": "Ɉ",
+        "r": "ɍ", "R": "Ɍ", "t": "ŧ", "T": "Ŧ", "u": "ʉ", "U": "Ʉ",
+        "y": "ɏ", "Y": "Ɏ", "z": "ƶ", "Z": "Ƶ", "\u002D": "\u0336", "\u0020": "\u002D"
+      }
+    },
+    "dk_macron": {
+      "description": "Macron",
+      "example": "a → ā",
+      "table": {
+        "a": "ā", "A": "Ā", "e": "ē", "E": "Ē", "g": "ḡ", "G": "Ḡ",
+        "i": "ī", "I": "Ī", "o": "ō", "O": "Ō", "u": "ū", "U": "Ū",
+        "y": "ȳ", "Y": "Ȳ", "æ": "ǣ", "Æ": "Ǣ",
+        "b": "ḇ", "B": "Ḇ", "d": "ḏ", "D": "Ḏ", "h": "ẖ", "k": "ḵ",
+        "K": "Ḵ", "l": "ḻ", "L": "Ḻ", "n": "ṉ", "N": "Ṉ", "r": "ṟ",
+        "R": "Ṟ", "t": "ṯ", "T": "Ṯ", "z": "ẕ", "Z": "Ẕ",
+        "_": "\u0331", "8": "\u0305", "\u00AF": "\u0304", "\u0020": "\u00AF"
+      }
+    },
+    "dk_extended_latin": {
+      "description": "Special Latin letters",
+      "example": "z → ʒ",
+      "table": {
+        "a": "\u0251", "A": "\u2C6D", "d": "ð", "D": "Ð", "e": "ə", "E": "Ə",
+        "g": "\u0263", "G": "\u0194", "i": "ĳ", "I": "Ĳ", "l" : "\u017F", "L": "\u017F",
+        "n": "ŋ", "N": "Ŋ", "o": "ɔ", "O": "Ɔ", "r": "ɖ", "R": "Ɖ",
+        "s": "\u0283", "S": "\u01A9", "t": "þ", "T": "Þ", "u": "\u028A", "U": "\u01B1",
+        "v": "\u028C", "V": "\u0245", "y": "\u01B4", "Y": "\u01B3", "z": "\u0292", "Z": "\u01B7",
+        "\"": "ɛ", "3": "Ɛ", "?": "\u0294",
+        "^": "\u032D", "\u00A8": "\u0324", "\u007E": "\u0330", "\u02C7": "\u032C", "\u02D8": "\u032E",
+        "\u02DA": "\u0325",
+        "\u0020": "\u0020"
+      }
+    },
+    "dk_cedilla": {
+      "description": "Cedilla",
+      "example": "c → ç",
+      "table": {
+        "c": "ç", "C": "Ç", "d": "ḑ", "D": "Ḑ", "e": "ȩ", "E": "Ȩ",
+        "g": "ģ", "G": "Ģ", "h": "ḩ", "H": "Ḩ", "k": "ķ", "K": "Ķ",
+        "l": "ļ", "L": "Ļ", "n": "ņ", "N": "Ņ", "r": "ŗ", "R": "Ŗ",
+        "s": "ş", "S": "Ş", "t": "ţ", "T": "Ţ",
+        "\u00B8": "\u0327", "\u0020": "\u00B8"
+      }
+    },
+    "dk_comma": {
+      "description": "Comma below",
+      "example": "s → ș",
+      "table": {
+        "s": "\u0219", "S": "\u0218", "t": "\u021B", "T": "\u021A",
+        "\u0326": "\u0326", "\u0020": "\u0326"
+      }
+    },
+    "dk_phonetic": {
+      "description": "Phonetic symbols (IPA)",
+      "example": "a → ɐ",
+      "table": {
+        "a": "\u0250", "d": "\u0279", "e": "\u025C", "E": "\u0258", "f": "\u0278", "h": "\u0266",
+        "i": "\u0268", "I": "\u026A", "j": "\u026B", "J": "\u028E", "l": "\u026D", "L": "\u026C",
+        "m": "\u0271", "n": "\u0272", "N": "\u0273", "o": "\u0275", "O": "\u025E", "r": "\u027E",
+        "R": "\u0281", "t": "\u0288", "u": "\u026F", "v": "\u028B", "w": "\u028D", "y": "\u0265",
+        "Y": "\u028F", "z": "\u026E", "?": "\u02E4", "4": "\u0280", ":": "\u02D0", ";": "\u02D1",
+        "'": "\u02C8", ",": "\u02CC", "-": "\u02B0", "è": "\u02B2", "&": "\u02B7", "ç": "\u02E1",
+        "(": "\u02E0", "=": "\u031A", "_": "\u207F", "|": "\u0329", "\u02D8": "\u032F",
+        "\u0020": "\u0281"  
+      }
+    },
+    "dk_ring_above": {
+      "description": "Ring above",
+      "example": "a → å",
+      "table": {
+        "a": "å", "A": "Å", "u": "ů", "U": "Ů", "w": "ẘ", "y": "ẙ",
+        "\u02DA": "\u030A", "\u0020": "\u02DA"
+      }
+    },
+    "dk_greek": {
+      "description": "Greek letters",
+      "example": "p → π",
+      "table": {
+        "a": "\u03B1", "A": "\u0391", "b": "\u03B2", "B": "\u0392", "c": "\u03C7", "C": "\u03A7",
+        "d": "\u03B4", "D": "\u0394", "e": "\u03B5", "E": "\u0395", "f": "\u03C6", "F": "\u03A6",
+        "g": "\u03B3", "G": "\u0393", "h": "\u03B7", "H": "\u0397", "i": "\u03B9", "I": "\u0399",
+        "k": "\u03BA", "K": "\u039A", "l": "\u03BB", "L": "\u039B", "m": "\u03BC", "M": "\u039C",
+        "n": "\u03BD", "N": "\u039D", "o": "\u03BF", "O": "\u039F", "p": "\u03C0", "P": "\u03A0",
+        "q": "\u03B8", "Q": "\u0398", "r": "\u03C1", "R": "\u03A1", "s": "\u03C3", "S": "\u03A3",
+        "t": "\u03C4", "T": "\u03A4", "u": "\u03C5", "U": "\u03A5", "w": "\u03C9", "W": "\u03A9",
+        "x": "\u03BE", "X": "\u039E", "y": "\u03C8", "Y": "\u03A8", "z": "\u03B6", "Z": "\u0396",
+        "&": "\u03AC", "1": "\u0386", "é": "\u03AD", "2": "\u0388", "\"": "\u03AE", "3": "\u0389",
+        "'": "\u03AF", "4": "\u038A", "(": "\u03CC", "5": "\u038C", "-": "\u03CD", "6": "\u038E",
+        "è": "\u03CE", "7": "\u038F", "_": "\u03CA", "8": "\u03AA", "ç": "\u03CB", "9": "\u03AB",
+        ")": "\u03B0", "à": "\u0390",
+        "<": "\u03C2", ";": "\u037E", ".": "\u00B7", "\u00B5": "\u00B5", "\u0020": "\u00B5"
+      }
+    },
+    "dk_cyrillic": {
+      "description": "Cyrillic letters",
+      "example": "q → я",
+      "table": {
+        "a": "\u0430", "A": "\u0410", "b": "\u0431", "B": "\u0411", "c": "\u0446", "C": "\u0426",
+        "d": "\u0434", "D": "\u0414", "e": "\u0435", "E": "\u0415", "f": "\u0444", "F": "\u0424",
+        "g": "\u0433", "G": "\u0413", "h": "\u0447", "H": "\u0427", "i": "\u0438", "I": "\u0418",
+        "j": "\u0436", "J": "\u0416", "k": "\u043A", "K": "\u041A", "l": "\u043B", "L": "\u041B",
+        "m": "\u043C", "M": "\u041C", "n": "\u043D", "N": "\u041D", "o": "\u043E", "O": "\u041E",
+        "p": "\u043F", "P": "\u041F", "q": "\u044F", "Q": "\u042F", "r": "\u0440", "R": "\u0420",
+        "s": "\u0441", "S": "\u0421", "t": "\u0442", "T": "\u0422", "u": "\u0443", "U": "\u0423",
+        "v": "\u0432", "V": "\u0412", "w": "\u0448", "W": "\u0428", "x": "\u0445", "X": "\u0425",
+        "y": "\u044B", "Y": "\u042B", "z": "\u0437", "Z": "\u0417",
+        "&": "\u0456", "1": "\u0406", "é": "\u0451", "2": "\u0401", "\"": "\u044D", "3": "\u042D", 
+        "'": "\u0457", "4": "\u0407", "(": "\u0454", "5": "\u0404", "-": "\u045E", "6": "\u040E",
+        "è": "\u0450", "7": "\u0400", "_": "\u045D", "8": "\u040D", "ç": "\u0491", "9": "\u0490",
+        "à": "\u044E", "0": "\u042E", ")": "\u0458", "%": "\u0408", "=": "\u0439", "+": "\u0419",
+        "$": "\u0449", "£": "\u0429", ",": "\u044C", "?": "\u042C", ".": "\u044A", ";": "\u042A", 
+        "!": "\u2116", "\u0020": "\u0020"
+      }
+    },
+    "dk_misc_symbols": {
+      "description": "Miscellaneous symbols",
+      "example": "v → ✅",
+      "table": {
+        "a": "\u2708", "A": "\u2708", "c": "\u00A9", "C": "\u00AE", "d": "\u2192", "D": "\u25B6",
+        "e": "\u2605", "E": "\u2605", "f": "\u2194", "F": "\u2194", "h": "\u2642", "H": "\u2640",
+        "i": "\u2139", "I": "\u261E", "j": "\u2122", "J": "\u2120", "k": "\u2620", "K": "\u2620",
+        "l": "\u2665", "L": "\u2665", "m": "\u2709", "M": "\u2709", "n": "\u266A", "N": "\u266B",
+        "p": "\u262E", "P": "\u2117", "q": "\u2190", "Q": "\u25C0", "r": "\u267B", "R": "\u267B",
+        "s": "\u2193", "S": "\u25BC", "t": "\u260E", "T": "\u260E", "v": "\u2705", "V": "\u2705",
+        "w": "\u2197", "W": "\u2197", "x": "\u274C", "X": "\u274C", "y": "\u26A1", "Y": "\u26A1",
+        "z": "\u2191", "Z": "\u25B2",
+        "&": "\u00BC", "1": "\u00BC", "é": "\u00BD", "2": "\u00BD", "\"": "\u00BE", "3": "\u00BE",
+        "'": "\u2153", "4": "\u2153", "(": "\u2154", "5": "\u2154", "-": "\u263C", "6": "\u263C",
+        "è": "\u263D", "7": "\u263D", "_": "\u2601", "8": "\u2601", "ç": "\u2614", "9": "\u2614",
+        "à": "\u2744", "0": "\u2744", ")": "\u263A", "%": "\u2639", "|": "\u00A6",
+        "<": "\u2198", ">": "\u2198", "!": "\u26A0", "\u0020": "\u2192"
+      }
+    },
+    "dk_scientific": {
+      "description": "Scientific & Mathematical symbols",
+      "example": "8 → ∞",
+      "table": {
+        "a": "∠", "A": "∀", "c": "⊂", "C": "\u2102", "d": "\u2202", "D": "\u2206",
+        "e": "\u2208", "E": "\u2203", "g": "⇐", "G": "⇐", "h": "⇓", "H": "⇓",
+        "i": "∫", "I": "∫", "j": "⇒", "J": "⇒", "k": "⇔", "K": "⇔",
+        "l": "\u2113", "L": "\u2113", "m": "\u2261", "M": "\u2261", "n": "∇", "N": "\u2115",
+        "p": "∏", "P": "∏", "Q": "\u211A", "R": "\u211D", "s": "\u2211", "S": "\u2211",
+        "t": "∥", "T": "⊥", "u": "\u222A", "U": "∩", "v": "√", "V": "∛",
+        "x": "\u00D7", "X": "\u00D7", "y": "⇑", "Y": "⇑", "Z": "\u2124",
+        "<": "≤", ">": "≥", "=": "≠", "+": "±", "-": "\u2212", "*": "\u00D7",
+        ":": "\u2254", "/": "÷", "\u00B0": "\u2218", ".": "\u2219", "$": "⊗", "£": "⊕",
+        "^": "\u2227", "\u00A8": "\u2228", "_": "∝", "8": "∞", "à": "∅", "0": "∅",
+        "~": "≈", "%": "‰", "|": "\u210F", "@": "\u00AC", "\u0020": "±"  
+      }
+    },
+    "dk_currencies": {
+      "description": "Currency symbols",
+      "example": "e → €",
+      "table": {
+        "a": "\u20B3", "A": "\u20B3", "b": "\u20BF", "B": "\u0E3F", "c": "\u00A2", "C": "\u20A1",
+        "d": "\u20AB", "D": "\u20AF", "e": "\u20A0", "E": "\u20A0", "f": "\u0192", "F": "\u20A3",
+        "g": "\u20BE", "G": "\u20B2", "i": "\u20B9", "I": "\u20B9", "k": "\u20C0", "K": "\u20AD",
+        "l": "\u20BA", "L": "\u20BA", "m": "\u20A5", "M": "\u20BC", "n": "\u20A6", "N": "\u20A6",
+        "p": "\u20B1", "P": "\u20A7", "r": "\u20BD", "R": "\u17DB", "s": "\u20AA", "S": "\u20AA",
+        "t": "\u20B8", "T": "\u20AE", "u": "\u20B4", "U": "\u20B4", "w": "\u20A9", "W": "\u20A9",
+        "z": "\u20A2", "Z": "\u20A2", "ç": "\u20B5",
+        "\u0020": "\u00A4"
+      }
+    },
+    "dk_punctuation": {
+      "description": "Punctuation variants",
+      "example": "q → ¶",
+      "table": {
+        "a": "\u00AA", "A": "\u00AA", "o": "\u00BA", "O": "\u00BA", "<": "\u2039", ">": "\u203A",
+        "w": "\u201E", "W": "\u201E", "x": "\u201F", "X": "\u201F", "c": "\u2018", "C": "\u2018",
+        "v": "\u2019", "V": "\u2019", "b": "\u201A", "B": "\u201A", "n": "\u201B", "N": "\u201B",
+        "!": "\u203D", "?": "\u2E2E", "\"": "\u2033", "'": "\u2032", "-": "\u2010", "_": "\u2423",
+		    "*": "\u2042", ".": "\u2026", "|": "\u2016", ")": "\u203F", "6": "\u2043", "^": "\u2038", 
+        ":": "\u2022", "/": "\u2023", "q": "\u00B6", "Q": "\u00B6", "r": "\u203B", "R": "\u203B",
+        "t": "\u2020", "T": "\u2021",
+        "\u0020": "\u00A7"
+      }
+    }
+  }
+}

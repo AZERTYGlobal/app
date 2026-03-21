@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>AZERTY Global Portable</AssemblyName>
+    <RootNamespace>AZERTYGlobalPortable</RootNamespace>
+    <Version>0.9.1</Version>
+    <Company>AZERTY Global</Company>
+    <Product>AZERTY Global Portable</Product>
+    <Copyright>© 2017-2026 Antoine Olivier — EUPL 1.2</Copyright>
+    <Description>Version portable d'AZERTY Global — disposition clavier française améliorée</Description>
+
+    <!-- Désactiver la génération auto d'AssemblyInfo (le commentaire "MSBuild WriteCodeFragment"
+         est embarqué dans le binaire AOT et déclenche un warning WACK) -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+
+    <!-- Pas de WinForms : UI via Win32 P/Invoke natif -->
+    <!-- Publication : dotnet publish -c Release produit un exe natif AOT unique -->
+    <PublishAot>true</PublishAot>
+    <!-- InvariantGlobalization désactivé : NormalizationForm.FormD ne fonctionne pas
+         en mode invariant (les diacritiques ne sont pas décomposés), ce qui casse
+         la recherche accent-insensitive dans CharacterSearch. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <StackTraceSupport>false</StackTraceSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <OptimizationPreference>Size</OptimizationPreference>
+
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- JSON embarqués dans l'exe comme ressources -->
+    <EmbeddedResource Include="AZERTY Global 2026.json" LogicalName="layout.json" />
+    <EmbeddedResource Include="character-index.json" LogicalName="character-index.json" />
+    <!-- Logo pour la fenêtre d'accueil -->
+    <EmbeddedResource Include="favicon-azerty-global.png" LogicalName="favicon-azerty-global.png" />
+  </ItemGroup>
+
+</Project>

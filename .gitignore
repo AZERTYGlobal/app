@@ -1,0 +1,22 @@
+# Build artifacts
+bin/
+obj/
+src/bin/
+src/obj/
+
+# Compiled binaries
+*.exe
+*.pdb
+*.msix
+
+# User config
+config.json
+
+# IDE
+.vs/
+*.user
+*.suo
+
+# OS
+Thumbs.db
+.DS_Store
