@@ -2,7 +2,7 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
-namespace AZERTYGlobalPortable;
+namespace AZERTYGlobal;
 
 /// <summary>
 /// Fenêtre de recherche de caractère positionnée en bas à droite (au-dessus de la barre des tâches).
@@ -109,6 +109,7 @@ sealed class CharacterSearch : IDisposable
     private bool _showCopiedFeedback;
     private string _copiedChar = "";
     private IntPtr _hEditBgBrush;
+    private IntPtr _hClassBgBrush; // Brush de fond passé à WNDCLASSEXW
 
     // Polices cachées (créées une fois, détruites au Dispose)
     private IntPtr _hFontChar;
@@ -401,12 +402,15 @@ sealed class CharacterSearch : IDisposable
 
         query = query.Trim();
         var lowerQuery = query.ToLowerInvariant();
+        var normalizedQuery = NormalizeForSearch(query);
+        var queryWords = normalizedQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var originalQueryWords = lowerQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
         // Score et tri
         var scored = new List<(CharEntry entry, int score)>();
         foreach (var entry in _allEntries)
         {
-            int score = MatchScore(entry, query, lowerQuery);
+            int score = MatchScore(entry, query, lowerQuery, normalizedQuery, queryWords, originalQueryWords);
             if (score > 0)
                 scored.Add((entry, score));
         }
@@ -459,13 +463,10 @@ sealed class CharacterSearch : IDisposable
     }
 
     /// <summary>Score de correspondance — identique au site web (tester-modal.js searchCharacters).</summary>
-    private static int MatchScore(CharEntry entry, string query, string lowerQuery)
+    private static int MatchScore(CharEntry entry, string query, string lowerQuery,
+        string normalizedQuery, string[] queryWords, string[] originalQueryWords)
     {
         int score = 0;
-
-        var normalizedQuery = NormalizeForSearch(query);
-        var queryWords = normalizedQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var originalQueryWords = lowerQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
         // Correspondance exacte du caractère (priorité maximale)
         if (entry.Character == query)
@@ -563,7 +564,7 @@ sealed class CharacterSearch : IDisposable
             style = 0x0003, // CS_HREDRAW | CS_VREDRAW
             lpfnWndProc = _wndProcDelegate,
             hInstance = hInstance,
-            hbrBackground = Win32.CreateSolidBrush(CLR_BG),
+            hbrBackground = _hClassBgBrush = Win32.CreateSolidBrush(CLR_BG),
             lpszClassName = className,
         };
         Win32.RegisterClassExW(ref wc);
@@ -590,24 +591,16 @@ sealed class CharacterSearch : IDisposable
             Win32.MoveWindow(_hWnd, dx, dy, w, h, false);
         }
 
-        // Créer les polices cachées (réutilisées à chaque repaint)
-        _hFontChar = Win32.CreateFontW(Scale(24), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
-        _hFontName = Win32.CreateFontW(Scale(20), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
-        _hFontMethod = Win32.CreateFontW(Scale(18), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI Semibold");
-        _hFontFooter = Win32.CreateFontW(Scale(16), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
-        _hFontPlaceholder = Win32.CreateFontW(-Scale(16), 0, 0, 0, 400, 1, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
+        CreateFonts();
 
         // Créer le champ de recherche (Edit control)
-        int searchH = Scale(BASE_SEARCH_H);
-        int editPad = Scale(5);
         _hEdit = Win32.CreateWindowExW(0, "EDIT", "",
             Win32.WS_CHILD | Win32.WS_VISIBLE | ES_AUTOHSCROLL,
-            editPad, editPad, Scale(BASE_WIN_W) - editPad * 2, searchH,
+            0, 0, 0, 0,
             _hWnd, (IntPtr)IDC_SEARCH, hInstance, IntPtr.Zero);
 
-        // Police du champ de recherche (négatif = hauteur caractère exacte)
-        _hFontEdit = Win32.CreateFontW(-Scale(16), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
         Win32.SendMessageW(_hEdit, Win32.WM_SETFONT, _hFontEdit, (IntPtr)1);
+        ResizeEditControl();
 
         // Pas de placeholder natif — on dessine le nôtre en italique dans OnPaint
 
@@ -616,6 +609,44 @@ sealed class CharacterSearch : IDisposable
 
         // Subclasser l'Edit pour intercepter les touches (Entrée, flèches, Échap)
         Win32.SetWindowSubclass(_hEdit, _editSubclassProc, (UIntPtr)1, IntPtr.Zero);
+    }
+
+    private void CreateFonts()
+    {
+        _hFontChar = Win32.CreateFontW(Scale(24), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
+        _hFontName = Win32.CreateFontW(Scale(20), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
+        _hFontMethod = Win32.CreateFontW(Scale(18), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI Semibold");
+        _hFontFooter = Win32.CreateFontW(Scale(16), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
+        _hFontPlaceholder = Win32.CreateFontW(-Scale(16), 0, 0, 0, 400, 1, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
+        _hFontEdit = Win32.CreateFontW(-Scale(16), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
+    }
+
+    private void DestroyFonts()
+    {
+        if (_hFontChar != IntPtr.Zero) { Win32.DeleteObject(_hFontChar); _hFontChar = IntPtr.Zero; }
+        if (_hFontName != IntPtr.Zero) { Win32.DeleteObject(_hFontName); _hFontName = IntPtr.Zero; }
+        if (_hFontMethod != IntPtr.Zero) { Win32.DeleteObject(_hFontMethod); _hFontMethod = IntPtr.Zero; }
+        if (_hFontFooter != IntPtr.Zero) { Win32.DeleteObject(_hFontFooter); _hFontFooter = IntPtr.Zero; }
+        if (_hFontPlaceholder != IntPtr.Zero) { Win32.DeleteObject(_hFontPlaceholder); _hFontPlaceholder = IntPtr.Zero; }
+        if (_hFontEdit != IntPtr.Zero) { Win32.DeleteObject(_hFontEdit); _hFontEdit = IntPtr.Zero; }
+    }
+
+    private void RecreateFonts()
+    {
+        DestroyFonts();
+        CreateFonts();
+        if (_hEdit != IntPtr.Zero)
+            Win32.SendMessageW(_hEdit, Win32.WM_SETFONT, _hFontEdit, (IntPtr)1);
+    }
+
+    private void ResizeEditControl()
+    {
+        if (_hEdit == IntPtr.Zero)
+            return;
+
+        int searchH = Scale(BASE_SEARCH_H);
+        int editPad = Scale(5);
+        Win32.MoveWindow(_hEdit, editPad, editPad, Scale(BASE_WIN_W) - editPad * 2, searchH, true);
     }
 
     private (int x, int y) GetBottomRightPosition(int winW, int winH)
@@ -764,6 +795,19 @@ sealed class CharacterSearch : IDisposable
                     }
                     return IntPtr.Zero;
 
+                case Win32.WM_DPICHANGED:
+                {
+                    int newDpi = (wParam.ToInt32() >> 16) & 0xFFFF;
+                    if (newDpi > 0)
+                        _dpiScale = newDpi / 96f;
+
+                    RecreateFonts();
+                    ResizeEditControl();
+                    ResizeToFitResults();
+                    Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
+                    return IntPtr.Zero;
+                }
+
                 case Win32.WM_CTLCOLOREDIT:
                     Win32.SetTextColor(wParam, CLR_NAME);      // texte clair
                     Win32.SetBkColor(wParam, CLR_SEARCH_BG);   // fond édit sombre
@@ -775,11 +819,7 @@ sealed class CharacterSearch : IDisposable
         }
         catch (Exception ex)
         {
-            var logDir = ConfigManager.IsPackaged
-                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AZERTY Global Portable")
-                : AppContext.BaseDirectory;
-            try { Directory.CreateDirectory(logDir); } catch { }
-            File.AppendAllText(Path.Combine(logDir, "error.log"), $"[{DateTime.Now:s}] CharSearch WndProc: {ex}\n");
+            ConfigManager.Log("CharSearch WndProc", ex);
         }
 
         return Win32.DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -919,7 +959,7 @@ sealed class CharacterSearch : IDisposable
         if (_selectedIndex < 0 || _selectedIndex >= _filteredResults.Count) return;
 
         var entry = _filteredResults[_selectedIndex];
-        CopyToClipboard(entry.Character);
+        if (!CopyToClipboard(entry.Character)) return;
 
         // Feedback visuel "Copié !"
         _showCopiedFeedback = true;
@@ -928,28 +968,60 @@ sealed class CharacterSearch : IDisposable
         Win32.SetTimer(_hWnd, (UIntPtr)IDC_TIMER_COPYFEEDBACK, 1500, IntPtr.Zero);
     }
 
-    private void CopyToClipboard(string text)
+    private bool CopyToClipboard(string text)
     {
-        if (!Win32.OpenClipboard(_hWnd)) return;
+        IntPtr hMem = IntPtr.Zero;
+        bool ownershipTransferred = false;
         try
         {
-            Win32.EmptyClipboard();
             int byteCount = (text.Length + 1) * 2; // UTF-16 + null terminator
-            var hMem = Win32.GlobalAlloc(GMEM_MOVEABLE, (UIntPtr)byteCount);
-            if (hMem == IntPtr.Zero) return;
+            hMem = Win32.GlobalAlloc(GMEM_MOVEABLE, (UIntPtr)byteCount);
+            if (hMem == IntPtr.Zero)
+                return false;
 
             var ptr = Win32.GlobalLock(hMem);
-            if (ptr != IntPtr.Zero)
+            if (ptr == IntPtr.Zero)
+                return false;
+
+            try
             {
                 Marshal.Copy(text.ToCharArray(), 0, ptr, text.Length);
                 Marshal.WriteInt16(ptr, text.Length * 2, 0); // null terminator
-                Win32.GlobalUnlock(hMem);
-                Win32.SetClipboardData(CF_UNICODETEXT, hMem);
             }
+            finally
+            {
+                Win32.GlobalUnlock(hMem);
+            }
+
+            if (!Win32.OpenClipboard(_hWnd))
+                return false;
+
+            try
+            {
+                Win32.EmptyClipboard();
+                if (Win32.SetClipboardData(CF_UNICODETEXT, hMem) == IntPtr.Zero)
+                {
+                    ConfigManager.Log("CharSearch clipboard", new ExternalException("SetClipboardData a échoué."));
+                    return false;
+                }
+
+                ownershipTransferred = true;
+                return true;
+            }
+            finally
+            {
+                Win32.CloseClipboard();
+            }
+        }
+        catch (Exception ex) when (ex is ExternalException or ArgumentException or OutOfMemoryException)
+        {
+            ConfigManager.Log("CharSearch clipboard", ex);
+            return false;
         }
         finally
         {
-            Win32.CloseClipboard();
+            if (!ownershipTransferred && hMem != IntPtr.Zero)
+                Win32.GlobalFree(hMem);
         }
     }
 
@@ -1259,13 +1331,8 @@ sealed class CharacterSearch : IDisposable
             Win32.DeleteObject(_hEditBgBrush);
             _hEditBgBrush = IntPtr.Zero;
         }
-        // Polices cachées
-        if (_hFontChar != IntPtr.Zero) { Win32.DeleteObject(_hFontChar); _hFontChar = IntPtr.Zero; }
-        if (_hFontName != IntPtr.Zero) { Win32.DeleteObject(_hFontName); _hFontName = IntPtr.Zero; }
-        if (_hFontMethod != IntPtr.Zero) { Win32.DeleteObject(_hFontMethod); _hFontMethod = IntPtr.Zero; }
-        if (_hFontFooter != IntPtr.Zero) { Win32.DeleteObject(_hFontFooter); _hFontFooter = IntPtr.Zero; }
-        if (_hFontPlaceholder != IntPtr.Zero) { Win32.DeleteObject(_hFontPlaceholder); _hFontPlaceholder = IntPtr.Zero; }
-        if (_hFontEdit != IntPtr.Zero) { Win32.DeleteObject(_hFontEdit); _hFontEdit = IntPtr.Zero; }
+        DestroyFonts();
+        if (_hClassBgBrush != IntPtr.Zero) { Win32.DeleteObject(_hClassBgBrush); _hClassBgBrush = IntPtr.Zero; }
         if (_hWnd != IntPtr.Zero)
         {
             Win32.DestroyWindow(_hWnd);

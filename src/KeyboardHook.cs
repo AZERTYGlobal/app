@@ -1,7 +1,7 @@
 // Low-level keyboard hook — intercepte toutes les frappes sans droits admin
 using System.Runtime.InteropServices;
 
-namespace AZERTYGlobalPortable;
+namespace AZERTYGlobal;
 
 /// <summary>
 /// Hook clavier bas niveau (WH_KEYBOARD_LL).
@@ -10,13 +10,9 @@ namespace AZERTYGlobalPortable;
 sealed class KeyboardHook : IDisposable
 {
     private const int WH_KEYBOARD_LL = 13;
-    private const int WM_KEYDOWN = 0x0100;
-    private const int WM_KEYUP = 0x0101;
-    private const int WM_SYSKEYDOWN = 0x0104;
-    private const int WM_SYSKEYUP = 0x0105;
 
     // Flag pour identifier nos propres injections (éviter les boucles infinies)
-    public static readonly IntPtr INJECTED_FLAG = (IntPtr)0xA261;
+    internal static readonly IntPtr INJECTED_FLAG = (IntPtr)0xA261;
 
     private IntPtr _hookId = IntPtr.Zero;
     private readonly Win32.LowLevelKeyboardProc _proc;
@@ -27,6 +23,9 @@ sealed class KeyboardHook : IDisposable
     private uint _vkSearch;
     private uint _vkVirtualKeyboard;
 
+    // Détection changement de layout via Ctrl+Shift
+    private bool _nonModifierPressed;
+
     /// <summary>Événement déclenché pour chaque keydown (scancode) — pour animation clavier virtuel.</summary>
     public event Action<uint>? RawKeyDown;
 
@@ -35,6 +34,9 @@ sealed class KeyboardHook : IDisposable
 
     /// <summary>Événement déclenché quand Ctrl+Maj+Q est pressé (ouvrir/fermer clavier virtuel).</summary>
     public event Action? VirtualKeyboardRequested;
+
+    /// <summary>Événement déclenché quand Ctrl+Shift est relâché sans 3e touche (possible changement de layout système).</summary>
+    public event Action? LayoutMayHaveChanged;
 
     public bool Enabled
     {
@@ -52,8 +54,8 @@ sealed class KeyboardHook : IDisposable
     /// <summary>Recharge les raccourcis depuis la configuration.</summary>
     public void ReloadShortcuts()
     {
-        _vkSearch = ConfigManager.GetVkCode(ConfigManager.ShortcutCharacterSearch);
-        _vkVirtualKeyboard = ConfigManager.GetVkCode(ConfigManager.ShortcutVirtualKeyboard);
+        _vkSearch = ConfigManager.ShortcutCharacterSearchVk;
+        _vkVirtualKeyboard = ConfigManager.ShortcutVirtualKeyboardVk;
         // Sécurité : si les deux raccourcis sont identiques, désactiver le second
         if (_vkSearch != 0 && _vkSearch == _vkVirtualKeyboard)
             _vkVirtualKeyboard = 0;
@@ -82,14 +84,33 @@ sealed class KeyboardHook : IDisposable
                 return Win32.CallNextHookEx(_hookId, nCode, wParam, lParam);
 
             int msg = wParam.ToInt32();
-            bool isKeyDown = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
-            bool isKeyUp = msg == WM_KEYUP || msg == WM_SYSKEYUP;
+            bool isKeyDown = msg == (int)Win32.WM_KEYDOWN || msg == (int)Win32.WM_SYSKEYDOWN;
+            bool isKeyUp = msg == (int)Win32.WM_KEYUP || msg == (int)Win32.WM_SYSKEYUP;
 
             if (isKeyDown || isKeyUp)
             {
+                // ── Détection changement de layout via Ctrl+Shift ──
+                // Windows change le layout du foreground thread quand Ctrl+Shift
+                // est pressé et relâché SANS qu'une 3e touche ait été pressée.
+                bool wasCtrlShift = _mapper.IsToggleShortcut();
+
                 // Toujours tracker les modificateurs (même quand désactivé)
                 // pour que Ctrl+Shift+CapsLock fonctionne dans tous les cas
                 _mapper.TrackModifiers(hookStruct.vkCode, hookStruct.scanCode, hookStruct.flags, isKeyDown);
+
+                bool isCtrlShift = _mapper.IsToggleShortcut();
+
+                // Ctrl+Shift vient de s'activer → reset du flag
+                if (!wasCtrlShift && isCtrlShift)
+                    _nonModifierPressed = false;
+
+                // Touche non-modificateur pressée pendant Ctrl+Shift → c'était un raccourci
+                if (isKeyDown && isCtrlShift && !IsModifierKey(hookStruct.vkCode))
+                    _nonModifierPressed = true;
+
+                // Ctrl+Shift relâché sans touche intermédiaire → possible changement de layout
+                if (wasCtrlShift && !isCtrlShift && !_nonModifierPressed)
+                    LayoutMayHaveChanged?.Invoke();
 
                 // Détecter Ctrl+Shift+CapsLock même quand désactivé
                 if (hookStruct.vkCode == 0x14 && isKeyDown && _mapper.IsToggleShortcut())
@@ -132,6 +153,12 @@ sealed class KeyboardHook : IDisposable
 
         return Win32.CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
+
+    private static bool IsModifierKey(uint vkCode) => vkCode is
+        0xA0 or 0xA1 or 0x10 or  // LShift, RShift, Shift
+        0xA2 or 0xA3 or 0x11 or  // LCtrl, RCtrl, Ctrl
+        0xA4 or 0xA5 or 0x12 or  // LAlt, RAlt, Alt
+        0x5B or 0x5C;             // LWin, RWin
 
     public void Dispose()
     {

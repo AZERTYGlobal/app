@@ -1,131 +1,289 @@
-// Fenêtre d'accueil — affichée au premier lancement
+// Fenêtre d'accueil — wizard 3 étapes affiché au premier lancement
 using System.Runtime.InteropServices;
 
-namespace AZERTYGlobalPortable;
+namespace AZERTYGlobal;
 
 /// <summary>
-/// Fenêtre Win32 d'onboarding avec fond blanc, logo, texte explicatif,
-/// liens cliquables, case à cocher et bouton "C'est parti !".
-/// Rendu anti-aliasé via GDI+ pour le logo et les cercles.
-/// Toutes les dimensions sont scalées selon le DPI système.
+/// Fenêtre Win32 d'onboarding en 3 étapes :
+///   1. Les 5 améliorations + bandeau bêta
+///   2. Comment utiliser l'application
+///   3. Ressources, communauté et préférences
+/// DPI-aware per-monitor v2 : recalcule polices et layout sur WM_DPICHANGED.
 /// </summary>
 sealed class OnboardingWindow : IDisposable
 {
-    // ── Window constants (spécifiques OnboardingWindow) ───────────
+    // ── Window constants ─────────────────────────────────────────────
     private const uint BS_AUTOCHECKBOX = 0x0003;
-    private const uint BS_PUSHBUTTON = 0x0000;
     private const uint BM_GETCHECK = 0x00F0;
+    private const uint BM_SETCHECK = 0x00F1;
     private const uint BST_CHECKED = 0x0001;
     private const uint SS_NOTIFY = 0x0100;
 
-    private const int IDC_CHECKBOX = 2001;
-    private const int IDC_BUTTON = 2002;
-    private const int IDC_LINK_GUIDE = 2003;
-    private const int IDC_LINK_LESSONS = 2004;
-    private const int IDC_CHECKBOX_AUTOSTART = 2005;
+    // ── Control IDs ──────────────────────────────────────────────────
+    private const int IDC_CHK_DONT_SHOW = 2001;
+    private const int IDC_BTN_NEXT = 2002;
+    private const int IDC_BTN_PREV = 2003;
+    private const int IDC_LINK_GUIDE = 2004;
+    private const int IDC_LINK_LESSONS = 2005;
+    private const int IDC_CHK_AUTOSTART = 2006;
+    private const int IDC_LINK_BETA_BANNER = 2007;
+    private const int IDC_LINK_BETA = 2008;
+    private const int IDC_LINK_DISCORD = 2010;
+    private const int IDC_NOTE = 2011;
 
-    // Dimensions de base (96 DPI) — scalées dynamiquement
-    private const int BASE_WIN_W = 480;
-    private const int BASE_WIN_H = 500;
+    // Dimensions de base (96 DPI)
+    private const int BASE_WIN_W = 560;
+    private const int BASE_WIN_H = 750;
+    private const float ONBOARDING_UI_SCALE = 0.75f;
+    private const int BASE_MARGIN = 28;
+    private const int BASE_BOTTOM_MARGIN = 52;
+    private const int BASE_LINK_H = 24;
+    private const int BASE_LINK_SPACING = 30;
+    private const int BASE_BTN_H = 36;
 
-    // ── Colors (COLORREF = 0x00BBGGRR) ───────────────────────────
-    private const uint CLR_BG = 0x00DDDDDD;       // Fond gris
+    // ── Colors (COLORREF = 0x00BBGGRR) ───────────────────────────────
+    private const uint CLR_BG = 0x00DDDDDD;
     private const uint CLR_TITLE = 0x00201C18;
-    private const uint CLR_STEP_TITLE = 0x00D47800; // Bleu Windows (COLORREF de 0x0078D4)
+    private const uint CLR_FEATURE_TITLE = 0x00D47800;
     private const uint CLR_TEXT = 0x00333333;
-    private const uint CLR_LINK = 0x00D47800;       // Bleu lien
-    private const uint CLR_HIGHLIGHT = 0x000078D4;   // Orange #D47800 (COLORREF = BBGGRR)
-
-    // ── Colors ARGB pour GDI+ (0xAARRGGBB) ──────────────────────
-    private const uint ARGB_STEP_CIRCLE = 0xFF0078D4; // Bleu Windows
+    private const uint CLR_LINK = 0x00D47800;
+    private const uint CLR_LINK_HOVER = 0x00FF9830;
+    private const uint CLR_BANNER_BG = 0x00E8E8E8;
+    private const uint CLR_BANNER_BORDER = 0x000078D4;
+    private const uint CLR_BANNER_TEXT = 0x00333333;
+    private const uint CLR_BANNER_TITLE = 0x000078D4;
+    private const uint CLR_STEP_TITLE = 0x00D47800;
+    private const uint CLR_HIGHLIGHT = 0x000078D4;
+    private const uint CLR_PROGRESS_ACTIVE = 0x00D47800;
+    private const uint CLR_PROGRESS_INACTIVE = 0x00C8C8C8;
+    private const uint CLR_SECTION = 0x00D47800;
+    private const uint CLR_PANEL_BG = 0x00EEEEEE;
+    private const uint CLR_PANEL_BORDER = 0x00D1D1D1;
+    private const uint CLR_NOTE_BG = 0x00D8F4FF;
+    private const uint CLR_NOTE_BORDER = 0x007BC2EB;
+    private const uint CLR_NOTE_ACCENT = 0x002A98E2;
+    private const uint CLR_BADGE_BG = 0x00D47800;
+    private const uint CLR_BADGE_TEXT = 0x00FFFFFF;
+    private const uint CLR_PILL_BG = 0x00FBECD8;
+    private const uint CLR_PILL_TEXT = 0x00201C18;
+    private const uint CLR_WARNING_TEXT = 0x00174D6E;
+    private const uint CLR_INLINE_HIGHLIGHT = 0x000078D4;
+    private const uint ARGB_STEP_CIRCLE = 0xFF0078D4;
     private const uint ARGB_WHITE = 0xFFFFFFFF;
+
+    // ── Colors ARGB pour GDI+ (0xAARRGGBB) ──────────────────────────
 
     // ═══════════════════════════════════════════════════════════════
     // Champs d'instance
     // ═══════════════════════════════════════════════════════════════
     private IntPtr _hWnd;
-    private IntPtr _hWndCheckbox;
-    private IntPtr _hWndCheckboxAutoStart;
-    private IntPtr _hWndButton;
+    private int _currentStep;
+
+    // Y du contenu (après le header) — recalculé à chaque OnPaint
+    private int _contentY;
+
+    // Contrôles — Navigation
+    private IntPtr _hWndBtnNext;
+    private IntPtr _hWndBtnPrev;
+
+    // Contrôles — Étape 1
+    private IntPtr _hWndLinkBetaBanner;
+
+    // Contrôles — Étape 3
     private IntPtr _hWndLinkGuide;
     private IntPtr _hWndLinkLessons;
-    private IntPtr _hWndTesterNote;
+    private IntPtr _hWndLinkBeta;
+    private IntPtr _hWndLinkDiscord;
+    private IntPtr _hWndNote;
+    private IntPtr _hWndChkAutoStart;
+    private IntPtr _hWndChkDontShow;
+
+    // Delegates (prevent GC)
     private readonly Win32.WNDPROC _wndProcDelegate;
+    private readonly Win32.SUBCLASSPROC _linkSubclassProc;
+    private IntPtr _hoveredLink;
+
+    // GDI resources
     private readonly IntPtr _hBgBrush;
+    private readonly IntPtr _hBannerBgBrush;
+    private readonly IntPtr _hPanelBrush;
+    private readonly IntPtr _hNoteBrush;
+
+    // GDI+ resources
     private IntPtr _gdipToken;
-    private IntPtr _gdipLogo;  // GDI+ Image (pas HBITMAP)
-    private IntPtr _hIcon;     // Icône fenêtre (favicon)
+    private IntPtr _gdipLogo;
+    private IntPtr _gdipDiscord;
+    private IntPtr _hIcon;
+
     private bool _visible;
 
-    // DPI scaling
-    private readonly float _dpiScale;
-    private int S(int val) => (int)(val * _dpiScale); // Scale helper
+    // DPI scaling — mutable, recalculé sur WM_DPICHANGED
+    private float _dpiScale;
+    private int S(int val) => (int)(val * _dpiScale * ONBOARDING_UI_SCALE);
 
-    // Fonts (créés avec tailles scalées)
+    // Fonts — recréés sur changement de DPI
     private IntPtr _hFontTitle;
     private IntPtr _hFontSubtitle;
     private IntPtr _hFontText;
+    private IntPtr _hFontFeatureDesc;
     private IntPtr _hFontBold;
     private IntPtr _hFontLink;
     private IntPtr _hFontSmall;
+    private IntPtr _hFontNote;
     private IntPtr _hFontButton;
+    private IntPtr _hFontBannerBold;
+    private IntPtr _hFontStepSummary;
+    private IntPtr _hFontSection;
+    private IntPtr _hFontPageTitle;
+    private IntPtr _hFontLinkStrong;
 
     public bool IsVisible => _visible;
 
     public OnboardingWindow()
     {
         _wndProcDelegate = WndProc;
+        _linkSubclassProc = LinkSubclassProc;
         _hBgBrush = Win32.CreateSolidBrush(CLR_BG);
+        _hBannerBgBrush = Win32.CreateSolidBrush(CLR_BANNER_BG);
+        _hPanelBrush = Win32.CreateSolidBrush(CLR_PANEL_BG);
+        _hNoteBrush = Win32.CreateSolidBrush(CLR_NOTE_BG);
 
-        // Déterminer le DPI système
+        // DPI initial (moniteur principal — sera corrigé par GetDpiForWindow après création)
         var hdcScreen = Win32.GetDC(IntPtr.Zero);
-        int dpi = Win32.GetDeviceCaps(hdcScreen, 88); // LOGPIXELSX
+        int dpi = Win32.GetDeviceCaps(hdcScreen, 88);
         Win32.ReleaseDC(IntPtr.Zero, hdcScreen);
         _dpiScale = dpi / 96f;
 
-        // Initialiser GDI+ (gardé vivant pour le rendu)
+        // GDI+
         var gdipInput = new Win32.GdiplusStartupInput { GdiplusVersion = 1 };
         Win32.GdiplusStartup(out _gdipToken, ref gdipInput, IntPtr.Zero);
 
-        LoadLogo();
-
-        // Créer les polices (tailles scalées par DPI)
-        // quality=5 → CLEARTYPE_QUALITY pour un rendu net des petites polices
-        _hFontTitle = Win32.CreateFontW(S(24), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
-        _hFontSubtitle = Win32.CreateFontW(S(16), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
-        _hFontText = Win32.CreateFontW(S(16), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
-        _hFontBold = Win32.CreateFontW(S(17), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
-        _hFontLink = Win32.CreateFontW(S(16), 0, 0, 0, 600, 0, 1, 0, 0, 0, 0, 5, 0, "Segoe UI"); // underline
-        _hFontSmall = Win32.CreateFontW(S(13), 0, 0, 0, 400, 1, 0, 0, 0, 0, 0, 5, 0, "Segoe UI"); // italic
-        _hFontButton = Win32.CreateFontW(S(17), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
-
+        _gdipLogo = GdiImageLoader.LoadFromEmbeddedResource(typeof(OnboardingWindow), "favicon-azerty-global.png");
+        _gdipDiscord = GdiImageLoader.LoadFromEmbeddedResource(typeof(OnboardingWindow), "discord-icon.png");
+        CreateFonts();
         CreateMainWindow();
-    }
+        ApplyFontsToControls();
 
-    private void LoadLogo()
-    {
+        // Corriger le DPI avec le vrai DPI du moniteur où la fenêtre est apparue
         try
         {
-            using var stream = typeof(OnboardingWindow).Assembly
-                .GetManifestResourceStream("favicon-azerty-global.png");
-            if (stream == null) return;
-
-            var bytes = new byte[stream.Length];
-            stream.ReadExactly(bytes);
-
-            IntPtr hGlobal = Win32.GlobalAlloc(0x0042, (nuint)bytes.Length);
-            IntPtr pGlobal = Win32.GlobalLock(hGlobal);
-            Marshal.Copy(bytes, 0, pGlobal, bytes.Length);
-            Win32.GlobalUnlock(hGlobal);
-
-            Win32.CreateStreamOnHGlobal(hGlobal, true, out IntPtr pStream);
-            Win32.GdipCreateBitmapFromStream(pStream, out _gdipLogo);
-            Marshal.Release(pStream);
+            int realDpi = Win32.GetDpiForWindow(_hWnd);
+            if (realDpi > 0 && Math.Abs(realDpi / 96f - _dpiScale) > 0.01f)
+            {
+                _dpiScale = realDpi / 96f;
+                RecreateFonts();
+                RepositionControls();
+                ResizeWindow();
+            }
         }
-        catch (Exception ex) when (ex is ExternalException or IOException or ArgumentException)
-        {
-            // Logo non chargé — pas critique
-        }
+        catch { /* GetDpiForWindow non disponible (Windows 8.1-) */ }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Polices
+    // ═══════════════════════════════════════════════════════════════
+    private void CreateFonts()
+    {
+        _hFontTitle = Win32.CreateFontW(-S(28), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontSubtitle = Win32.CreateFontW(-S(18), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontText = Win32.CreateFontW(-S(17), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontFeatureDesc = Win32.CreateFontW(-S(16), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontBold = Win32.CreateFontW(-S(17), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontLink = Win32.CreateFontW(-S(16), 0, 0, 0, 400, 0, 1, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontSmall = Win32.CreateFontW(-S(14), 0, 0, 0, 400, 1, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontNote = Win32.CreateFontW(-S(15), 0, 0, 0, 700, 1, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontButton = Win32.CreateFontW(-S(17), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontBannerBold = Win32.CreateFontW(-S(21), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontStepSummary = Win32.CreateFontW(-S(20), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontSection = Win32.CreateFontW(-S(15), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontPageTitle = Win32.CreateFontW(-S(26), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontLinkStrong = Win32.CreateFontW(-S(16), 0, 0, 0, 700, 0, 1, 0, 0, 0, 0, 5, 0, "Segoe UI");
+    }
+
+    private void DestroyFonts()
+    {
+        Win32.DeleteObject(_hFontTitle);
+        Win32.DeleteObject(_hFontSubtitle);
+        Win32.DeleteObject(_hFontText);
+        Win32.DeleteObject(_hFontFeatureDesc);
+        Win32.DeleteObject(_hFontBold);
+        Win32.DeleteObject(_hFontLink);
+        Win32.DeleteObject(_hFontSmall);
+        Win32.DeleteObject(_hFontNote);
+        Win32.DeleteObject(_hFontButton);
+        Win32.DeleteObject(_hFontBannerBold);
+        Win32.DeleteObject(_hFontStepSummary);
+        Win32.DeleteObject(_hFontSection);
+        Win32.DeleteObject(_hFontPageTitle);
+        Win32.DeleteObject(_hFontLinkStrong);
+    }
+
+    private void RecreateFonts()
+    {
+        DestroyFonts();
+        CreateFonts();
+        ApplyFontsToControls();
+    }
+
+    private void ApplyFontsToControls()
+    {
+        Win32.SendMessageW(_hWndBtnNext, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
+        Win32.SendMessageW(_hWndBtnPrev, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
+        Win32.SendMessageW(_hWndLinkBetaBanner, Win32.WM_SETFONT, _hFontLink, (IntPtr)1);
+        Win32.SendMessageW(_hWndLinkGuide, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
+        Win32.SendMessageW(_hWndLinkLessons, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
+        Win32.SendMessageW(_hWndLinkBeta, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
+        Win32.SendMessageW(_hWndLinkDiscord, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
+        Win32.SetWindowTextW(_hWndLinkDiscord, "Échanger avec les autres testeurs");
+        Win32.SendMessageW(_hWndNote, Win32.WM_SETFONT, _hFontNote, (IntPtr)1);
+        Win32.SetWindowTextW(_hWndNote, "\u26A0 Le testeur en ligne n\u00E9cessite de d\u00E9sactiver temporairement l'application.");
+        Win32.SendMessageW(_hWndChkAutoStart, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
+        Win32.SendMessageW(_hWndChkDontShow, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Redimensionnement et repositionnement
+    // ═══════════════════════════════════════════════════════════════
+    private void ResizeWindow()
+    {
+        int winW = S(BASE_WIN_W);
+        int winH = S(BASE_WIN_H);
+        uint dwStyle = Win32.WS_OVERLAPPED | Win32.WS_CAPTION | Win32.WS_SYSMENU;
+        uint dwExStyle = Win32.WS_EX_TOPMOST;
+        var adjustRect = new Win32.RECT { left = 0, top = 0, right = winW, bottom = winH };
+        Win32.AdjustWindowRectEx(ref adjustRect, dwStyle, false, dwExStyle);
+        int windowW = adjustRect.right - adjustRect.left;
+        int windowH = adjustRect.bottom - adjustRect.top;
+        Win32.GetWindowRect(_hWnd, out var currentRect);
+        int cx = (currentRect.left + currentRect.right) / 2;
+        int cy = (currentRect.top + currentRect.bottom) / 2;
+        Win32.MoveWindow(_hWnd, cx - windowW / 2, cy - windowH / 2, windowW, windowH, true);
+    }
+
+    private void RepositionControls()
+    {
+        int margin = S(BASE_MARGIN);
+        int winW = S(BASE_WIN_W);
+        int bottomY = S(BASE_WIN_H) - S(BASE_BOTTOM_MARGIN);
+        GetStep3Layout(_contentY, winW, out _, out _, out _,
+            out int linksX, out int linksWidth, out int linkStartY, out int linkRowH, out int linkControlHeight,
+            out int noteX, out int noteWidth, out int noteY, out int noteHeight,
+            out int checkboxX, out int checkboxWidth, out int checkboxY, out int checkboxSpacing, out int checkboxHeight);
+
+        // Navigation
+        Win32.MoveWindow(_hWndBtnNext, winW - margin - S(140), bottomY, S(140), S(BASE_BTN_H), true);
+        Win32.MoveWindow(_hWndBtnPrev, margin, bottomY, S(120), S(BASE_BTN_H), true);
+
+        // Étape 3 — liens et préférences dans une grille fixe
+        Win32.MoveWindow(_hWndLinkGuide, linksX, linkStartY, linksWidth, linkControlHeight, true);
+        Win32.MoveWindow(_hWndLinkLessons, linksX, linkStartY + linkRowH, linksWidth, linkControlHeight, true);
+        Win32.MoveWindow(_hWndLinkBeta, linksX, linkStartY + linkRowH * 2, linksWidth, linkControlHeight, true);
+        Win32.MoveWindow(_hWndLinkDiscord, linksX, linkStartY + linkRowH * 3, linksWidth, linkControlHeight, true);
+        Win32.MoveWindow(_hWndNote, noteX, noteY, noteWidth, noteHeight, true);
+
+        // Préférences
+        Win32.MoveWindow(_hWndChkAutoStart, checkboxX, checkboxY, checkboxWidth, checkboxHeight, true);
+        Win32.MoveWindow(_hWndChkDontShow, checkboxX, checkboxY + checkboxSpacing, checkboxWidth, checkboxHeight, true);
     }
 
     private void CreateMainWindow()
@@ -146,7 +304,6 @@ sealed class OnboardingWindow : IDisposable
 
         int winW = S(BASE_WIN_W);
         int winH = S(BASE_WIN_H);
-
         uint dwStyle = Win32.WS_OVERLAPPED | Win32.WS_CAPTION | Win32.WS_SYSMENU;
         uint dwExStyle = Win32.WS_EX_TOPMOST;
         var adjustRect = new Win32.RECT { left = 0, top = 0, right = winW, bottom = winH };
@@ -154,119 +311,173 @@ sealed class OnboardingWindow : IDisposable
         int windowW = adjustRect.right - adjustRect.left;
         int windowH = adjustRect.bottom - adjustRect.top;
 
-        int screenW = Win32.GetSystemMetrics(0);
-        int screenH = Win32.GetSystemMetrics(1);
+        Win32.GetCursorPos(out var cursorPt);
+        var hMonitor = Win32.MonitorFromPoint(cursorPt, 0x00000001);
+        var monInfo = new Win32.MONITORINFO { cbSize = Marshal.SizeOf<Win32.MONITORINFO>() };
+        Win32.GetMonitorInfo(hMonitor, ref monInfo);
+        int screenX = monInfo.rcWork.left;
+        int screenY = monInfo.rcWork.top;
+        int screenW = monInfo.rcWork.right - monInfo.rcWork.left;
+        int screenH = monInfo.rcWork.bottom - monInfo.rcWork.top;
 
-        _hWnd = Win32.CreateWindowExW(dwExStyle, className, "AZERTY Global Portable",
-            dwStyle, (screenW - windowW) / 2, (screenH - windowH) / 2, windowW, windowH,
+        _hWnd = Win32.CreateWindowExW(dwExStyle, className, "AZERTY Global",
+            dwStyle, screenX + (screenW - windowW) / 2, screenY + (screenH - windowH) / 2, windowW, windowH,
             IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
 
         CreateControls();
         SetWindowIcon();
     }
 
-    /// <summary>Crée une HICON à partir du logo GDI+ et l'applique à la fenêtre.</summary>
     private void SetWindowIcon()
     {
         if (_gdipLogo == IntPtr.Zero) return;
         try
         {
-            // Créer un bitmap 32x32 GDI+ et y dessiner le logo
             int size = 32;
-            Win32.GdipCreateBitmapFromScan0(size, size, 0, 0x0026200A, IntPtr.Zero, out IntPtr bmp32); // PixelFormat32bppARGB
+            Win32.GdipCreateBitmapFromScan0(size, size, 0, 0x0026200A, IntPtr.Zero, out IntPtr bmp32);
             Win32.GdipGetImageGraphicsContext(bmp32, out IntPtr g);
             Win32.GdipSetSmoothingMode(g, 4);
             Win32.GdipSetInterpolationMode(g, 7);
             Win32.GdipDrawImageRectI(g, _gdipLogo, 0, 0, size, size);
             Win32.GdipDeleteGraphics(g);
-
-            // Convertir en HBITMAP
             Win32.GdipCreateHBITMAPFromBitmap(bmp32, out IntPtr hBmp, 0x00000000);
             Win32.GdipDisposeImage(bmp32);
-
-            // Créer le masque (tout opaque)
             var maskBits = new byte[size * size / 8];
             IntPtr hMask = Win32.CreateBitmap(size, size, 1, 1, maskBits);
-
             var iconInfo = new Win32.ICONINFO { fIcon = true, hbmMask = hMask, hbmColor = hBmp };
             _hIcon = Win32.CreateIconIndirect(ref iconInfo);
-
             Win32.DeleteObject(hMask);
             Win32.DeleteObject(hBmp);
-
-            // WM_SETICON (ICON_SMALL=0, ICON_BIG=1)
             const uint WM_SETICON = 0x0080;
             Win32.SendMessageW(_hWnd, WM_SETICON, (IntPtr)0, _hIcon);
             Win32.SendMessageW(_hWnd, WM_SETICON, (IntPtr)1, _hIcon);
         }
-        catch (Exception ex) when (ex is ExternalException or IOException or ArgumentException)
-        {
-            // Icône non chargée — pas critique
-        }
+        catch (Exception ex) when (ex is ExternalException or IOException or ArgumentException) { }
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // Création des contrôles
+    // ═══════════════════════════════════════════════════════════════
     private void CreateControls()
     {
-        int margin = S(30);
-        int bottomY = S(BASE_WIN_H) - S(55);
+        var hInstance = Win32.GetModuleHandleW(null);
+        int margin = S(BASE_MARGIN);
         int winW = S(BASE_WIN_W);
+        int bottomY = S(BASE_WIN_H) - S(BASE_BOTTOM_MARGIN);
+        int linkH = S(28);
 
-        // ── Cases à cocher (en premier) ──
-        int sectionY = bottomY - S(118);
+        // ══ Navigation ══
+        _hWndBtnNext = Win32.CreateWindowExW(0, "BUTTON", "Suivant",
+            Win32.WS_CHILD | Win32.WS_VISIBLE | 0x0001 | Win32.WS_TABSTOP,
+            winW - margin - S(140), bottomY, S(140), S(BASE_BTN_H),
+            _hWnd, (IntPtr)IDC_BTN_NEXT, hInstance, IntPtr.Zero);
+        Win32.SendMessageW(_hWndBtnNext, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
 
-        // Case à cocher — lancer au démarrage de Windows
-        _hWndCheckboxAutoStart = Win32.CreateWindowExW(0, "BUTTON", "Lancer au démarrage de Windows",
-            Win32.WS_CHILD | Win32.WS_VISIBLE | BS_AUTOCHECKBOX | Win32.WS_TABSTOP,
-            margin, sectionY, S(300), S(24),
-            _hWnd, (IntPtr)IDC_CHECKBOX_AUTOSTART, Win32.GetModuleHandleW(null), IntPtr.Zero);
-        Win32.SendMessageW(_hWndCheckboxAutoStart, Win32.WM_SETFONT, _hFontText, (IntPtr)1);
-        // Coché si déjà activé dans la config
-        if (ConfigManager.AutoStartEnabled)
-            Win32.SendMessageW(_hWndCheckboxAutoStart, 0x00F1, (IntPtr)BST_CHECKED, IntPtr.Zero);
+        _hWndBtnPrev = Win32.CreateWindowExW(0, "BUTTON", "Précédent",
+            Win32.WS_CHILD | Win32.WS_TABSTOP,
+            margin, bottomY, S(120), S(BASE_BTN_H),
+            _hWnd, (IntPtr)IDC_BTN_PREV, hInstance, IntPtr.Zero);
+        Win32.SendMessageW(_hWndBtnPrev, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
 
-        // Case à cocher — ne plus afficher
-        _hWndCheckbox = Win32.CreateWindowExW(0, "BUTTON", "Ne plus afficher au démarrage",
-            Win32.WS_CHILD | Win32.WS_VISIBLE | BS_AUTOCHECKBOX | Win32.WS_TABSTOP,
-            margin, sectionY + S(26), S(260), S(24),
-            _hWnd, (IntPtr)IDC_CHECKBOX, Win32.GetModuleHandleW(null), IntPtr.Zero);
-        Win32.SendMessageW(_hWndCheckbox, Win32.WM_SETFONT, _hFontText, (IntPtr)1);
-        // Coché par défaut — l'utilisateur décoche s'il veut revoir l'accueil
-        Win32.SendMessageW(_hWndCheckbox, 0x00F1, (IntPtr)BST_CHECKED, IntPtr.Zero); // BM_SETCHECK
+        // ══ Étape 1 — Lien bandeau bêta ══
+        // Position initiale temporaire — repositionné dynamiquement dans UpdateStepVisibility
+        _hWndLinkBetaBanner = Win32.CreateWindowExW(0, "STATIC", "donnez votre avis",
+            Win32.WS_CHILD | Win32.WS_VISIBLE | SS_NOTIFY | Win32.WS_TABSTOP,
+            margin, 0, S(160), S(26),
+            _hWnd, (IntPtr)IDC_LINK_BETA_BANNER, hInstance, IntPtr.Zero);
+        Win32.SendMessageW(_hWndLinkBetaBanner, Win32.WM_SETFONT, _hFontLink, (IntPtr)1);
+        Win32.SetWindowSubclass(_hWndLinkBetaBanner, _linkSubclassProc, (UIntPtr)10, IntPtr.Zero);
 
-        // ── Liens cliquables (après les cases à cocher) ──
-        int linkY = sectionY + S(58);
-        _hWndLinkGuide = Win32.CreateWindowExW(0, "STATIC",
-            "\u2192 Découvrir le guide complet",
-            Win32.WS_CHILD | Win32.WS_VISIBLE | SS_NOTIFY,
-            margin, linkY, S(210), S(22),
-            _hWnd, (IntPtr)IDC_LINK_GUIDE, Win32.GetModuleHandleW(null), IntPtr.Zero);
-        Win32.SendMessageW(_hWndLinkGuide, Win32.WM_SETFONT, _hFontLink, (IntPtr)1);
+        // ══ Étape 3 — Liens et checkboxes ══
+        // Positions initiales temporaires — repositionnés dans RepositionControls
+        int y = 0;
+        _hWndLinkGuide = Win32.CreateWindowExW(0, "STATIC", "Guide de prise en main",
+            Win32.WS_CHILD | SS_NOTIFY | Win32.WS_TABSTOP, margin, y, S(200), linkH,
+            _hWnd, (IntPtr)IDC_LINK_GUIDE, hInstance, IntPtr.Zero);
+        Win32.SendMessageW(_hWndLinkGuide, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
+        Win32.SetWindowSubclass(_hWndLinkGuide, _linkSubclassProc, (UIntPtr)1, IntPtr.Zero);
 
-        _hWndLinkLessons = Win32.CreateWindowExW(0, "STATIC",
-            "\u2192 S'entraîner avec les leçons de frappe",
-            Win32.WS_CHILD | Win32.WS_VISIBLE | SS_NOTIFY,
-            margin, linkY + S(26), S(280), S(22),
-            _hWnd, (IntPtr)IDC_LINK_LESSONS, Win32.GetModuleHandleW(null), IntPtr.Zero);
-        Win32.SendMessageW(_hWndLinkLessons, Win32.WM_SETFONT, _hFontLink, (IntPtr)1);
+        _hWndLinkLessons = Win32.CreateWindowExW(0, "STATIC", "S'entraîner avec les leçons de frappe",
+            Win32.WS_CHILD | SS_NOTIFY | Win32.WS_TABSTOP, margin, y, S(360), linkH,
+            _hWnd, (IntPtr)IDC_LINK_LESSONS, hInstance, IntPtr.Zero);
+        Win32.SendMessageW(_hWndLinkLessons, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
+        Win32.SetWindowSubclass(_hWndLinkLessons, _linkSubclassProc, (UIntPtr)2, IntPtr.Zero);
 
-        // Note sous le lien leçons
-        _hWndTesterNote = Win32.CreateWindowExW(0, "STATIC",
-            "(Désactivez le portable pour utiliser le testeur)",
-            Win32.WS_CHILD | Win32.WS_VISIBLE,
-            margin + S(18), linkY + S(50), S(300), S(18),
-            _hWnd, IntPtr.Zero, Win32.GetModuleHandleW(null), IntPtr.Zero);
-        Win32.SendMessageW(_hWndTesterNote, Win32.WM_SETFONT, _hFontSmall, (IntPtr)1);
+        _hWndLinkBeta = Win32.CreateWindowExW(0, "STATIC", "Donner son avis sur la bêta",
+            Win32.WS_CHILD | SS_NOTIFY | Win32.WS_TABSTOP, margin, y, S(280), linkH,
+            _hWnd, (IntPtr)IDC_LINK_BETA, hInstance, IntPtr.Zero);
+        Win32.SendMessageW(_hWndLinkBeta, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
+        Win32.SetWindowSubclass(_hWndLinkBeta, _linkSubclassProc, (UIntPtr)3, IntPtr.Zero);
 
-        // Bouton "C'est parti !"
-        _hWndButton = Win32.CreateWindowExW(0, "BUTTON", "C'est parti !",
-            Win32.WS_CHILD | Win32.WS_VISIBLE | 0x0001 | Win32.WS_TABSTOP, // BS_DEFPUSHBUTTON
-            winW - margin - S(150), bottomY - S(4), S(150), S(38),
-            _hWnd, (IntPtr)IDC_BUTTON, Win32.GetModuleHandleW(null), IntPtr.Zero);
-        Win32.SendMessageW(_hWndButton, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
+        _hWndLinkDiscord = Win32.CreateWindowExW(0, "STATIC", "Discord — Échanger avec les testeurs",
+            Win32.WS_CHILD | SS_NOTIFY | Win32.WS_TABSTOP, margin, y, S(380), linkH,
+            _hWnd, (IntPtr)IDC_LINK_DISCORD, hInstance, IntPtr.Zero);
+        Win32.SendMessageW(_hWndLinkDiscord, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
+        Win32.SetWindowSubclass(_hWndLinkDiscord, _linkSubclassProc, (UIntPtr)5, IntPtr.Zero);
+
+        _hWndNote = Win32.CreateWindowExW(0, "STATIC",
+            "⚠ Le testeur en ligne nécessite de désactiver temporairement l'application.",
+            Win32.WS_CHILD, margin, y, S(380), S(20),
+            _hWnd, (IntPtr)IDC_NOTE, hInstance, IntPtr.Zero);
+        Win32.SendMessageW(_hWndNote, Win32.WM_SETFONT, _hFontNote, (IntPtr)1);
+
+        _hWndChkAutoStart = Win32.CreateWindowExW(0, "BUTTON", "Lancer au démarrage de Windows",
+            Win32.WS_CHILD | BS_AUTOCHECKBOX | Win32.WS_TABSTOP,
+            margin, y, S(320), S(26),
+            _hWnd, (IntPtr)IDC_CHK_AUTOSTART, hInstance, IntPtr.Zero);
+        Win32.SendMessageW(_hWndChkAutoStart, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
+        RefreshAutoStartCheckbox();
+
+        _hWndChkDontShow = Win32.CreateWindowExW(0, "BUTTON", "Ne plus afficher cet écran au démarrage",
+            Win32.WS_CHILD | BS_AUTOCHECKBOX | Win32.WS_TABSTOP,
+            margin, y, S(280), S(26),
+            _hWnd, (IntPtr)IDC_CHK_DONT_SHOW, hInstance, IntPtr.Zero);
+        Win32.SendMessageW(_hWndChkDontShow, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Visibilité des contrôles selon l'étape
+    // ═══════════════════════════════════════════════════════════════
+    private void UpdateStepVisibility()
+    {
+        Win32.ShowWindow(_hWndLinkBetaBanner, _currentStep == 0 ? 1 : 0);
+
+        int step3Vis = _currentStep == 2 ? 1 : 0;
+        Win32.ShowWindow(_hWndLinkGuide, step3Vis);
+        Win32.ShowWindow(_hWndLinkLessons, step3Vis);
+        Win32.ShowWindow(_hWndLinkBeta, step3Vis);
+        Win32.ShowWindow(_hWndLinkDiscord, step3Vis);
+        Win32.ShowWindow(_hWndNote, step3Vis);
+        Win32.ShowWindow(_hWndChkAutoStart, step3Vis);
+        Win32.ShowWindow(_hWndChkDontShow, step3Vis);
+
+        Win32.ShowWindow(_hWndBtnPrev, _currentStep > 0 ? 1 : 0);
+        Win32.SetWindowTextW(_hWndBtnNext, _currentStep == 2 ? "C'est parti !" : "Suivant");
+
+        // Repositionner le lien bandeau bêta (étape 1)
+        // Le positionnement précis est fait dans PaintStep1 après mesure du texte,
+        // mais on doit initialiser la position ici pour que le lien soit dans la zone visible
+        if (_currentStep == 0)
+        {
+            int margin = S(BASE_MARGIN);
+            int bannerTextX = margin + S(14);
+            int bannerLine2Y = _contentY + S(32);
+            Win32.MoveWindow(_hWndLinkBetaBanner, bannerTextX, bannerLine2Y, S(160), S(26), true);
+        }
+
+        if (_currentStep == 2)
+            RepositionControls();
+
+        Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
     }
 
     public void Show()
     {
+        _currentStep = 0;
+        RefreshAutoStartCheckbox();
+        Win32.SendMessageW(_hWndChkDontShow, BM_SETCHECK,
+            ConfigManager.ShowOnboardingAtStartup ? IntPtr.Zero : (IntPtr)BST_CHECKED, IntPtr.Zero);
+        UpdateStepVisibility();
         Win32.ShowWindow(_hWnd, 1);
         Win32.SetForegroundWindow(_hWnd);
         _visible = true;
@@ -274,13 +485,14 @@ sealed class OnboardingWindow : IDisposable
 
     public void Close()
     {
-        var checkState = Win32.SendMessageW(_hWndCheckbox, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero);
-        if (checkState == (IntPtr)BST_CHECKED)
-            ConfigManager.SetOnboardingDone();
+        var checkState = Win32.SendMessageW(_hWndChkDontShow, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero);
+        ConfigManager.SetShowOnboardingAtStartup(checkState != (IntPtr)BST_CHECKED);
 
-        // Appliquer le choix de lancement automatique
-        var autoStartState = Win32.SendMessageW(_hWndCheckboxAutoStart, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero);
-        AutoStart.Set(autoStartState == (IntPtr)BST_CHECKED);
+        var autoStartState = Win32.SendMessageW(_hWndChkAutoStart, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero);
+        bool autoStartSaved = AutoStart.Set(autoStartState == (IntPtr)BST_CHECKED);
+        RefreshAutoStartCheckbox();
+        if (!autoStartSaved)
+            ShowAutoStartError();
 
         Win32.ShowWindow(_hWnd, 0);
         _visible = false;
@@ -291,6 +503,8 @@ sealed class OnboardingWindow : IDisposable
     // ═══════════════════════════════════════════════════════════════
     private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
+        try
+        {
         switch (msg)
         {
             case Win32.WM_PAINT:
@@ -300,82 +514,177 @@ sealed class OnboardingWindow : IDisposable
             case Win32.WM_ERASEBKGND:
                 return (IntPtr)1;
 
+            case Win32.WM_DPICHANGED:
+            {
+                int newDpi = (wParam.ToInt32() >> 16) & 0xFFFF;
+                if (newDpi > 0)
+                    _dpiScale = newDpi / 96f;
+                RecreateFonts();
+                var suggested = Marshal.PtrToStructure<Win32.RECT>(lParam);
+                Win32.MoveWindow(_hWnd, suggested.left, suggested.top,
+                    suggested.right - suggested.left, suggested.bottom - suggested.top, true);
+                RepositionControls();
+                Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
+                return IntPtr.Zero;
+            }
+
             case Win32.WM_COMMAND:
                 int id = wParam.ToInt32() & 0xFFFF;
                 int code = (wParam.ToInt32() >> 16) & 0xFFFF;
                 switch (id)
                 {
-                    case IDC_BUTTON: Close(); break;
+                    case IDC_BTN_NEXT:
+                        if (_currentStep < 2) { _currentStep++; UpdateStepVisibility(); }
+                        else Close();
+                        break;
+                    case IDC_BTN_PREV:
+                        if (_currentStep > 0) { _currentStep--; UpdateStepVisibility(); }
+                        break;
+                    case IDC_LINK_BETA_BANNER: case IDC_LINK_BETA:
+                        if (code == 0) OpenLink("https://azerty.global/beta"); break;
                     case IDC_LINK_GUIDE:
-                        if (code == 0)
-                        {
-                            Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/guide", null, null, 1);
-                            // Retirer le topmost pour que le navigateur passe devant
-                            Win32.SetWindowPos(_hWnd, (IntPtr)(-2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040); // HWND_NOTOPMOST, SWP_NOMOVE|SWP_NOSIZE|SWP_SHOWWINDOW
-                        }
-                        break;
+                        if (code == 0) OpenLink("https://azerty.global/guide"); break;
                     case IDC_LINK_LESSONS:
-                        if (code == 0)
-                        {
-                            Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/?mode=lessons", null, null, 1);
-                            Win32.SetWindowPos(_hWnd, (IntPtr)(-2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040);
-                        }
-                        break;
+                        if (code == 0) OpenLink("https://azerty.global/?mode=lessons"); break;
+                    case IDC_LINK_DISCORD:
+                        if (code == 0) OpenLink("https://discord.gg/nYknqshJz3"); break;
                 }
                 return IntPtr.Zero;
 
             case Win32.WM_CTLCOLORSTATIC:
+            {
                 IntPtr hdcStatic = wParam;
                 IntPtr hCtrl = lParam;
-                if (hCtrl == _hWndLinkGuide || hCtrl == _hWndLinkLessons)
+                if (hCtrl == _hWndLinkGuide || hCtrl == _hWndLinkLessons ||
+                    hCtrl == _hWndLinkBeta || hCtrl == _hWndLinkDiscord)
                 {
                     Win32.SetBkMode(hdcStatic, 1);
-                    Win32.SetTextColor(hdcStatic, CLR_LINK);
-                    return _hBgBrush;
+                    bool isActive = _hoveredLink == hCtrl || Win32.GetFocus() == hCtrl;
+                    Win32.SetTextColor(hdcStatic, isActive ? CLR_LINK_HOVER : CLR_LINK);
+                    return _hPanelBrush;
                 }
-                if (hCtrl == _hWndTesterNote)
+                if (hCtrl == _hWndLinkBetaBanner)
                 {
                     Win32.SetBkMode(hdcStatic, 1);
-                    Win32.SetTextColor(hdcStatic, 0x00888888); // Gris discret
-                    return _hBgBrush;
+                    bool isActive = _hoveredLink == hCtrl || Win32.GetFocus() == hCtrl;
+                    Win32.SetTextColor(hdcStatic, isActive ? CLR_LINK_HOVER : CLR_LINK);
+                    return _hBannerBgBrush;
                 }
-                if (hCtrl == _hWndCheckbox || hCtrl == _hWndCheckboxAutoStart)
+                if (hCtrl == _hWndChkAutoStart || hCtrl == _hWndChkDontShow)
                 {
                     Win32.SetBkMode(hdcStatic, 1);
                     Win32.SetTextColor(hdcStatic, CLR_TEXT);
-                    return _hBgBrush;
+                    return _hPanelBrush;
                 }
-                break;
+                if (hCtrl == _hWndNote)
+                {
+                    Win32.SetBkMode(hdcStatic, 1);
+                    Win32.SetTextColor(hdcStatic, CLR_WARNING_TEXT);
+                    return _hNoteBrush;
+                }
+                Win32.SetBkMode(hdcStatic, 1);
+                Win32.SetTextColor(hdcStatic, 0x00888888);
+                return _hBgBrush;
+            }
 
             case Win32.WM_SETCURSOR:
-                if (wParam == _hWndLinkGuide || wParam == _hWndLinkLessons)
+                if (wParam == _hWndLinkGuide || wParam == _hWndLinkLessons ||
+                    wParam == _hWndLinkBeta || wParam == _hWndLinkDiscord ||
+                    wParam == _hWndLinkBetaBanner)
                 {
-                    Win32.SetCursor(Win32.LoadCursorW(IntPtr.Zero, (IntPtr)32649)); // IDC_HAND
+                    Win32.SetCursor(Win32.LoadCursorW(IntPtr.Zero, (IntPtr)32649));
                     return (IntPtr)1;
                 }
                 break;
 
-            case Win32.WM_NCHITTEST:
-                // Empêcher le déplacement : toujours retourner HTCLIENT (1)
-                // au lieu de HTCAPTION, même sur la barre de titre
-                return (IntPtr)1;
-
-            case Win32.WM_SYSCOMMAND:
-                // Bloquer SC_MOVE (0xF010) pour empêcher le déplacement via menu système
-                if ((wParam.ToInt32() & 0xFFF0) == 0xF010)
+            case Win32.WM_KEYDOWN:
+                if (wParam == (IntPtr)0x1B) // VK_ESCAPE
+                {
+                    Close();
                     return IntPtr.Zero;
+                }
                 break;
 
             case Win32.WM_CLOSE:
                 Close();
                 return IntPtr.Zero;
         }
+        }
+        catch (Exception ex)
+        {
+            ConfigManager.Log("Onboarding WndProc", ex);
+        }
 
         return Win32.DefWindowProcW(hWnd, msg, wParam, lParam);
     }
 
+    private void RefreshAutoStartCheckbox()
+    {
+        Win32.SendMessageW(_hWndChkAutoStart, BM_SETCHECK,
+            AutoStart.IsRegistered ? (IntPtr)BST_CHECKED : IntPtr.Zero, IntPtr.Zero);
+    }
+
+    private void ShowAutoStartError()
+    {
+        Win32.MessageBoxW(_hWnd,
+            AutoStart.GetFailureMessage(),
+            "AZERTY Global \u2014 Erreur", 0x10);
+    }
+
+    private void OpenLink(string url)
+    {
+        Win32.ShellExecuteW(IntPtr.Zero, "open", url, null, null, 1);
+        Win32.SetWindowPos(_hWnd, (IntPtr)(-2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040);
+    }
+
     // ═══════════════════════════════════════════════════════════════
-    // Rendu
+    // Sous-classe liens (hover)
+    // ═══════════════════════════════════════════════════════════════
+    private IntPtr LinkSubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, IntPtr dwRefData)
+    {
+        switch (msg)
+        {
+            case Win32.WM_MOUSEMOVE:
+                if (_hoveredLink != hWnd)
+                {
+                    _hoveredLink = hWnd;
+                    Win32.InvalidateRect(hWnd, IntPtr.Zero, true);
+                    var tme = new Win32.TRACKMOUSEEVENT
+                    {
+                        cbSize = (uint)Marshal.SizeOf<Win32.TRACKMOUSEEVENT>(),
+                        dwFlags = Win32.TME_LEAVE,
+                        hwndTrack = hWnd
+                    };
+                    Win32.TrackMouseEvent(ref tme);
+                }
+                break;
+            case Win32.WM_MOUSELEAVE:
+                if (_hoveredLink == hWnd)
+                {
+                    _hoveredLink = IntPtr.Zero;
+                    Win32.InvalidateRect(hWnd, IntPtr.Zero, true);
+                }
+                break;
+            case 0x0087: // WM_GETDLGCODE — permet au STATIC de recevoir les touches
+                return (IntPtr)0x0004; // DLGC_WANTALLKEYS
+            case Win32.WM_KEYDOWN:
+                if (wParam == (IntPtr)0x0D) // VK_RETURN
+                {
+                    int ctrlId = Win32.GetDlgCtrlID(hWnd);
+                    Win32.SendMessageW(_hWnd, Win32.WM_COMMAND, (IntPtr)ctrlId, hWnd);
+                    return IntPtr.Zero;
+                }
+                break;
+            case Win32.WM_SETFOCUS:
+            case Win32.WM_KILLFOCUS:
+                Win32.InvalidateRect(hWnd, IntPtr.Zero, true);
+                break;
+        }
+        return Win32.DefSubclassProc(hWnd, msg, wParam, lParam);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Rendu — Dispatcher
     // ═══════════════════════════════════════════════════════════════
     private void OnPaint(IntPtr hWnd)
     {
@@ -384,177 +693,636 @@ sealed class OnboardingWindow : IDisposable
         int cw = clientRect.right;
         int ch = clientRect.bottom;
 
-        // Double buffering
         var hdcScreen = Win32.GetDC(IntPtr.Zero);
         var hdc = Win32.CreateCompatibleDC(hdcScreen);
         var hBmp = Win32.CreateCompatibleBitmap(hdcScreen, cw, ch);
         var hBmpOld = Win32.SelectObject(hdc, hBmp);
         Win32.ReleaseDC(IntPtr.Zero, hdcScreen);
 
-        // Fond blanc
         Win32.FillRect(hdc, ref clientRect, _hBgBrush);
-        Win32.SetBkMode(hdc, 1); // TRANSPARENT
+        Win32.SetBkMode(hdc, 1);
 
-        // Créer un contexte GDI+ à partir du HDC mémoire
         Win32.GdipCreateFromHDC(hdc, out IntPtr gfx);
-        Win32.GdipSetSmoothingMode(gfx, 4);        // SmoothingModeAntiAlias
-        Win32.GdipSetInterpolationMode(gfx, 7);    // InterpolationModeHighQualityBicubic
-        Win32.GdipSetTextRenderingHint(gfx, 5);    // TextRenderingHintClearTypeGridFit
+        Win32.GdipSetSmoothingMode(gfx, 4);
+        Win32.GdipSetInterpolationMode(gfx, 7);
+        Win32.GdipSetTextRenderingHint(gfx, 5);
 
-        int margin = S(30);
-        int y = S(20);
 
-        // ── Logo + Titre + Sous-titre (logo à gauche des deux lignes) ──
-        int logoSize = S(48);
-        int textX = margin;
+        int y = S(10);
+        DrawHeader(hdc, gfx, cw, ref y);
+        DrawProgressBar(hdc, cw, ref y);
+        _contentY = y; // Stocker pour le positionnement des contrôles
 
-        if (_gdipLogo != IntPtr.Zero)
+        switch (_currentStep)
         {
-            Win32.GdipDrawImageRectI(gfx, _gdipLogo, margin, y, logoSize, logoSize);
-            textX = margin + logoSize + S(14);
+            case 0: PaintStep1(hdc, cw, ch, y); break;
+            case 1: PaintStep2(hdc, gfx, cw, ch, y); break;
+            case 2: PaintStep3(hdc, gfx, cw, ch, y); break;
         }
 
-        // Titre (première ligne à droite du logo)
-        Win32.SelectObject(hdc, _hFontTitle);
-        Win32.SetTextColor(hdc, CLR_TITLE);
-        var titleRect = new Win32.RECT { left = textX, top = y + S(2), right = cw - margin, bottom = y + S(26) };
-        Win32.DrawTextW(hdc, "AZERTY Global Portable", -1, ref titleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
-
-        // Sous-titre (deuxième ligne à droite du logo, collé sous le titre)
-        Win32.SelectObject(hdc, _hFontSubtitle);
-        Win32.SetTextColor(hdc, CLR_TEXT);
-        var subtitleRect = new Win32.RECT { left = textX, top = y + S(28), right = cw - margin, bottom = y + S(48) };
-        Win32.DrawTextW(hdc, "Votre clavier est maintenant amélioré.", -1, ref subtitleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
-        y += logoSize + S(10);
-
-        // Ligne de séparation
-        var sepBrush = Win32.CreateSolidBrush(0x00E0E0E0);
-        var sepRect = new Win32.RECT { left = margin, top = y, right = cw - margin, bottom = y + 1 };
-        Win32.FillRect(hdc, ref sepRect, sepBrush);
-        Win32.DeleteObject(sepBrush);
-        y += S(18);
-
-        // ── Étapes ──
-        DrawStep(hdc, gfx, margin, cw, ref y, "1",
-            "Tapez normalement",
-            "AZERTY Global Portable fonctionne par-dessus votre clavier actuel. Vos raccourcis (Ctrl+C, Ctrl+V\u2026) sont préservés.");
-
-        DrawStep(hdc, gfx, margin, cw, ref y, "2",
-            "Explorez avec le clavier virtuel",
-            "Double-cliquez sur l'icône AG dans la barre des tâches pour voir tous les caractères disponibles.");
-
-        DrawStepWithHighlight(hdc, gfx, margin, cw, ref y);
-
-        // Nettoyage GDI+
         Win32.GdipDeleteGraphics(gfx);
-
-        // Copier le buffer
         Win32.BitBlt(hdcPaint, 0, 0, cw, ch, hdc, 0, 0, Win32.SRCCOPY);
         Win32.SelectObject(hdc, hBmpOld);
         Win32.DeleteObject(hBmp);
         Win32.DeleteDC(hdc);
-
         Win32.EndPaint(hWnd, ref ps);
     }
 
-    /// <summary>Dessine une étape numérotée avec cercle anti-aliasé via GDI+.</summary>
-    private void DrawStep(IntPtr hdc, IntPtr gfx, int margin, int cw, ref int y, string number, string title, string description)
+    // ═══════════════════════════════════════════════════════════════
+    // Barre de progression en haut (3 segments)
+    // ═══════════════════════════════════════════════════════════════
+    private void DrawProgressBar(IntPtr hdc, int cw, ref int y)
     {
-        int circleSize = S(28);
-        int textX = margin + circleSize + S(12);
+        int margin = S(BASE_MARGIN);
+        int barY = y + S(8);
+        int barH = S(4);
+        int barW = cw - margin * 2;
+        int segW = barW / 3;
 
-        // Cercle bleu anti-aliasé via GDI+
-        Win32.GdipCreateSolidFill(ARGB_STEP_CIRCLE, out IntPtr blueBrush);
-        Win32.GdipFillEllipseI(gfx, blueBrush, margin, y, circleSize, circleSize);
+        var trackRect = new Win32.RECT { left = margin, top = barY, right = margin + barW, bottom = barY + barH };
+        GdiHelpers.FillSolidRect(hdc, trackRect, CLR_PROGRESS_INACTIVE);
 
-        // Numéro blanc dans le cercle via GDI+ DrawString
-        Win32.GdipCreateFontFamilyFromName("Segoe UI", IntPtr.Zero, out IntPtr fontFamily);
-        Win32.GdipCreateFont(fontFamily, 10f * _dpiScale, 1, 2, out IntPtr gdipFont); // Bold, Point unit
-        Win32.GdipCreateStringFormat(0, 0, out IntPtr strFormat);
-        Win32.GdipSetStringFormatAlign(strFormat, 1);     // Center
-        Win32.GdipSetStringFormatLineAlign(strFormat, 1); // Center
-        Win32.GdipCreateSolidFill(ARGB_WHITE, out IntPtr whiteBrush);
+        for (int i = 0; i < 3; i++)
+        {
+            if (i > _currentStep) continue;
+            int left = margin + i * segW + (i > 0 ? 1 : 0);
+            int right = (i == 2) ? margin + barW : margin + (i + 1) * segW;
+            var rect = new Win32.RECT { left = left, top = barY, right = right, bottom = barY + barH };
+            GdiHelpers.FillSolidRect(hdc, rect, CLR_PROGRESS_ACTIVE);
+        }
 
-        var circleRect = new Win32.RectF { X = margin, Y = y, Width = circleSize, Height = circleSize };
-        Win32.GdipDrawString(gfx, number, number.Length, gdipFont, ref circleRect, strFormat, whiteBrush);
-
-        Win32.GdipDeleteBrush(whiteBrush);
-        Win32.GdipDeleteBrush(blueBrush);
-        Win32.GdipDeleteStringFormat(strFormat);
-        Win32.GdipDeleteFont(gdipFont);
-        Win32.GdipDeleteFontFamily(fontFamily);
-
-        // Titre en gras + couleur bleue (GDI)
-        Win32.SelectObject(hdc, _hFontBold);
-        Win32.SetTextColor(hdc, CLR_STEP_TITLE);
-        var titleRect = new Win32.RECT { left = textX, top = y + S(2), right = cw - margin, bottom = y + S(24) };
-        Win32.DrawTextW(hdc, title, -1, ref titleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
-        y += S(26);
-
-        // Description (GDI, wordwrap)
-        Win32.SelectObject(hdc, _hFontText);
-        Win32.SetTextColor(hdc, CLR_TEXT);
-        var descRect = new Win32.RECT { left = textX, top = y, right = cw - margin, bottom = y + S(60) };
-        Win32.DrawTextW(hdc, description, -1, ref descRect, Win32.DT_LEFT | Win32.DT_WORDBREAK | Win32.DT_NOPREFIX);
-        y += S(48);
+        y = barY + barH + S(16);
     }
 
-    /// <summary>Étape 3 avec le raccourci en couleur bleue.</summary>
-    private void DrawStepWithHighlight(IntPtr hdc, IntPtr gfx, int margin, int cw, ref int y)
+    // ═══════════════════════════════════════════════════════════════
+    // Header
+    // ═══════════════════════════════════════════════════════════════
+    private void DrawHeader(IntPtr hdc, IntPtr gfx, int cw, ref int y)
     {
-        int circleSize = S(28);
-        int textX = margin + circleSize + S(12);
+        int margin = S(BASE_MARGIN);
+        int logoSize = S(44);
+        int textX = margin;
+        int titleTop = y + S(4);
+        int titleBottom = y + S(36);
+        int subtitleTop = y + S(38);
+        int subtitleBottom = y + S(62);
+        int logoY = titleTop + Math.Max(0, (subtitleBottom - titleTop - logoSize) / 2);
 
-        // Cercle bleu anti-aliasé via GDI+
+        if (_gdipLogo != IntPtr.Zero)
+        {
+            Win32.GdipDrawImageRectI(gfx, _gdipLogo, margin, logoY, logoSize, logoSize);
+            textX = margin + logoSize + S(12);
+        }
+
+        Win32.SelectObject(hdc, _hFontSubtitle);
+        Win32.SetTextColor(hdc, 0x00888888);
+        string versionText = "v" + Program.Version;
+        int versionWidth = MeasureSingleLineWidth(hdc, _hFontSubtitle, versionText) + S(8);
+        int versionLeft = cw - margin - versionWidth;
+        var versionRect = new Win32.RECT
+        {
+            left = versionLeft,
+            top = y + S(8),
+            right = cw - margin,
+            bottom = y + S(32)
+        };
+        Win32.DrawTextW(hdc, versionText, -1, ref versionRect,
+            Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+
+        Win32.SelectObject(hdc, _hFontTitle);
+        Win32.SetTextColor(hdc, CLR_TITLE);
+        var titleRect = new Win32.RECT
+        {
+            left = textX,
+            top = titleTop,
+            right = Math.Max(textX, versionLeft - S(8)),
+            bottom = titleBottom
+        };
+        Win32.DrawTextW(hdc, "AZERTY Global", -1, ref titleRect,
+            Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+
+        Win32.SelectObject(hdc, _hFontSubtitle);
+        Win32.SetTextColor(hdc, CLR_TEXT);
+        var subtitleRect = new Win32.RECT
+        {
+            left = textX,
+            top = subtitleTop,
+            right = cw - margin,
+            bottom = subtitleBottom
+        };
+        Win32.DrawTextW(hdc, "Votre clavier est maintenant amélioré.", -1, ref subtitleRect,
+            Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+
+        int headerBottom = Math.Max(logoY + logoSize, subtitleRect.bottom) + S(2);
+        y = headerBottom;
+
+        var sepBrush = Win32.CreateSolidBrush(0x00D0D0D0);
+        var sepRect = new Win32.RECT { left = margin, top = y + S(24), right = cw - margin, bottom = y + S(25) };
+        Win32.FillRect(hdc, ref sepRect, sepBrush);
+        Win32.DeleteObject(sepBrush);
+        y += S(26);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Étape 1 — Les 5 améliorations + bandeau bêta
+    // ═══════════════════════════════════════════════════════════════
+    private void GetStep3Layout(int topY, int winW,
+        out Win32.RECT resourcesPanel, out Win32.RECT noteRect, out Win32.RECT prefsPanel,
+        out int linksX, out int linksWidth, out int linkStartY, out int linkRowH, out int linkControlHeight,
+        out int noteX, out int noteWidth, out int noteY, out int noteHeight,
+        out int checkboxX, out int checkboxWidth, out int checkboxY, out int checkboxSpacing, out int checkboxHeight)
+    {
+        int margin = S(BASE_MARGIN);
+        int panelWidth = winW - margin * 2;
+        int panelPaddingX = S(18);
+        const string noteText = "\u26A0 Le testeur en ligne n\u00E9cessite de d\u00E9sactiver temporairement l'application.";
+        int resourcePaddingTop = S(16);
+        int resourcePaddingBottom = S(12);
+        int notePaddingTop = S(10);
+        int notePaddingBottom = S(10);
+        int prefsPaddingTop = S(16);
+        int prefsPaddingBottom = S(16);
+        int panelGap = S(14);
+
+        IntPtr hdc = Win32.GetDC(_hWnd);
+        try
+        {
+            int pageTitleHeight = MeasureSingleLineHeight(hdc, _hFontPageTitle);
+            linkControlHeight = Math.Max(S(28), MeasureSingleLineHeight(hdc, _hFontLinkStrong) + S(6));
+            linkRowH = linkControlHeight + S(2);
+            int resourcesHeight = resourcePaddingTop + linkRowH * 4 + resourcePaddingBottom;
+            int panelTop = topY + pageTitleHeight + S(12);
+
+            resourcesPanel = new Win32.RECT
+            {
+                left = margin,
+                top = panelTop,
+                right = margin + panelWidth,
+                bottom = panelTop + resourcesHeight
+            };
+
+            linksX = resourcesPanel.left + panelPaddingX;
+            linksWidth = panelWidth - panelPaddingX * 2;
+            linkStartY = resourcesPanel.top + resourcePaddingTop;
+
+            int noteTop = resourcesPanel.bottom + panelGap;
+            noteX = margin + S(12);
+            noteWidth = panelWidth - S(24);
+            noteHeight = MeasureTextHeight(hdc, _hFontNote, noteText, noteWidth) + S(4);
+            int noteBlockHeight = notePaddingTop + noteHeight + notePaddingBottom;
+            noteY = noteTop + notePaddingTop;
+            noteRect = new Win32.RECT
+            {
+                left = margin,
+                top = noteTop,
+                right = margin + panelWidth,
+                bottom = noteTop + noteBlockHeight
+            };
+
+            checkboxX = margin + panelPaddingX;
+            checkboxWidth = panelWidth - panelPaddingX * 2;
+            checkboxHeight = Math.Max(S(26), MeasureSingleLineHeight(hdc, _hFontBold) + S(10));
+            int prefsTitleHeight = MeasureSingleLineHeight(hdc, _hFontPageTitle);
+            int prefsTop = noteRect.bottom + panelGap + prefsTitleHeight + S(8);
+            checkboxY = prefsTop + prefsPaddingTop;
+            checkboxSpacing = checkboxHeight + S(10);
+            int prefsHeight = prefsPaddingTop + checkboxHeight * 2 + S(10) + prefsPaddingBottom;
+            prefsPanel = new Win32.RECT
+            {
+                left = margin,
+                top = prefsTop,
+                right = margin + panelWidth,
+                bottom = prefsTop + prefsHeight
+            };
+        }
+        finally
+        {
+            Win32.ReleaseDC(_hWnd, hdc);
+        }
+    }
+
+    // Méthodes GDI factorisées dans GdiHelpers.cs — wrappers d'instance pour le DPI scaling
+    private int MeasureTextHeight(IntPtr hdc, IntPtr hFont, string text, int width,
+        uint format = Win32.DT_LEFT | Win32.DT_WORDBREAK | Win32.DT_NOPREFIX)
+        => GdiHelpers.MeasureTextHeight(hdc, hFont, text, width, format);
+
+    private int MeasureSingleLineWidth(IntPtr hdc, IntPtr hFont, string text)
+        => GdiHelpers.MeasureSingleLineWidth(hdc, hFont, text);
+
+    private int MeasureSingleLineHeight(IntPtr hdc, IntPtr hFont)
+        => GdiHelpers.MeasureSingleLineHeight(hdc, hFont);
+
+    private void PaintStep1(IntPtr hdc, int cw, int ch, int y)
+    {
+        int margin = S(BASE_MARGIN);
+        int bannerTextX = margin + S(14);
+
+        // ── Bandeau bêta ──
+        int bannerH = S(72);
+        var bannerRect = new Win32.RECT { left = margin, top = y, right = cw - margin, bottom = y + bannerH };
+        Win32.FillRect(hdc, ref bannerRect, _hBannerBgBrush);
+
+        var borderBrush = Win32.CreateSolidBrush(CLR_BANNER_BORDER);
+        var borderRect = new Win32.RECT { left = margin, top = y, right = margin + S(4), bottom = y + bannerH };
+        Win32.FillRect(hdc, ref borderRect, borderBrush);
+        Win32.DeleteObject(borderBrush);
+
+        Win32.SelectObject(hdc, _hFontBannerBold);
+        Win32.SetTextColor(hdc, CLR_BANNER_TITLE);
+        int line1Y = y + S(9);
+        var bannerLine1 = new Win32.RECT { left = bannerTextX, top = line1Y, right = cw - margin - S(8), bottom = line1Y + S(28) };
+        Win32.DrawTextW(hdc, "Version bêta", -1, ref bannerLine1, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+
+        // Ligne 2 : "Après quelques jours d'utilisation, " (GDI) + "donnez votre avis" (lien STATIC)
+        int line2Y = line1Y + S(28);
+        string prefix = "Après quelques jours d'utilisation, ";
+        Win32.SelectObject(hdc, _hFontText);
+        Win32.SetTextColor(hdc, CLR_BANNER_TEXT);
+        var prefixRect = new Win32.RECT { left = bannerTextX, top = line2Y, right = cw - margin, bottom = line2Y + S(24) };
+        Win32.DrawTextW(hdc, prefix, -1, ref prefixRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+
+        // Mesurer le préfixe et repositionner le lien
+        var measurePrefix = new Win32.RECT { left = 0, top = 0, right = 9999, bottom = 9999 };
+        Win32.DrawTextW(hdc, prefix, -1, ref measurePrefix, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX | Win32.DT_CALCRECT);
+        Win32.SetWindowPos(_hWndLinkBetaBanner, IntPtr.Zero,
+            bannerTextX + measurePrefix.right, line2Y, S(160), S(26),
+            0x0004 | 0x0010); // SWP_NOZORDER | SWP_NOACTIVATE
+
+        y += bannerH + S(18);
+
+        // ── Titre ──
+        Win32.SelectObject(hdc, _hFontStepSummary);
+        Win32.SetTextColor(hdc, CLR_TITLE);
+        var stepTitleRect = new Win32.RECT { left = margin, top = y, right = cw - margin, bottom = y + S(28) };
+        Win32.DrawTextW(hdc, "5 améliorations, 99 % de vos habitudes préservées", -1, ref stepTitleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+        y += S(40);
+
+        // ── Les 5 améliorations ──
+        DrawFeatureWithHighlight(hdc, margin, cw, ref y, "1",
+            "Verrouillage Majuscule intelligent",
+            "Verr. Maj. + é è ç à \u2192 É È Ç À.");
+        DrawFeature(hdc, margin, cw, ref y, "2",
+            "Point en accès direct",
+            "Le point et le point-virgule échangent leurs places.");
+        DrawFeature(hdc, margin, cw, ref y, "3",
+            "@ et # sur la touche en haut à gauche",
+            "Accès direct sans AltGr.");
+        DrawFeatureWithHighlight(hdc, margin, cw, ref y, "4",
+            "Symboles de programmation accessibles",
+            "{ } [ ] \\ | sur la rangée de repos avec AltGr.");
+        DrawFeatureWithHighlight(hdc, margin, cw, ref y, "5",
+            "Accents internationaux",
+            "Accents aigu, grave et tilde sur la touche à droite du M");
+    }
+
+    private void DrawFeature(IntPtr hdc, int margin, int cw, ref int y, string number, string title, string description)
+    {
+        DrawStepCard(hdc, margin, cw, ref y, number, title, description);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Étape 2
+    // ═══════════════════════════════════════════════════════════════
+    private void PaintStep2(IntPtr hdc, IntPtr gfx, int cw, int ch, int y)
+    {
+        int margin = S(BASE_MARGIN);
+
+        Win32.SelectObject(hdc, _hFontStepSummary);
+        Win32.SetTextColor(hdc, CLR_TITLE);
+        var stepTitleRect = new Win32.RECT { left = margin, top = y, right = cw - margin, bottom = y + S(28) };
+        Win32.DrawTextW(hdc, "Comment utiliser AZERTY Global", -1, ref stepTitleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+        y += S(38);
+
+        DrawStepCard(hdc, margin, cw, ref y, "1",
+            "L'icône AG est dans la barre des tâches",
+            "Elle indique si le remapping est actif. Clic droit pour accéder aux options.");
+
+        DrawToggleStepCard(hdc, margin, cw, ref y);
+
+        DrawStepCardWithRuns(hdc, margin, cw, ref y, "3",
+            "Explorez avec le clavier virtuel",
+            GetShortcutRuns(null, "Ctrl + Maj + Q", " pour voir tous les caractères disponibles."));
+
+        DrawStepCardWithRuns(hdc, margin, cw, ref y, "4",
+            "Recherchez n'importe quel caractère",
+            GetShortcutRuns(null, "Ctrl + Maj + W", " puis tapez le nom d'un caractère pour le copier et voir comment le taper sur le clavier virtuel."));
+    }
+
+    /// <summary>Dessine un cercle numéroté en GDI+ (anti-aliasé).</summary>
+    private void DrawNumberedCircle(IntPtr gfx, int x, int y, int size, string number)
+    {
         Win32.GdipCreateSolidFill(ARGB_STEP_CIRCLE, out IntPtr blueBrush);
-        Win32.GdipFillEllipseI(gfx, blueBrush, margin, y, circleSize, circleSize);
-
-        // Numéro blanc
+        Win32.GdipFillEllipseI(gfx, blueBrush, x, y, size, size);
         Win32.GdipCreateFontFamilyFromName("Segoe UI", IntPtr.Zero, out IntPtr fontFamily);
         Win32.GdipCreateFont(fontFamily, 10f * _dpiScale, 1, 2, out IntPtr gdipFont);
         Win32.GdipCreateStringFormat(0, 0, out IntPtr strFormat);
         Win32.GdipSetStringFormatAlign(strFormat, 1);
         Win32.GdipSetStringFormatLineAlign(strFormat, 1);
         Win32.GdipCreateSolidFill(ARGB_WHITE, out IntPtr whiteBrush);
-        var circleRect = new Win32.RectF { X = margin, Y = y, Width = circleSize, Height = circleSize };
-        Win32.GdipDrawString(gfx, "3", 1, gdipFont, ref circleRect, strFormat, whiteBrush);
+        var circleRect = new Win32.RectF { X = x, Y = y, Width = size, Height = size };
+        Win32.GdipDrawString(gfx, number, number.Length, gdipFont, ref circleRect, strFormat, whiteBrush);
         Win32.GdipDeleteBrush(whiteBrush);
         Win32.GdipDeleteBrush(blueBrush);
         Win32.GdipDeleteStringFormat(strFormat);
         Win32.GdipDeleteFont(gdipFont);
         Win32.GdipDeleteFontFamily(fontFamily);
+    }
 
-        // Titre
+    private void DrawStep(IntPtr hdc, IntPtr gfx, int margin, int cw, ref int y, string number, string title, string description)
+    {
+        int circleSize = S(28);
+        int textX = margin + circleSize + S(10);
+
+        DrawNumberedCircle(gfx, margin, y, circleSize, number);
+
         Win32.SelectObject(hdc, _hFontBold);
         Win32.SetTextColor(hdc, CLR_STEP_TITLE);
-        var titleRect = new Win32.RECT { left = textX, top = y + S(2), right = cw - margin, bottom = y + S(24) };
-        Win32.DrawTextW(hdc, "Activez / désactivez à tout moment", -1, ref titleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
-        y += S(26);
+        var titleRect = new Win32.RECT { left = textX, top = y + S(2), right = cw - margin, bottom = y + S(26) };
+        Win32.DrawTextW(hdc, title, -1, ref titleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+        y += S(28);
 
-        // "Raccourci : " en texte normal
+        Win32.SelectObject(hdc, _hFontText);
+        Win32.SetTextColor(hdc, CLR_TEXT);
+        var measureDesc = new Win32.RECT { left = textX, top = 0, right = cw - margin, bottom = S(100) };
+        Win32.DrawTextW(hdc, description, -1, ref measureDesc, Win32.DT_LEFT | Win32.DT_WORDBREAK | Win32.DT_NOPREFIX | Win32.DT_CALCRECT);
+        int textH = measureDesc.bottom;
+        var descRect = new Win32.RECT { left = textX, top = y, right = cw - margin, bottom = y + textH };
+        Win32.DrawTextW(hdc, description, -1, ref descRect, Win32.DT_LEFT | Win32.DT_WORDBREAK | Win32.DT_NOPREFIX);
+        y += textH + S(14);
+    }
+
+    private void DrawStepWithHighlight(IntPtr hdc, IntPtr gfx, int margin, int cw, ref int y)
+    {
+        int circleSize = S(28);
+        int textX = margin + circleSize + S(10);
+
+        DrawNumberedCircle(gfx, margin, y, circleSize, "2");
+
+        Win32.SelectObject(hdc, _hFontBold);
+        Win32.SetTextColor(hdc, CLR_STEP_TITLE);
+        var titleRect = new Win32.RECT { left = textX, top = y + S(2), right = cw - margin, bottom = y + S(26) };
+        Win32.DrawTextW(hdc, "Activez / désactivez à tout moment", -1, ref titleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+        y += S(28);
+
         Win32.SelectObject(hdc, _hFontText);
         Win32.SetTextColor(hdc, CLR_TEXT);
         string prefix = "Raccourci : ";
-        var prefixRect = new Win32.RECT { left = textX, top = y, right = cw - margin, bottom = y + S(20) };
+        var prefixRect = new Win32.RECT { left = textX, top = y, right = cw - margin, bottom = y + S(22) };
         Win32.DrawTextW(hdc, prefix, -1, ref prefixRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
 
-        // Mesurer la largeur du préfixe pour positionner le raccourci juste après
         var measureRect = new Win32.RECT { left = 0, top = 0, right = 9999, bottom = 9999 };
         Win32.DrawTextW(hdc, prefix, -1, ref measureRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX | Win32.DT_CALCRECT);
 
-        // "Ctrl + Maj + Verr.Maj" en orange
         Win32.SelectObject(hdc, _hFontBold);
         Win32.SetTextColor(hdc, CLR_HIGHLIGHT);
-        var shortcutRect = new Win32.RECT { left = textX + measureRect.right, top = y, right = cw - margin, bottom = y + S(20) };
-        Win32.DrawTextW(hdc, "Ctrl + Maj + Verr.Maj", -1, ref shortcutRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
-        y += S(22);
+        var shortcutRect = new Win32.RECT { left = textX + measureRect.right, top = y, right = cw - margin, bottom = y + S(22) };
+        Win32.DrawTextW(hdc, "Ctrl + Maj + Verr. Maj.", -1, ref shortcutRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+        y += S(24);
 
-        // Deuxième ligne
         Win32.SelectObject(hdc, _hFontText);
         Win32.SetTextColor(hdc, CLR_TEXT);
-        var line2Rect = new Win32.RECT { left = textX, top = y, right = cw - margin, bottom = y + S(20) };
+        var line2Rect = new Win32.RECT { left = textX, top = y, right = cw - margin, bottom = y + S(22) };
         Win32.DrawTextW(hdc, "Ou clic droit sur l'icône AG \u2192 Désactiver", -1, ref line2Rect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
-        y += S(26);
+        y += S(14); // Marge identique à DrawStep
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Étape 3
+    // ═══════════════════════════════════════════════════════════════
+    private void DrawBadge(IntPtr hdc, int x, int y, string number)
+    {
+        int badgeW = S(34);
+        int badgeH = S(24);
+        var badgeRect = new Win32.RECT { left = x, top = y, right = x + badgeW, bottom = y + badgeH };
+        GdiHelpers.FillSolidRect(hdc, badgeRect, CLR_BADGE_BG);
+
+        Win32.SelectObject(hdc, _hFontSmall);
+        Win32.SetTextColor(hdc, CLR_BADGE_TEXT);
+        Win32.DrawTextW(hdc, number, -1, ref badgeRect,
+            Win32.DT_CENTER | Win32.DT_VCENTER | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+    }
+
+    private void DrawPill(IntPtr hdc, int x, int y, string text)
+    {
+        int pillPadX = S(10);
+        int pillH = S(24);
+        int pillW = MeasureSingleLineWidth(hdc, _hFontSmall, text) + pillPadX * 2;
+        var pillRect = new Win32.RECT { left = x, top = y, right = x + pillW, bottom = y + pillH };
+        GdiHelpers.FillSolidRect(hdc, pillRect, CLR_PILL_BG);
+
+        Win32.SelectObject(hdc, _hFontSmall);
+        Win32.SetTextColor(hdc, CLR_PILL_TEXT);
+        Win32.DrawTextW(hdc, text, -1, ref pillRect,
+            Win32.DT_CENTER | Win32.DT_VCENTER | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+    }
+
+    private (string Text, uint Color, IntPtr Font)[] GetStyledDescriptionRuns(string number, string description)
+    {
+        return number switch
+        {
+            "1" => new (string Text, uint Color, IntPtr Font)[]
+            {
+                ("Verr. Maj. + ", CLR_TEXT, _hFontText),
+                ("\u00E9 \u00E8 \u00E7 \u00E0", CLR_INLINE_HIGHLIGHT, _hFontBold),
+                (" \u2192 ", CLR_TEXT, _hFontText),
+                ("\u00C9 \u00C8 \u00C7 \u00C0", CLR_INLINE_HIGHLIGHT, _hFontBold),
+                (".", CLR_TEXT, _hFontText)
+            },
+            "4" => new (string Text, uint Color, IntPtr Font)[]
+            {
+                ("{ } [ ] \\ |", CLR_INLINE_HIGHLIGHT, _hFontBold),
+                (" sur la rang\u00E9e de repos avec AltGr.", CLR_TEXT, _hFontText)
+            },
+            "5" => new (string Text, uint Color, IntPtr Font)[]
+            {
+                ("Accents aigu, grave et tilde sur la touche \u00E0 droite du M.", CLR_TEXT, _hFontText)
+            },
+            _ => new (string Text, uint Color, IntPtr Font)[]
+            {
+                (description, CLR_TEXT, _hFontText)
+            }
+        };
+    }
+
+    private (string Text, uint Color, IntPtr Font)[] GetShortcutRuns(string? prefix, string shortcut, string? suffix = null)
+    {
+        var runs = new System.Collections.Generic.List<(string Text, uint Color, IntPtr Font)>();
+
+        if (!string.IsNullOrEmpty(prefix))
+            runs.Add((prefix, CLR_TEXT, _hFontText));
+
+        string[] keys = shortcut.Split(" + ");
+        for (int i = 0; i < keys.Length; i++)
+        {
+            if (i > 0)
+                runs.Add((" + ", CLR_TEXT, _hFontText));
+
+            runs.Add((keys[i], CLR_INLINE_HIGHLIGHT, _hFontBold));
+        }
+
+        if (!string.IsNullOrEmpty(suffix))
+            runs.Add((suffix, CLR_TEXT, _hFontText));
+
+        return runs.ToArray();
+    }
+
+    private void DrawStepCardWithRuns(IntPtr hdc, int margin, int cw, ref int y, string number, string title,
+        params (string Text, uint Color, IntPtr Font)[] descriptionRuns)
+    {
+        int cardTop = y;
+        int cardPaddingX = S(16);
+        int cardPaddingY = S(12);
+        int badgeW = S(34);
+        int badgeGap = S(16);
+        int contentWidth = cw - margin * 2;
+        int textX = margin + cardPaddingX + badgeW + badgeGap;
+        int textWidth = contentWidth - cardPaddingX * 2 - badgeW - badgeGap;
+        int titleHeight = S(24);
+        int descHeight = GdiHelpers.MeasureColoredRunsHeight(hdc, textWidth, S(22), descriptionRuns);
+        int cardHeight = Math.Max(S(78), cardPaddingY * 2 + titleHeight + descHeight + S(4));
+
+        var cardRect = new Win32.RECT { left = margin, top = cardTop, right = cw - margin, bottom = cardTop + cardHeight };
+        GdiHelpers.DrawPanel(hdc, cardRect, CLR_PANEL_BG, CLR_PANEL_BORDER, CLR_BADGE_BG, S(4));
+        DrawBadge(hdc, margin + cardPaddingX, cardTop + cardPaddingY, number);
+
+        Win32.SelectObject(hdc, _hFontBold);
+        Win32.SetTextColor(hdc, CLR_STEP_TITLE);
+        var titleRect = new Win32.RECT
+        {
+            left = textX,
+            top = cardTop + cardPaddingY - S(1),
+            right = textX + textWidth,
+            bottom = cardTop + cardPaddingY + titleHeight
+        };
+        Win32.DrawTextW(hdc, title, -1, ref titleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+
+        GdiHelpers.DrawColoredRuns(hdc, textX, cardTop + cardPaddingY + titleHeight, textWidth, S(22), descriptionRuns);
+
+        y += cardHeight + S(10);
+    }
+
+    private void DrawFeatureWithHighlight(IntPtr hdc, int margin, int cw, ref int y, string number, string title, string description)
+    {
+        DrawStepCardWithRuns(hdc, margin, cw, ref y, number, title, GetStyledDescriptionRuns(number, description));
+    }
+
+    private void DrawStepCard(IntPtr hdc, int margin, int cw, ref int y, string number, string title, string description)
+    {
+        int cardTop = y;
+        int cardPaddingX = S(16);
+        int cardPaddingY = S(12);
+        int badgeW = S(34);
+        int badgeGap = S(16);
+        int contentWidth = cw - margin * 2;
+        int textX = margin + cardPaddingX + badgeW + badgeGap;
+        int textWidth = contentWidth - cardPaddingX * 2 - badgeW - badgeGap;
+        int titleHeight = S(24);
+        int descHeight = MeasureTextHeight(hdc, _hFontText, description, textWidth);
+        int cardHeight = Math.Max(S(78), cardPaddingY * 2 + titleHeight + descHeight + S(4));
+
+        var cardRect = new Win32.RECT { left = margin, top = cardTop, right = cw - margin, bottom = cardTop + cardHeight };
+        GdiHelpers.DrawPanel(hdc, cardRect, CLR_PANEL_BG, CLR_PANEL_BORDER, CLR_BADGE_BG, S(4));
+        DrawBadge(hdc, margin + cardPaddingX, cardTop + cardPaddingY, number);
+
+        Win32.SelectObject(hdc, _hFontBold);
+        Win32.SetTextColor(hdc, CLR_STEP_TITLE);
+        var titleRect = new Win32.RECT
+        {
+            left = textX,
+            top = cardTop + cardPaddingY - S(1),
+            right = textX + textWidth,
+            bottom = cardTop + cardPaddingY + titleHeight
+        };
+        Win32.DrawTextW(hdc, title, -1, ref titleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+
+        Win32.SelectObject(hdc, _hFontText);
+        Win32.SetTextColor(hdc, CLR_TEXT);
+        var descRect = new Win32.RECT
+        {
+            left = textX,
+            top = cardTop + cardPaddingY + titleHeight,
+            right = textX + textWidth,
+            bottom = cardTop + cardHeight - cardPaddingY
+        };
+        Win32.DrawTextW(hdc, description, -1, ref descRect, Win32.DT_LEFT | Win32.DT_WORDBREAK | Win32.DT_NOPREFIX);
+
+        y += cardHeight + S(10);
+    }
+
+    private void DrawToggleStepCard(IntPtr hdc, int margin, int cw, ref int y)
+    {
+        int cardTop = y;
+        int cardPaddingX = S(16);
+        int cardPaddingY = S(12);
+        int badgeW = S(34);
+        int badgeGap = S(16);
+        int contentWidth = cw - margin * 2;
+        int textX = margin + cardPaddingX + badgeW + badgeGap;
+        int textWidth = contentWidth - cardPaddingX * 2 - badgeW - badgeGap;
+        int titleHeight = S(24);
+        var shortcutRuns = GetShortcutRuns("Raccourci : ", "Ctrl + Maj + Verr. Maj.");
+        int shortcutHeight = GdiHelpers.MeasureColoredRunsHeight(hdc, textWidth, S(22), shortcutRuns);
+        int cardHeight = Math.Max(S(78), cardPaddingY * 2 + titleHeight + shortcutHeight + S(10));
+
+        var cardRect = new Win32.RECT { left = margin, top = cardTop, right = cw - margin, bottom = cardTop + cardHeight };
+        GdiHelpers.DrawPanel(hdc, cardRect, CLR_PANEL_BG, CLR_PANEL_BORDER, CLR_BADGE_BG, S(4));
+        DrawBadge(hdc, margin + cardPaddingX, cardTop + cardPaddingY, "2");
+
+        Win32.SelectObject(hdc, _hFontBold);
+        Win32.SetTextColor(hdc, CLR_STEP_TITLE);
+        var titleRect = new Win32.RECT
+        {
+            left = textX,
+            top = cardTop + cardPaddingY - S(1),
+            right = textX + textWidth,
+            bottom = cardTop + cardPaddingY + titleHeight
+        };
+        Win32.DrawTextW(hdc, "Activez / désactivez à tout moment", -1, ref titleRect,
+            Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+
+        int lineY = cardTop + cardPaddingY + titleHeight + S(4);
+        GdiHelpers.DrawColoredRuns(hdc, textX, lineY, textWidth, S(22), shortcutRuns);
+
+        y += cardHeight + S(10);
+    }
+
+    private void PaintStep3(IntPtr hdc, IntPtr gfx, int cw, int ch, int y)
+    {
+        int margin = S(BASE_MARGIN);
+        GetStep3Layout(y, cw, out var resourcesPanel, out var noteRect, out var prefsPanel,
+            out int linksX, out int linksWidth, out int linkStartY, out int linkRowH, out _,
+            out int noteX, out int noteWidth, out int noteY, out int noteHeight,
+            out int checkboxX, out int checkboxWidth, out int checkboxY, out int checkboxSpacing, out _);
+
+        Win32.SelectObject(hdc, _hFontPageTitle);
+        Win32.SetTextColor(hdc, CLR_TITLE);
+        var stepTitleRect = new Win32.RECT { left = margin, top = y, right = cw - margin, bottom = resourcesPanel.top - S(12) };
+        Win32.DrawTextW(hdc, "Ressources & communauté", -1, ref stepTitleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+
+        var prefsTitleRect = new Win32.RECT
+        {
+            left = margin,
+            top = noteRect.bottom + S(14),
+            right = cw - margin,
+            bottom = prefsPanel.top - S(8)
+        };
+        Win32.DrawTextW(hdc, "Préférences", -1, ref prefsTitleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+
+        GdiHelpers.DrawPanel(hdc, resourcesPanel, CLR_PANEL_BG, CLR_PANEL_BORDER, CLR_BADGE_BG, S(4));
+        GdiHelpers.DrawPanel(hdc, prefsPanel, CLR_PANEL_BG, CLR_PANEL_BORDER, CLR_BADGE_BG, S(4));
+        GdiHelpers.DrawPanel(hdc, noteRect, CLR_NOTE_BG, CLR_NOTE_BORDER, CLR_NOTE_ACCENT, S(4));
+
+        for (int row = 1; row < 4; row++)
+        {
+            var rowSep = new Win32.RECT
+            {
+                left = linksX,
+                top = linkStartY + row * linkRowH - S(6),
+                right = linksX + linksWidth,
+                bottom = linkStartY + row * linkRowH - S(5)
+            };
+            GdiHelpers.FillSolidRect(hdc, rowSep, 0x00E3E3E3);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -562,17 +1330,21 @@ sealed class OnboardingWindow : IDisposable
     // ═══════════════════════════════════════════════════════════════
     public void Dispose()
     {
+        if (_hWndLinkBetaBanner != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkBetaBanner, _linkSubclassProc, (UIntPtr)10);
+        if (_hWndLinkGuide != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkGuide, _linkSubclassProc, (UIntPtr)1);
+        if (_hWndLinkLessons != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkLessons, _linkSubclassProc, (UIntPtr)2);
+        if (_hWndLinkBeta != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkBeta, _linkSubclassProc, (UIntPtr)3);
+        if (_hWndLinkDiscord != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkDiscord, _linkSubclassProc, (UIntPtr)5);
+
         if (_hWnd != IntPtr.Zero) { Win32.DestroyWindow(_hWnd); _hWnd = IntPtr.Zero; }
         if (_hIcon != IntPtr.Zero) { Win32.DestroyIcon(_hIcon); _hIcon = IntPtr.Zero; }
         if (_gdipLogo != IntPtr.Zero) { Win32.GdipDisposeImage(_gdipLogo); _gdipLogo = IntPtr.Zero; }
+        if (_gdipDiscord != IntPtr.Zero) { Win32.GdipDisposeImage(_gdipDiscord); _gdipDiscord = IntPtr.Zero; }
         if (_gdipToken != IntPtr.Zero) { Win32.GdiplusShutdown(_gdipToken); _gdipToken = IntPtr.Zero; }
-        Win32.DeleteObject(_hFontTitle);
-        Win32.DeleteObject(_hFontSubtitle);
-        Win32.DeleteObject(_hFontText);
-        Win32.DeleteObject(_hFontBold);
-        Win32.DeleteObject(_hFontLink);
-        Win32.DeleteObject(_hFontSmall);
-        Win32.DeleteObject(_hFontButton);
+        DestroyFonts();
         Win32.DeleteObject(_hBgBrush);
+        Win32.DeleteObject(_hBannerBgBrush);
+        Win32.DeleteObject(_hPanelBrush);
+        Win32.DeleteObject(_hNoteBrush);
     }
 }

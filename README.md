@@ -19,7 +19,7 @@ L'application Windows permet d'utiliser AZERTY Global **sans installation systè
 - **Clavier virtuel** — Visualisation interactive de la disposition
 - **Recherche de caractères** — Trouvez n'importe quel caractère parmi les 1 000+ disponibles
 - **Icône dans la zone de notification** — Activation/désactivation rapide
-- **Aucune installation requise** — Fonctionne depuis le Microsoft Store ou en portable
+- **Aucune installation requise** — Fonctionne depuis le Microsoft Store
 
 ### Configuration requise
 
@@ -36,7 +36,7 @@ dotnet publish -c Release
 
 > **Note :** Le linker AOT peut échouer si le chemin contient des espaces. Si c'est le cas, copiez les sources dans un chemin sans espaces (ex : `C:\temp\agp-build`).
 
-Le binaire compilé se trouve dans `src/bin/Release/net8.0-windows/win-x64/publish/`.
+Le binaire compilé se trouve dans `src/bin/Release/net8.0-windows10.0.17763.0/win-x64/publish/`.
 
 ## Structure du projet
 
@@ -50,15 +50,22 @@ src/                        Code source C#
 ├── CharacterSearch.cs      Recherche de caractères
 ├── VirtualKeyboard.cs      Clavier virtuel interactif
 ├── OnboardingWindow.cs     Fenêtre de première utilisation
+├── SettingsWindow.cs       Fenêtre des paramètres
 ├── ConfigManager.cs        Gestion de la configuration
 ├── AutoStart.cs            Démarrage automatique
+├── GdiHelpers.cs           Utilitaires GDI+ (rendu texte)
+├── GdiImageLoader.cs       Chargement d'images GDI+
 ├── Win32.cs                Interop Win32 / P/Invoke
 ├── AZERTY Global 2026.json Disposition clavier (ressource embarquée)
 ├── character-index.json    Index de recherche (ressource embarquée)
-└── favicon-azerty-global.png  Icône (ressource embarquée)
+├── favicon-azerty-global.png  Icône (ressource embarquée)
+└── discord-icon.png        Icône Discord (ressource embarquée)
 msix/                       Packaging Microsoft Store
 ├── AppxManifest.xml        Manifeste MSIX
 └── Assets/                 Logos et screenshots Store
+scripts/                    Scripts de build
+├── Pack-MSIX.ps1           Packaging MSIX
+└── Verify-Release.ps1      Vérification pré-publication
 ```
 
 ## Licence

@@ -1,10 +1,10 @@
 // Charge le layout AZERTY Global depuis le JSON
 using System.Text.Json;
 
-namespace AZERTYGlobalPortable;
+namespace AZERTYGlobal;
 
 /// <summary>
-/// Charge et parse le fichier AZERTY Global 2026.json.
+/// Charge et parse le fichier AZERTY Global Beta.json.
 /// Construit les tables de mapping en mémoire.
 /// </summary>
 static class LayoutLoader

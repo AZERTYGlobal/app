@@ -1,7 +1,7 @@
 // Moteur de remapping — traduit les scancodes en caractères AZERTY Global
 using System.Runtime.InteropServices;
 
-namespace AZERTYGlobalPortable;
+namespace AZERTYGlobal;
 
 /// <summary>
 /// Gère la logique de remapping clavier.
@@ -89,6 +89,9 @@ sealed class KeyMapper
         // Vider le buffer de touche morte du layout Windows sous-jacent
         // (l'utilisateur a pu activer une DK système pendant que le remapping était désactivé)
         FlushSystemDeadKey();
+
+        // Réinitialiser les touches en pass-through (un keyup a pu être manqué)
+        _passedThroughKeys.Clear();
 
         if (changed)
             StateChanged?.Invoke();
@@ -246,6 +249,11 @@ sealed class KeyMapper
         // GetAsyncKeyState ne reflète le nouvel état, ce qui effacerait le modificateur
         // que TrackModifiers vient de positionner.
         CleanupStaleModifiers();
+
+        // Garde : si des keyup ont été manqués, le HashSet grandit sans limite.
+        // 20 touches simultanées est physiquement impossible — vider le set.
+        if (_passedThroughKeys.Count > 20)
+            _passedThroughKeys.Clear();
 
         // Caps Lock : tracker l'état interne
         // Note : Ctrl+Shift+CapsLock (toggle on/off) est géré en amont dans le hook
@@ -439,7 +447,9 @@ sealed class KeyMapper
     private bool CanPassThrough(uint scanCode, string output)
     {
         // Seulement pour les caractères simples, pas AltGr (qui produit des chars spéciaux)
-        if (output.Length != 1 || IsAltGrDown) return false;
+        // Pas de pass-through avec Caps Lock : le Smart Caps Lock d'AZERTY Global diffère
+        // du comportement Windows natif (qui traite CapsLock comme Shift sur la rangée numérique)
+        if (output.Length != 1 || IsAltGrDown || _capsLockState) return false;
 
         // VK correspondant à ce scancode sur le layout Windows
         uint vk = Win32.MapVirtualKeyW(scanCode, 1); // MAPVK_VSC_TO_VK
@@ -486,49 +496,55 @@ sealed class KeyMapper
 
     /// <summary>
     /// Envoie une chaîne de caractères Unicode via SendInput.
+    /// Gère les surrogate pairs (caractères hors BMP, U+10000+).
     /// </summary>
     private void SendUnicodeString(string text)
     {
-        var inputs = new List<Win32.INPUT>();
+        // Pré-dimensionné : 2 inputs par char BMP (down+up), 4 par surrogate pair
+        var inputs = new Win32.INPUT[text.Length * 4];
+        int count = 0;
 
-        foreach (char c in text)
+        for (int i = 0; i < text.Length; i++)
         {
-            // Key down
-            inputs.Add(new Win32.INPUT
-            {
-                type = INPUT_KEYBOARD,
-                u = new Win32.INPUTUNION
-                {
-                    ki = new Win32.KEYBDINPUT
-                    {
-                        wVk = 0,
-                        wScan = c,
-                        dwFlags = KEYEVENTF_UNICODE,
-                        time = 0,
-                        dwExtraInfo = KeyboardHook.INJECTED_FLAG
-                    }
-                }
-            });
+            char c = text[i];
 
-            // Key up
-            inputs.Add(new Win32.INPUT
+            if (char.IsHighSurrogate(c) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
             {
-                type = INPUT_KEYBOARD,
-                u = new Win32.INPUTUNION
-                {
-                    ki = new Win32.KEYBDINPUT
-                    {
-                        wVk = 0,
-                        wScan = c,
-                        dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
-                        time = 0,
-                        dwExtraInfo = KeyboardHook.INJECTED_FLAG
-                    }
-                }
-            });
+                // Surrogate pair : envoyer les deux halves en séquence (down+down, up+up)
+                char high = c;
+                char low = text[++i];
+
+                // Key down (high puis low)
+                inputs[count++] = MakeUnicodeInput(high, false);
+                inputs[count++] = MakeUnicodeInput(low, false);
+
+                // Key up (high puis low)
+                inputs[count++] = MakeUnicodeInput(high, true);
+                inputs[count++] = MakeUnicodeInput(low, true);
+            }
+            else
+            {
+                inputs[count++] = MakeUnicodeInput(c, false);
+                inputs[count++] = MakeUnicodeInput(c, true);
+            }
         }
 
-        var inputArray = inputs.ToArray();
-        Win32.SendInput((uint)inputArray.Length, inputArray, Marshal.SizeOf<Win32.INPUT>());
+        Win32.SendInput((uint)count, inputs, Marshal.SizeOf<Win32.INPUT>());
     }
+
+    private static Win32.INPUT MakeUnicodeInput(char c, bool keyUp) => new()
+    {
+        type = INPUT_KEYBOARD,
+        u = new Win32.INPUTUNION
+        {
+            ki = new Win32.KEYBDINPUT
+            {
+                wVk = 0,
+                wScan = c,
+                dwFlags = KEYEVENTF_UNICODE | (keyUp ? KEYEVENTF_KEYUP : 0),
+                time = 0,
+                dwExtraInfo = KeyboardHook.INJECTED_FLAG
+            }
+        }
+    };
 }

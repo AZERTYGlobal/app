@@ -2,12 +2,12 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
-namespace AZERTYGlobalPortable;
+namespace AZERTYGlobal;
 
 /// <summary>
 /// Lit et écrit les préférences utilisateur dans config.json.
 /// Mode portable (unpackaged) : à côté de l'exécutable.
-/// Mode MSIX (packaged) : dans %LocalAppData%\AZERTY Global Portable\.
+/// Mode MSIX (packaged) : dans %LocalAppData%\AZERTY Global\.
 /// </summary>
 static class ConfigManager
 {
@@ -40,10 +40,27 @@ static class ConfigManager
         if (DetectPackaged())
         {
             // Mode MSIX : dossier du package en lecture seule → utiliser LocalAppData
-            var appDataDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "AZERTY Global Portable");
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var appDataDir = Path.Combine(localAppData, "AZERTY Global");
             Directory.CreateDirectory(appDataDir);
+
+            // Migration : copier les fichiers depuis l'ancien dossier "AZERTY Global Portable"
+            var oldDir = Path.Combine(localAppData, "AZERTY Global Portable");
+            if (Directory.Exists(oldDir))
+            {
+                try
+                {
+                    foreach (var file in Directory.GetFiles(oldDir))
+                    {
+                        var dest = Path.Combine(appDataDir, Path.GetFileName(file));
+                        if (!File.Exists(dest))
+                            File.Copy(file, dest);
+                    }
+                    Directory.Delete(oldDir, true);
+                }
+                catch { /* Migration best-effort — ne pas bloquer le démarrage */ }
+            }
+
             return Path.Combine(appDataDir, "config.json");
         }
 
@@ -52,18 +69,60 @@ static class ConfigManager
     }
 
     private static Dictionary<string, JsonElement>? _cache;
+    private static readonly object _lock = new();
 
     /// <summary>Vérifie si l'onboarding a déjà été affiché.</summary>
-    public static bool OnboardingDone => GetBool("onboardingDone");
+    public static bool ShowOnboardingAtStartup
+    {
+        get
+        {
+            lock (_lock)
+            {
+                EnsureLoaded();
+
+                if (_cache!.TryGetValue("showOnboardingAtStartup", out var showValue))
+                    return showValue.ValueKind != JsonValueKind.False;
+
+                bool show = true;
+                if (_cache.TryGetValue("onboardingDone", out var legacyDone) &&
+                    legacyDone.ValueKind == JsonValueKind.True)
+                {
+                    show = false;
+                }
+
+                using var doc = JsonDocument.Parse(show ? "true" : "false");
+                _cache["showOnboardingAtStartup"] = doc.RootElement.Clone();
+                Save();
+                return show;
+            }
+        }
+    }
 
     /// <summary>Marque l'onboarding comme terminé.</summary>
-    public static void SetOnboardingDone() => SetBool("onboardingDone", true);
+    public static void SetShowOnboardingAtStartup(bool show) => SetBool("showOnboardingAtStartup", show);
 
-    /// <summary>Vérifie si le lancement automatique au démarrage est activé.</summary>
+    /// <summary>Cache de compatibilité du lancement automatique. L'UI doit utiliser AutoStart.IsRegistered.</summary>
     public static bool AutoStartEnabled => GetBool("autoStartEnabled");
 
-    /// <summary>Active ou désactive le lancement automatique au démarrage.</summary>
+    /// <summary>Met à jour le cache de compatibilité du lancement automatique.</summary>
     public static void SetAutoStart(bool enabled) => SetBool("autoStartEnabled", enabled);
+
+    /// <summary>Vérifie si les notifications (balloons) sont activées. Défaut : true.</summary>
+    public static bool NotificationsEnabled
+    {
+        get
+        {
+            lock (_lock)
+            {
+                EnsureLoaded();
+                // Défaut true : si la clé n'existe pas, les notifications sont activées
+                return !_cache!.TryGetValue("notificationsEnabled", out var val) || val.ValueKind != JsonValueKind.False;
+            }
+        }
+    }
+
+    /// <summary>Active ou désactive les notifications.</summary>
+    public static void SetNotifications(bool enabled) => SetBool("notificationsEnabled", enabled);
 
     /// <summary>
     /// Raccourcis Ctrl+Shift+Lettre interdits car trop courants dans les applications.
@@ -84,48 +143,66 @@ static class ConfigManager
         'R', // Rechargement forcé (navigateurs)
     };
 
+    private const uint DefaultShortcutVirtualKeyboardVk = 0x51; // Q
+    private const uint DefaultShortcutCharacterSearchVk = 0x57; // W
+
     /// <summary>
     /// Vérifie si une touche est autorisée comme raccourci Ctrl+Shift+touche.
     /// Formats acceptés : lettre (A-Z sauf bloquées), chiffre (0-9), "F1" à "F12".
     /// </summary>
-    public static bool IsShortcutAllowed(string key)
+    public static bool IsShortcutAllowedVk(uint vk)
     {
-        if (string.IsNullOrEmpty(key)) return false;
+        if (vk >= 0x70 && vk <= 0x7B) return true;
         // Touches de fonction F1-F12
-        if (ParseFunctionKey(key) > 0) return true;
+        if (vk >= '0' && vk <= '9') return true;
         // Chiffres 0-9
-        if (key.Length == 1 && key[0] >= '0' && key[0] <= '9') return true;
+        if (vk >= 'A' && vk <= 'Z') return !BlockedLetters.Contains((char)vk);
         // Lettres A-Z (sauf bloquées)
-        char c = char.ToUpper(key[0]);
-        if (key.Length == 1 && c >= 'A' && c <= 'Z') return !BlockedLetters.Contains(c);
         return false;
     }
 
     /// <summary>Lettre du raccourci clavier virtuel. Défaut : "Q" → Ctrl+Maj+Q.</summary>
-    public static string ShortcutVirtualKeyboard
+    public static uint ShortcutVirtualKeyboardVk
     {
-        get => GetString("shortcutVirtualKeyboard") ?? "Q";
-        set { if (IsShortcutAllowed(value)) SetString("shortcutVirtualKeyboard", value.ToUpperInvariant()); }
+        get
+        {
+            uint vk = GetUInt("shortcutVirtualKeyboardVk");
+            return IsShortcutAllowedVk(vk) ? vk : DefaultShortcutVirtualKeyboardVk;
+        }
+        set
+        {
+            if (IsShortcutAllowedVk(value))
+                SetUInt("shortcutVirtualKeyboardVk", value);
+        }
     }
 
     /// <summary>Lettre du raccourci recherche de caractère. Défaut : "W" → Ctrl+Maj+W.</summary>
-    public static string ShortcutCharacterSearch
+    public static uint ShortcutCharacterSearchVk
     {
-        get => GetString("shortcutCharacterSearch") ?? "W";
-        set { if (IsShortcutAllowed(value)) SetString("shortcutCharacterSearch", value.ToUpperInvariant()); }
+        get
+        {
+            uint vk = GetUInt("shortcutCharacterSearchVk");
+            return IsShortcutAllowedVk(vk) ? vk : DefaultShortcutCharacterSearchVk;
+        }
+        set
+        {
+            if (IsShortcutAllowedVk(value))
+                SetUInt("shortcutCharacterSearchVk", value);
+        }
     }
 
     /// <summary>
     /// Parse une touche de fonction "F1"-"F12". Retourne le numéro (1-12) ou 0 si invalide.
     /// </summary>
-    private static int ParseFunctionKey(string key)
+    public static string GetShortcutDisplayName(uint vk)
     {
-        if (key.Length >= 2 && key.Length <= 3 &&
-            (key[0] == 'F' || key[0] == 'f') &&
-            int.TryParse(key.AsSpan(1), out int n) &&
-            n >= 1 && n <= 12)
-            return n;
-        return 0;
+        if (vk >= 0x70 && vk <= 0x7B)
+            return $"F{vk - 0x6F}";
+
+        if ((vk >= '0' && vk <= '9') || (vk >= 'A' && vk <= 'Z'))
+            return ((char)vk).ToString();
+
+        return string.Empty;
     }
 
     /// <summary>
@@ -133,56 +210,96 @@ static class ConfigManager
     /// Accepte : lettre A-Z (sauf bloquées), chiffre 0-9, "F1"-"F12".
     /// Retourne 0 si la touche est invalide ou bloquée.
     /// </summary>
-    public static uint GetVkCode(string key)
+
+    // ═══════════════════════════════════════════════════════════════
+    // Logging centralisé
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>Dossier de logs (LocalAppData en MSIX, à côté de l'exe sinon).</summary>
+    public static string LogDirectory => IsPackaged
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AZERTY Global")
+        : AppContext.BaseDirectory;
+
+    /// <summary>Écrit une entrée dans error.log de façon asynchrone et non-bloquante.</summary>
+    public static void Log(string context, Exception ex)
     {
-        if (string.IsNullOrEmpty(key)) return 0;
-
-        // Touches de fonction : VK_F1 (0x70) à VK_F12 (0x7B)
-        int fn = ParseFunctionKey(key);
-        if (fn > 0) return (uint)(0x6F + fn); // 0x6F + 1 = 0x70 = VK_F1
-
-        char c = char.ToUpper(key[0]);
-
-        // Lettres A-Z (bloquer les raccourcis courants)
-        if (c >= 'A' && c <= 'Z')
-            return BlockedLetters.Contains(c) ? 0 : (uint)c;
-
-        // Chiffres 0-9
-        if (c >= '0' && c <= '9') return (uint)c;
-
-        return 0;
+        var logDir = LogDirectory;
+        var logEntry = $"[{DateTime.Now:s}] {context}: {ex}\n";
+        var logFile = Path.Combine(logDir, "error.log");
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            try { Directory.CreateDirectory(logDir); File.AppendAllText(logFile, logEntry); } catch { }
+        });
     }
 
     private static bool GetBool(string key)
     {
-        EnsureLoaded();
-        if (_cache!.TryGetValue(key, out var val) && val.ValueKind == JsonValueKind.True)
-            return true;
-        return false;
+        lock (_lock)
+        {
+            EnsureLoaded();
+            if (_cache!.TryGetValue(key, out var val) && val.ValueKind == JsonValueKind.True)
+                return true;
+            return false;
+        }
     }
 
     private static void SetBool(string key, bool value)
     {
-        EnsureLoaded();
-        _cache![key] = JsonDocument.Parse(value ? "true" : "false").RootElement.Clone();
-        Save();
+        lock (_lock)
+        {
+            EnsureLoaded();
+            using var doc = JsonDocument.Parse(value ? "true" : "false");
+            _cache![key] = doc.RootElement.Clone();
+            Save();
+        }
     }
 
     private static string? GetString(string key)
     {
-        EnsureLoaded();
-        if (_cache!.TryGetValue(key, out var val) && val.ValueKind == JsonValueKind.String)
-            return val.GetString();
-        return null;
+        lock (_lock)
+        {
+            EnsureLoaded();
+            if (_cache!.TryGetValue(key, out var val) && val.ValueKind == JsonValueKind.String)
+                return val.GetString();
+            return null;
+        }
+    }
+
+    private static uint GetUInt(string key)
+    {
+        lock (_lock)
+        {
+            EnsureLoaded();
+            if (_cache!.TryGetValue(key, out var val) &&
+                val.ValueKind == JsonValueKind.Number &&
+                val.TryGetUInt32(out uint number))
+                return number;
+            return 0;
+        }
     }
 
     private static void SetString(string key, string value)
     {
-        EnsureLoaded();
-        // Sérialisation sûre via JsonEncodedText (échappe guillemets, backslash, etc.)
-        var encoded = JsonEncodedText.Encode(value);
-        _cache![key] = JsonDocument.Parse($"\"{encoded}\"").RootElement.Clone();
-        Save();
+        lock (_lock)
+        {
+            EnsureLoaded();
+            // Sérialisation sûre via JsonEncodedText (échappe guillemets, backslash, etc.)
+            var encoded = JsonEncodedText.Encode(value);
+            using var doc = JsonDocument.Parse($"\"{encoded}\"");
+            _cache![key] = doc.RootElement.Clone();
+            Save();
+        }
+    }
+
+    private static void SetUInt(string key, uint value)
+    {
+        lock (_lock)
+        {
+            EnsureLoaded();
+            using var doc = JsonDocument.Parse(value.ToString());
+            _cache![key] = doc.RootElement.Clone();
+            Save();
+        }
     }
 
     private static void EnsureLoaded()
@@ -207,28 +324,48 @@ static class ConfigManager
 
     private static void Save()
     {
+        string tempPath = _configPath + ".tmp";
         try
         {
-            using var stream = File.Create(_configPath);
-            using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
-            writer.WriteStartObject();
-            foreach (var (key, val) in _cache!)
+            var configDir = Path.GetDirectoryName(_configPath);
+            if (!string.IsNullOrEmpty(configDir))
+                Directory.CreateDirectory(configDir);
+
+            using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
             {
-                writer.WritePropertyName(key);
-                switch (val.ValueKind)
+                using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
+                writer.WriteStartObject();
+                foreach (var (key, val) in _cache!)
                 {
-                    case JsonValueKind.True: writer.WriteBooleanValue(true); break;
-                    case JsonValueKind.False: writer.WriteBooleanValue(false); break;
-                    case JsonValueKind.Number: writer.WriteNumberValue(val.GetDouble()); break;
-                    case JsonValueKind.String: writer.WriteStringValue(val.GetString()); break;
-                    default: writer.WriteStringValue(val.ToString()); break;
+                    writer.WritePropertyName(key);
+                    switch (val.ValueKind)
+                    {
+                        case JsonValueKind.True: writer.WriteBooleanValue(true); break;
+                        case JsonValueKind.False: writer.WriteBooleanValue(false); break;
+                        case JsonValueKind.Number: writer.WriteNumberValue(val.GetDouble()); break;
+                        case JsonValueKind.String: writer.WriteStringValue(val.GetString()); break;
+                        default: writer.WriteStringValue(val.ToString()); break;
+                    }
                 }
+                writer.WriteEndObject();
+                writer.Flush();
+                stream.Flush(true);
             }
-            writer.WriteEndObject();
+
+            if (File.Exists(_configPath))
+                File.Replace(tempPath, _configPath, null, true);
+            else
+                File.Move(tempPath, _configPath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Pas critique — on continue sans sauvegarder
+            try
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+            }
+            catch { }
         }
     }
 }

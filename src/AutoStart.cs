@@ -1,7 +1,7 @@
 // Gestion du lancement automatique au démarrage de Windows
 using System.Runtime.InteropServices;
 
-namespace AZERTYGlobalPortable;
+namespace AZERTYGlobal;
 
 /// <summary>
 /// Gère le lancement automatique au démarrage de Windows.
@@ -10,7 +10,7 @@ namespace AZERTYGlobalPortable;
 /// </summary>
 static class AutoStart
 {
-    private const string ShortcutName = "AZERTY Global Portable.lnk";
+    private const string ShortcutName = "AZERTY Global.lnk";
 
     private static string StartupFolder =>
         Environment.GetFolderPath(Environment.SpecialFolder.Startup);
@@ -89,33 +89,55 @@ static class AutoStart
     /// Active ou désactive le lancement automatique et met à jour la config.
     /// Mode portable : raccourci .lnk dans le dossier Startup.
     /// Mode MSIX : API WinRT StartupTask.
+    /// Retourne false si l'opération a échoué.
     /// </summary>
-    public static void Set(bool enabled)
+    public static bool Set(bool enabled)
     {
-        if (ConfigManager.IsPackaged)
+        try
         {
-            SetStartupTask(enabled);
-        }
-        else
-        {
-            if (enabled)
-                Enable();
+            if (ConfigManager.IsPackaged)
+            {
+                if (!SetStartupTask(enabled))
+                    return false;
+            }
             else
-                Disable();
-        }
+            {
+                if (enabled)
+                {
+                    if (!Enable()) return false;
+                }
+                else
+                    Disable();
+            }
 
-        ConfigManager.SetAutoStart(enabled);
+            bool finalState = IsRegistered;
+            if (finalState != enabled)
+                return false;
+
+            ConfigManager.SetAutoStart(finalState);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ConfigManager.Log($"AutoStart.Set({enabled})", ex);
+            return false;
+        }
     }
 
     /// <summary>Vérifie si le lancement automatique est enregistré.</summary>
     public static bool IsRegistered =>
         ConfigManager.IsPackaged ? IsStartupTaskEnabled() : File.Exists(ShortcutPath);
 
-    private static void Enable()
+    public static string GetFailureMessage() =>
+        ConfigManager.IsPackaged
+            ? "Impossible d'enregistrer le lancement automatique.\nVérifiez l'autorisation dans Paramètres > Applications > Démarrage."
+            : "Impossible d'enregistrer le lancement automatique.\nVérifiez les permissions du dossier Démarrage.";
+
+    private static bool Enable()
     {
         string? exePath = Environment.ProcessPath;
         if (string.IsNullOrEmpty(exePath))
-            return;
+            return false;
 
         string? exeDir = Path.GetDirectoryName(exePath);
 
@@ -131,7 +153,7 @@ static class AutoStart
         int hr = CoCreateInstance(ref clsid, IntPtr.Zero, CLSCTX_INPROC_SERVER,
             ref iidShellLink, out IntPtr pShellLink);
         if (hr != S_OK || pShellLink == IntPtr.Zero)
-            return;
+            return false;
 
         try
         {
@@ -142,7 +164,7 @@ static class AutoStart
             IntPtr pSetPath = Marshal.ReadIntPtr(vtable, VT_IShellLink_SetPath * IntPtr.Size);
             var setPath = Marshal.GetDelegateForFunctionPointer<SetPathDelegate>(pSetPath);
             hr = setPath(pShellLink, exePath);
-            if (hr != S_OK) return;
+            if (hr != S_OK) return false;
 
             // SetWorkingDirectory (slot 9)
             if (!string.IsNullOrEmpty(exeDir))
@@ -150,14 +172,14 @@ static class AutoStart
                 IntPtr pSetWorkDir = Marshal.ReadIntPtr(vtable, VT_IShellLink_SetWorkingDirectory * IntPtr.Size);
                 var setWorkDir = Marshal.GetDelegateForFunctionPointer<SetWorkingDirectoryDelegate>(pSetWorkDir);
                 hr = setWorkDir(pShellLink, exeDir);
-                if (hr != S_OK) return;
+                if (hr != S_OK) return false;
             }
 
             // SetDescription (slot 7)
             IntPtr pSetDesc = Marshal.ReadIntPtr(vtable, VT_IShellLink_SetDescription * IntPtr.Size);
             var setDesc = Marshal.GetDelegateForFunctionPointer<SetDescriptionDelegate>(pSetDesc);
-            hr = setDesc(pShellLink, "AZERTY Global Portable – Lancement automatique");
-            if (hr != S_OK) return;
+            hr = setDesc(pShellLink, "AZERTY Global – Lancement automatique");
+            if (hr != S_OK) return false;
 
             // QueryInterface pour IPersistFile
             IntPtr pQueryInterface = Marshal.ReadIntPtr(vtable, 0 * IntPtr.Size);
@@ -165,7 +187,7 @@ static class AutoStart
             Guid iidPersistFile = IID_IPersistFile;
             hr = queryInterface(pShellLink, ref iidPersistFile, out IntPtr pPersistFile);
             if (hr != S_OK || pPersistFile == IntPtr.Zero)
-                return;
+                return false;
 
             try
             {
@@ -174,7 +196,7 @@ static class AutoStart
                 IntPtr pSave = Marshal.ReadIntPtr(vtablePF, VT_IPersistFile_Save * IntPtr.Size);
                 var save = Marshal.GetDelegateForFunctionPointer<SaveDelegate>(pSave);
                 hr = save(pPersistFile, ShortcutPath, true);
-                // Si Save échoue, le raccourci n'est pas créé — pas de corruption
+                if (hr != S_OK) return false;
             }
             finally
             {
@@ -191,6 +213,8 @@ static class AutoStart
             var release = Marshal.GetDelegateForFunctionPointer<ReleaseDelegate>(pRelease);
             release(pShellLink);
         }
+
+        return true;
     }
 
     private static void Disable()
@@ -211,9 +235,13 @@ static class AutoStart
     // ──────────────────────────────────────────────
 
     /// <summary>TaskId déclaré dans AppxManifest.xml.</summary>
-    private const string StartupTaskId = "AZERTYGlobalPortableStartup";
+    private const string StartupTaskId = "AZERTYGlobalStartup";
 
-    private static void SetStartupTask(bool enabled)
+    /// <summary>
+    /// Active ou désactive la StartupTask MSIX.
+    /// Retourne true si l'état final correspond à la demande.
+    /// </summary>
+    private static bool SetStartupTask(bool enabled)
     {
         try
         {
@@ -222,16 +250,18 @@ static class AutoStart
 
             if (enabled)
             {
-                // RequestEnableAsync demande la permission à l'utilisateur si nécessaire.
-                // Retourne Enabled, DisabledByUser, ou DisabledByPolicy.
-                task.RequestEnableAsync().GetAwaiter().GetResult();
+                // RequestEnableAsync retourne l'état réel après la demande.
+                // Peut être Enabled, DisabledByUser, ou DisabledByPolicy.
+                var state = task.RequestEnableAsync().GetAwaiter().GetResult();
+                return state == Windows.ApplicationModel.StartupTaskState.Enabled;
             }
             else
             {
                 task.Disable();
+                return true;
             }
         }
-        catch { /* API non disponible ou erreur — on ignore */ }
+        catch { return false; }
     }
 
     private static bool IsStartupTaskEnabled()

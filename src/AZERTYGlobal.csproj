@@ -5,13 +5,13 @@
     <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>AZERTY Global Portable</AssemblyName>
-    <RootNamespace>AZERTYGlobalPortable</RootNamespace>
-    <Version>0.9.1</Version>
+    <AssemblyName>AZERTY Global</AssemblyName>
+    <RootNamespace>AZERTYGlobal</RootNamespace>
+    <Version>0.9.5</Version>
     <Company>AZERTY Global</Company>
-    <Product>AZERTY Global Portable</Product>
+    <Product>AZERTY Global</Product>
     <Copyright>© 2017-2026 Antoine Olivier — EUPL 1.2</Copyright>
-    <Description>Version portable d'AZERTY Global — disposition clavier française améliorée</Description>
+    <Description>AZERTY Global — disposition clavier française améliorée</Description>
 
     <!-- Désactiver la génération auto d'AssemblyInfo (le commentaire "MSBuild WriteCodeFragment"
          est embarqué dans le binaire AOT et déclenche un warning WACK) -->
@@ -36,6 +36,7 @@
     <EmbeddedResource Include="character-index.json" LogicalName="character-index.json" />
     <!-- Logo pour la fenêtre d'accueil -->
     <EmbeddedResource Include="favicon-azerty-global.png" LogicalName="favicon-azerty-global.png" />
+    <EmbeddedResource Include="discord-icon.png" LogicalName="discord-icon.png" />
   </ItemGroup>
 
 </Project>

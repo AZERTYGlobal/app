@@ -1,7 +1,7 @@
 // Application system tray — interface utilisateur via Win32 API natif (pas de WinForms)
 using System.Runtime.InteropServices;
 
-namespace AZERTYGlobalPortable;
+namespace AZERTYGlobal;
 
 /// <summary>
 /// Gère l'icône dans la zone de notification et le menu contextuel.
@@ -13,15 +13,19 @@ sealed class TrayApplication : IDisposable
     // ── Window messages (spécifiques TrayApplication) ────────────
     private const uint WM_APP = 0x8000;
     private const uint WM_TRAYICON = WM_APP + 1;
+    private const uint WM_APP_SEARCH = WM_APP + 2;
+    private const uint WM_APP_VKBD = WM_APP + 3;
 
     // ── Menu IDs ────────────────────────────────────────────────────
     private const int IDM_TOGGLE = 1001;
-    private const int IDM_CAPS = 1002;
     private const int IDM_SITE = 1003;
-    private const int IDM_ABOUT = 1004;
     private const int IDM_KEYBOARD = 1006;
     private const int IDM_SEARCH = 1007;
-    private const int IDM_AUTOSTART = 1008;
+    private const int IDM_BUG = 1009;
+    private const int IDM_ONBOARDING = 1010;
+    private const int IDM_SETTINGS = 1012;
+    private const int IDM_SUPPORT = 1013;
+    private const int IDM_FEEDBACK = 1014;
     private const int IDM_QUIT = 1005;
 
     // ── Shell_NotifyIcon ────────────────────────────────────────────
@@ -59,6 +63,7 @@ sealed class TrayApplication : IDisposable
     private VirtualKeyboard? _virtualKeyboard;
     private CharacterSearch? _characterSearch;
     private OnboardingWindow? _onboarding;
+    private SettingsWindow? _settings;
     private bool _enabled = true;
 
     public TrayApplication()
@@ -68,7 +73,7 @@ sealed class TrayApplication : IDisposable
 
         // Créer une fenêtre cachée pour recevoir les messages tray
         var hInstance = Win32.GetModuleHandleW(null);
-        var className = "AZERTYGlobalPortable_Wnd";
+        var className = "AZERTYGlobal_Wnd";
 
         var wc = new Win32.WNDCLASSEXW
         {
@@ -79,7 +84,7 @@ sealed class TrayApplication : IDisposable
         };
         Win32.RegisterClassExW(ref wc);
 
-        _hWnd = Win32.CreateWindowExW(0, className, "AZERTY Global Portable",
+        _hWnd = Win32.CreateWindowExW(0, className, "AZERTY Global",
             0, 0, 0, 0, 0, IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
 
         // Icône tray
@@ -93,7 +98,7 @@ sealed class TrayApplication : IDisposable
             uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP,
             uCallbackMessage = WM_TRAYICON,
             hIcon = _hIcon,
-            szTip = "AZERTY Global Portable v" + Program.Version,
+            szTip = "AZERTY Global v" + Program.Version,
             szInfo = "",
             szInfoTitle = ""
         };
@@ -103,21 +108,23 @@ sealed class TrayApplication : IDisposable
         try
         {
             LoadAndStart();
+            CheckSystemLayout();
 
             // Premier lancement : onboarding. Lancements suivants : notification balloon.
 #if DEBUG
             // En debug, toujours afficher l'onboarding pour faciliter les tests
-            if (true)
+            bool shouldShowOnboarding = true;
 #else
-            if (!ConfigManager.OnboardingDone)
+            bool shouldShowOnboarding = ConfigManager.ShowOnboardingAtStartup;
 #endif
+            if (shouldShowOnboarding)
             {
                 _onboarding = new OnboardingWindow();
                 _onboarding.Show();
             }
             else
             {
-                ShowBalloon("AZERTY Global Portable",
+                ShowBalloon("AZERTY Global",
                     "est actif.\nCtrl+Maj+Verr.Maj pour activer/désactiver.");
             }
         }
@@ -136,15 +143,34 @@ sealed class TrayApplication : IDisposable
         _mapper = new KeyMapper(layout);
         _mapper.StateChanged += OnStateChanged;
         _mapper.ToggleRequested += OnToggle;
-        // CharacterSearch charge character-index.json → partager les noms avec VirtualKeyboard
-        _characterSearch = new CharacterSearch();
-        _virtualKeyboard = new VirtualKeyboard(layout, _characterSearch.GetCharacterNames());
         _hook = new KeyboardHook(_mapper);
         _hook.RawKeyDown += OnKeyPressed;
-        _hook.SearchRequested += () => _characterSearch?.Toggle();
-        _hook.VirtualKeyboardRequested += () => _virtualKeyboard?.Toggle();
-        _characterSearch.SelectionChanged += OnSearchSelectionChanged;
+        _hook.SearchRequested += () => Win32.PostMessageW(_hWnd, WM_APP_SEARCH, IntPtr.Zero, IntPtr.Zero);
+        _hook.VirtualKeyboardRequested += () => Win32.PostMessageW(_hWnd, WM_APP_VKBD, IntPtr.Zero, IntPtr.Zero);
+        _hook.LayoutMayHaveChanged += OnLayoutMayHaveChanged;
         _hook.Install();
+
+        try
+        {
+            _characterSearch = new CharacterSearch();
+            _characterSearch.SelectionChanged += OnSearchSelectionChanged;
+        }
+        catch (Exception ex)
+        {
+            ConfigManager.Log("Init CharacterSearch", ex);
+            _characterSearch = null;
+        }
+
+        try
+        {
+            _virtualKeyboard = new VirtualKeyboard(layout, _characterSearch?.GetCharacterNames());
+        }
+        catch (Exception ex)
+        {
+            ConfigManager.Log("Init VirtualKeyboard", ex);
+            _virtualKeyboard = null;
+        }
+
         Win32.SetForegroundWindow(_hWnd);
     }
 
@@ -152,6 +178,8 @@ sealed class TrayApplication : IDisposable
     private const uint TIMER_REHOOK = 9001;
     private const uint TIMER_REHOOK_2 = 9002;
     private const uint TIMER_REHOOK_3 = 9003;
+    private const uint TIMER_SINGLECLICK = 9010;
+    private const uint TIMER_LAYOUT_CHECK = 9020;
 
     // Message TaskbarCreated (Explorer restart / chargement tardif au boot)
     private readonly uint _wmTaskbarCreated = Win32.RegisterWindowMessageW("TaskbarCreated");
@@ -166,8 +194,10 @@ sealed class TrayApplication : IDisposable
         Win32.SetTimer(_hWnd, (UIntPtr)TIMER_REHOOK_2, 3000, IntPtr.Zero);
         Win32.SetTimer(_hWnd, (UIntPtr)TIMER_REHOOK_3, 8000, IntPtr.Zero);
 
-        while (Win32.GetMessageW(out var msg, IntPtr.Zero, 0, 0))
+        int ret;
+        while ((ret = Win32.GetMessageW(out var msg, IntPtr.Zero, 0, 0)) != 0)
         {
+            if (ret == -1) break; // Erreur fatale — sortir de la boucle
             Win32.TranslateMessage(ref msg);
             Win32.DispatchMessageW(ref msg);
         }
@@ -186,8 +216,21 @@ sealed class TrayApplication : IDisposable
                     var mouseMsg = (uint)(lParam.ToInt64() & 0xFFFF);
                     if (mouseMsg == Win32.WM_RBUTTONUP)
                         ShowContextMenu();
+                    else if (mouseMsg == Win32.WM_LBUTTONUP)
+                        Win32.SetTimer(_hWnd, (UIntPtr)TIMER_SINGLECLICK, Win32.GetDoubleClickTime(), IntPtr.Zero);
                     else if (mouseMsg == Win32.WM_LBUTTONDBLCLK)
+                    {
+                        Win32.KillTimer(_hWnd, (UIntPtr)TIMER_SINGLECLICK);
                         _virtualKeyboard?.Toggle();
+                    }
+                    return IntPtr.Zero;
+
+                case WM_APP_SEARCH:
+                    _characterSearch?.Toggle();
+                    return IntPtr.Zero;
+
+                case WM_APP_VKBD:
+                    _virtualKeyboard?.Toggle();
                     return IntPtr.Zero;
 
                 case Win32.WM_COMMAND:
@@ -196,9 +239,23 @@ sealed class TrayApplication : IDisposable
                         case IDM_TOGGLE: OnToggle(); break;
                         case IDM_KEYBOARD: _virtualKeyboard?.Toggle(); break;
                         case IDM_SEARCH: _characterSearch?.Toggle(); break;
-                        case IDM_AUTOSTART: OnToggleAutoStart(); break;
+                        case IDM_SETTINGS:
+                            if (_settings == null)
+                            {
+                                _settings = new SettingsWindow();
+                                _settings.ShortcutChanged = () => _hook?.ReloadShortcuts();
+                            }
+                            _settings.Show();
+                            break;
                         case IDM_SITE: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global", null, null, 1); break;
-                        case IDM_ABOUT: OnAbout(); break;
+                        case IDM_FEEDBACK: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/feedback", null, null, 1); break;
+                        case IDM_BUG: OnReportBug(); break;
+                        case IDM_SUPPORT: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/soutien", null, null, 1); break;
+                        case IDM_ONBOARDING:
+                            if (_onboarding == null)
+                                _onboarding = new OnboardingWindow();
+                            _onboarding.Show();
+                            break;
                         case IDM_QUIT: OnExit(); break;
                     }
                     return IntPtr.Zero;
@@ -209,6 +266,16 @@ sealed class TrayApplication : IDisposable
                     {
                         Win32.KillTimer(_hWnd, (UIntPtr)timerId);
                         ReinstallHook();
+                    }
+                    else if (timerId == TIMER_SINGLECLICK)
+                    {
+                        Win32.KillTimer(_hWnd, (UIntPtr)TIMER_SINGLECLICK);
+                        ShowContextMenu();
+                    }
+                    else if (timerId == TIMER_LAYOUT_CHECK)
+                    {
+                        Win32.KillTimer(_hWnd, (UIntPtr)TIMER_LAYOUT_CHECK);
+                        CheckForegroundLayout();
                     }
                     return IntPtr.Zero;
 
@@ -229,11 +296,7 @@ sealed class TrayApplication : IDisposable
         }
         catch (Exception ex)
         {
-            var logDir = ConfigManager.IsPackaged
-                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AZERTY Global Portable")
-                : AppContext.BaseDirectory;
-            try { Directory.CreateDirectory(logDir); } catch { }
-            File.AppendAllText(Path.Combine(logDir, "error.log"), $"[{DateTime.Now:s}] WndProc: {ex}\n");
+            ConfigManager.Log("WndProc", ex);
         }
 
         return Win32.DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -242,17 +305,122 @@ sealed class TrayApplication : IDisposable
     /// <summary>Réinstalle le keyboard hook (nouveau SetWindowsHookEx).</summary>
     private void ReinstallHook()
     {
-        if (_hook == null) return;
-        _hook.Dispose();
-        _hook = new KeyboardHook(_mapper!);
-        _hook.RawKeyDown += OnKeyPressed;
-        _hook.SearchRequested += () => _characterSearch?.Toggle();
-        _hook.VirtualKeyboardRequested += () => _virtualKeyboard?.Toggle();
-        _hook.Enabled = _enabled;
-        _hook.Install();
+        if (_hook == null || _mapper == null) return;
+
+        var oldHook = _hook;
+        var newHook = new KeyboardHook(_mapper);
+        try
+        {
+            newHook.RawKeyDown += OnKeyPressed;
+            newHook.SearchRequested += () => Win32.PostMessageW(_hWnd, WM_APP_SEARCH, IntPtr.Zero, IntPtr.Zero);
+            newHook.VirtualKeyboardRequested += () => Win32.PostMessageW(_hWnd, WM_APP_VKBD, IntPtr.Zero, IntPtr.Zero);
+            newHook.LayoutMayHaveChanged += OnLayoutMayHaveChanged;
+            newHook.Enabled = _enabled;
+            newHook.Install();
+            _hook = newHook;
+            oldHook.Dispose();
+        }
+        catch
+        {
+            newHook.Dispose();
+            throw;
+        }
+
         // Activer la fenêtre pour que le thread soit associé au système d'input
         // Sans cet appel, le hook LL est installé mais ne reçoit pas d'événements
         Win32.SetForegroundWindow(_hWnd);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Détection double remapping
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Vérifie si un layout donné est AZERTY Global en testant le Smart Caps Lock.
+    /// Sur AZERTY Global, Verr.Maj + é → É, + ç → Ç, + à → À.
+    /// Sur AZERTY standard, Verr.Maj + é → 2, + ç → 9, + à → 0.
+    /// Utilise ToUnicodeEx avec le HKL spécifié — aucun accès registre.
+    /// </summary>
+    private static bool IsLayoutAZERTYGlobal(IntPtr hkl)
+    {
+        var keyState = new byte[256];
+        keyState[0x14] = 0x01; // VK_CAPITAL toggled ON
+        var buf = new System.Text.StringBuilder(8);
+
+        // 3 tests indépendants sur la signature du Smart Caps Lock
+        (uint scancode, char expected)[] tests =
+        {
+            (0x03, 'É'), // Verr.Maj + é/2 → É (AZERTY Global) vs 2 (standard)
+            (0x0A, 'Ç'), // Verr.Maj + ç/9 → Ç (AZERTY Global) vs 9 (standard)
+            (0x0B, 'À'), // Verr.Maj + à/0 → À (AZERTY Global) vs 0 (standard)
+        };
+
+        foreach (var (scancode, expected) in tests)
+        {
+            uint vk = Win32.MapVirtualKeyExW(scancode, 1, hkl); // MAPVK_VSC_TO_VK
+            if (vk == 0) return false;
+
+            buf.Clear();
+            int result = Win32.ToUnicodeEx(vk, scancode, keyState, buf, buf.Capacity, 0, hkl);
+            if (result < 0) // touche morte inattendue → consommer
+                Win32.ToUnicodeEx(vk, scancode, keyState, buf, buf.Capacity, 0, hkl);
+            if (result != 1 || buf[0] != expected)
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Avertit l'utilisateur si le layout système actif est déjà AZERTY Global.
+    /// Appelé au démarrage (vérifie le layout de notre thread).
+    /// </summary>
+    private void CheckSystemLayout()
+    {
+        IntPtr hkl = Win32.GetKeyboardLayout(0);
+        if (!IsLayoutAZERTYGlobal(hkl)) return;
+
+        int result = Win32.MessageBoxW(_hWnd,
+            "La disposition système AZERTY Global est déjà active " +
+            "sur cet ordinateur.\n\n" +
+            "L'application n'est pas nécessaire dans ce cas et pourrait " +
+            "créer des conflits.\n\n" +
+            "Voulez-vous quitter ?",
+            "AZERTY Global", 0x24); // MB_YESNO | MB_ICONQUESTION
+
+        if (result == 6) // IDYES
+            OnExit();
+    }
+
+    /// <summary>
+    /// Appelé quand Ctrl+Shift est relâché sans 3e touche.
+    /// Planifie une vérification après 100ms (laisser Windows finir le switch).
+    /// </summary>
+    private void OnLayoutMayHaveChanged()
+    {
+        Win32.SetTimer(_hWnd, (UIntPtr)TIMER_LAYOUT_CHECK, 100, IntPtr.Zero);
+    }
+
+    /// <summary>
+    /// Vérifie le layout du thread au premier plan après un potentiel Ctrl+Shift switch.
+    /// </summary>
+    private void CheckForegroundLayout()
+    {
+        IntPtr hwndFg = Win32.GetForegroundWindow();
+        uint threadId = Win32.GetWindowThreadProcessId(hwndFg, IntPtr.Zero);
+        IntPtr hkl = Win32.GetKeyboardLayout(threadId);
+
+        if (!IsLayoutAZERTYGlobal(hkl)) return;
+
+        int result = Win32.MessageBoxW(_hWnd,
+            "La disposition système AZERTY Global vient d'être activée.\n\n" +
+            "L'application n'est pas nécessaire dans ce cas et pourrait " +
+            "créer des conflits.\n\n" +
+            "Voulez-vous quitter ?",
+            "AZERTY Global", 0x24); // MB_YESNO | MB_ICONQUESTION
+
+        if (result == 6) // IDYES
+            OnExit();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -261,22 +429,26 @@ sealed class TrayApplication : IDisposable
     private void ShowContextMenu()
     {
         var hMenu = Win32.CreatePopupMenu();
-        var kbdKey = ConfigManager.ShortcutVirtualKeyboard;
-        var searchKey = ConfigManager.ShortcutCharacterSearch;
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_TOGGLE, _enabled ? "Désactiver" : "Activer");
+        var kbdKey = ConfigManager.GetShortcutDisplayName(ConfigManager.ShortcutVirtualKeyboardVk);
+        var searchKey = ConfigManager.GetShortcutDisplayName(ConfigManager.ShortcutCharacterSearchVk);
+        // Actions fréquentes
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_TOGGLE,
+            _enabled ? "Désactiver\tCtrl+Maj+Verr.Maj" : "Activer\tCtrl+Maj+Verr.Maj");
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_KEYBOARD,
             _virtualKeyboard?.IsVisible == true ? $"Masquer le clavier virtuel\tCtrl+Maj+{kbdKey}" : $"Clavier virtuel\tCtrl+Maj+{kbdKey}");
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_SEARCH, $"Rechercher un caractère\tCtrl+Maj+{searchKey}");
+        Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
 
-        var capsText = _mapper?.CapsLockActive == true ? "Verr. Maj : Actif ⬤" : "Verr. Maj : Inactif";
-        Win32.AppendMenuW(hMenu, MF_STRING | MF_GRAYED, IDM_CAPS, capsText);
+        // Liens et info
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_ONBOARDING, "Fenêtre de bienvenue");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_SITE, "Visiter le site web");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_FEEDBACK, "Donner son avis sur AZERTY Global");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_BUG, "Signaler un bug");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_SUPPORT, "❤️ Soutenir le projet");
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
-        uint autoStartFlags = MF_STRING | (ConfigManager.AutoStartEnabled ? MF_CHECKED : 0);
-        Win32.AppendMenuW(hMenu, autoStartFlags, IDM_AUTOSTART, "Lancer au démarrage de Windows");
-        Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_SITE, "Site azerty.global");
-        Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_ABOUT, "À propos");
+
+        // Paramètres et fin
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_SETTINGS, "⚙️ Paramètres");
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_QUIT, "Quitter");
 
         Win32.GetCursorPos(out var pt);
@@ -299,7 +471,7 @@ sealed class TrayApplication : IDisposable
         UpdateIcon();
         UpdateTooltip();
 
-        ShowBalloon("AZERTY Global Portable", _enabled ? "est actif." : "est désactivé.");
+        ShowBalloon("AZERTY Global", _enabled ? "est actif." : "est désactivé.");
     }
 
     private bool _lastCapsState;
@@ -337,21 +509,13 @@ sealed class TrayApplication : IDisposable
             _mapper.ActiveDeadKey);
     }
 
-    private void OnToggleAutoStart()
+    private void OnReportBug()
     {
-        bool newState = !ConfigManager.AutoStartEnabled;
-        AutoStart.Set(newState);
-    }
-
-    private void OnAbout()
-    {
-        Win32.MessageBoxW(IntPtr.Zero,
-            "AZERTY Global Portable v" + Program.Version + "\n\n" +
-            "Disposition clavier française améliorée\n" +
-            "© 2017-2026 Antoine Olivier\n\n" +
-            "Licence : EUPL 1.2\n" +
-            "https://azerty.global",
-            "À propos — AZERTY Global", MB_OK | MB_ICONINFORMATION);
+        var os = Environment.OSVersion;
+        var winVer = os.Version.Build >= 22000 ? "11" : "10";
+        var osVersion = $"Windows {winVer} ({os.Version.Build})";
+        var url = $"https://azerty.global/bug?v={Uri.EscapeDataString(Program.Version)}&os={Uri.EscapeDataString(osVersion)}&src=app";
+        Win32.ShellExecuteW(IntPtr.Zero, "open", url, null, null, 1);
     }
 
     private void OnExit()
@@ -367,10 +531,11 @@ sealed class TrayApplication : IDisposable
         if (_cleaned) return;
         _cleaned = true;
 
-        _hook?.Dispose();
-        _virtualKeyboard?.Dispose();
-        _characterSearch?.Dispose();
-        _onboarding?.Dispose();
+        _hook?.Dispose(); _hook = null;
+        _virtualKeyboard?.Dispose(); _virtualKeyboard = null;
+        _characterSearch?.Dispose(); _characterSearch = null;
+        _onboarding?.Dispose(); _onboarding = null;
+        _settings?.Dispose(); _settings = null;
         Win32.Shell_NotifyIconW(NIM_DELETE, ref _nid);
         if (_hIcon != IntPtr.Zero)
         {
@@ -402,7 +567,7 @@ sealed class TrayApplication : IDisposable
 
     private void UpdateTooltip()
     {
-        var parts = new List<string> { "AZERTY Global Portable v" + Program.Version };
+        var parts = new List<string> { "AZERTY Global v" + Program.Version };
         if (!_enabled)
             parts.Add("Inactif");
         else
@@ -458,6 +623,7 @@ sealed class TrayApplication : IDisposable
 
     private void ShowBalloon(string title, string text)
     {
+        if (!ConfigManager.NotificationsEnabled) return;
         _nid.uFlags = NIF_INFO;
         _nid.szInfoTitle = title;
         _nid.szInfo = text;

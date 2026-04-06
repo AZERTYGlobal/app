@@ -14045,7 +14045,7 @@
             "codePoint": "U+202F",
             "unicodeName": "NARROW NO-BREAK SPACE",
             "unicodeNameFr": "ESPACE FINE INSÉCABLE",
-            "frenchAliases": [],
+            "frenchAliases": ["ESPACE INSÉCABLE ÉTROITE"],
             "methods": [
                 {
                     "type": "direct",

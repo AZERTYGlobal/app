@@ -2,7 +2,7 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
-namespace AZERTYGlobalPortable;
+namespace AZERTYGlobal;
 
 /// <summary>
 /// Fenêtre Win32 affichant le clavier AZERTY Global.
@@ -11,9 +11,6 @@ namespace AZERTYGlobalPortable;
 sealed class VirtualKeyboard : IDisposable
 {
     // ── Window messages (spécifiques VirtualKeyboard) ─────────────
-    private const uint WM_GETMINMAXINFO = 0x0024;
-    private const uint WM_SIZING = 0x0214;
-    private const uint WM_MOUSELEAVE = 0x02A3;
 
     // ── Colors (COLORREF = 0x00BBGGRR) ───────────────────────────
     private const uint CLR_BG = 0x00201C18;         // Fond fenêtre (gris très foncé)
@@ -266,6 +263,29 @@ sealed class VirtualKeyboard : IDisposable
 
     public bool IsVisible => _visible;
 
+    // ── Géométrie du clavier (partagée entre EnsureFonts, PaintContent, OnMouseMove) ──
+
+    private const float TOTAL_KEY_W = 16.3f; // Largeur max d'une rangée en unités
+    private const int KB_MARGIN = 10;
+
+    private record struct KeyboardGeometry(
+        float Scale, float KbWidth, float KbHeight,
+        int OffsetX, int OffsetY, int BottomReserve);
+
+    private static KeyboardGeometry GetKeyboardGeometry(int cw, int ch)
+    {
+        float totalKeyH = 5 * KEY_H + 4 * ROW_GAP;
+        float scaleX = (cw - 2 * KB_MARGIN) / TOTAL_KEY_W;
+        float scaleY = (ch - 2 * KB_MARGIN) / totalKeyH;
+        float scale = Math.Min(scaleX, scaleY);
+        int bottomReserve = Math.Max(20, (int)(scale * 0.55f));
+        float kbWidth = TOTAL_KEY_W * scale;
+        float kbHeight = totalKeyH * scale;
+        int offsetX = KB_MARGIN + (int)((cw - 2 * KB_MARGIN - kbWidth) / 2);
+        int offsetY = KB_MARGIN + (int)((ch - 2 * KB_MARGIN - bottomReserve - kbHeight) / 2);
+        return new KeyboardGeometry(scale, kbWidth, kbHeight, offsetX, offsetY, bottomReserve);
+    }
+
     /// <summary>Crée ou recrée les polices selon la taille client actuelle.</summary>
     private void EnsureFonts(int cw, int ch)
     {
@@ -277,16 +297,11 @@ sealed class VirtualKeyboard : IDisposable
         if (_hLabelFont != IntPtr.Zero) Win32.DeleteObject(_hLabelFont);
         if (_hCtxFont != IntPtr.Zero) Win32.DeleteObject(_hCtxFont);
 
-        float totalKeyW = 16.3f;
-        float totalKeyH = 5 * KEY_H + 4 * ROW_GAP;
-        int margin = 10;
-        float scaleX = (cw - 2 * margin) / totalKeyW;
-        float scaleY = (ch - 2 * margin) / totalKeyH;
-        float scale = Math.Min(scaleX, scaleY);
+        var geo = GetKeyboardGeometry(cw, ch);
 
-        int charFontSize = Math.Max(14, (int)(scale * 0.72f));
-        int labelFontSize = Math.Max(9, (int)(scale * 0.30f));
-        int ctxFontSize = Math.Max(10, (int)(scale * 0.35f));
+        int charFontSize = Math.Max(14, (int)(geo.Scale * 0.72f));
+        int labelFontSize = Math.Max(9, (int)(geo.Scale * 0.30f));
+        int ctxFontSize = Math.Max(10, (int)(geo.Scale * 0.35f));
 
         _hCharFont = Win32.CreateFontW(charFontSize, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
         _hLabelFont = Win32.CreateFontW(labelFontSize, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
@@ -617,6 +632,8 @@ sealed class VirtualKeyboard : IDisposable
     // ═══════════════════════════════════════════════════════════════
     private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
+        try
+        {
         switch (msg)
         {
             case Win32.WM_PAINT:
@@ -634,7 +651,7 @@ sealed class VirtualKeyboard : IDisposable
                 OnMouseMove(lParam);
                 return IntPtr.Zero;
 
-            case WM_MOUSELEAVE:
+            case Win32.WM_MOUSELEAVE:
                 _trackingMouse = false;
                 if (_hoveredKeyIndex != -1)
                 {
@@ -643,7 +660,7 @@ sealed class VirtualKeyboard : IDisposable
                 }
                 return IntPtr.Zero;
 
-            case WM_SIZING:
+            case Win32.WM_SIZING:
                 OnSizing(wParam, lParam);
                 return (IntPtr)1;
 
@@ -683,7 +700,7 @@ sealed class VirtualKeyboard : IDisposable
                 Hide();
                 return IntPtr.Zero; // Ne pas détruire, juste masquer
 
-            case WM_GETMINMAXINFO:
+            case Win32.WM_GETMINMAXINFO:
                 if (lParam != IntPtr.Zero)
                 {
                     // Convertir les tailles client min en tailles fenêtre
@@ -695,6 +712,11 @@ sealed class VirtualKeyboard : IDisposable
                     Marshal.StructureToPtr(mmi, lParam, false);
                 }
                 return IntPtr.Zero;
+        }
+        }
+        catch (Exception ex)
+        {
+            ConfigManager.Log("VirtualKeyboard WndProc", ex);
         }
 
         return Win32.DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -778,8 +800,7 @@ sealed class VirtualKeyboard : IDisposable
         catch (Exception ex)
         {
             // Ne pas crasher — log et afficher un fond noir
-            var logPath = Path.Combine(AppContext.BaseDirectory, "error.log");
-            try { File.AppendAllText(logPath, $"[{DateTime.Now:s}] OnPaint: {ex}\n"); } catch { }
+            ConfigManager.Log("OnPaint", ex);
         }
 
         // Copier le buffer sur l'écran
@@ -802,21 +823,12 @@ sealed class VirtualKeyboard : IDisposable
         Win32.DeleteObject(hBgBrush);
 
         // Calculer les marges et l'échelle
-        float totalKeyW = 16.3f; // Largeur max d'une rangée en unités (rangée 1 : 13×1 + 1×2 + gaps)
-        float totalKeyH = 5 * KEY_H + 4 * ROW_GAP;
-        int margin = 10;
-        float scaleX = (cw - 2 * margin) / totalKeyW;
-        float scaleY = (ch - 2 * margin) / totalKeyH;
-        float scale = Math.Min(scaleX, scaleY);
-
-        // Réserver de l'espace en bas pour l'indication de touche morte
-        int bottomReserve = Math.Max(20, (int)(scale * 0.55f));
-
-        // Centrer le clavier dans l'espace restant (hors réserve basse)
-        float kbWidth = totalKeyW * scale;
-        float kbHeight = totalKeyH * scale;
-        int offsetX = margin + (int)((cw - 2 * margin - kbWidth) / 2);
-        int offsetY = margin + (int)((ch - 2 * margin - bottomReserve - kbHeight) / 2);
+        var geo = GetKeyboardGeometry(cw, ch);
+        float scale = geo.Scale;
+        int offsetX = geo.OffsetX;
+        int offsetY = geo.OffsetY;
+        float kbWidth = geo.KbWidth;
+        float kbHeight = geo.KbHeight;
 
         // Polices cachées (recréées si la taille a changé)
         EnsureFonts(cw, ch);
@@ -1071,17 +1083,10 @@ sealed class VirtualKeyboard : IDisposable
         int cw = clientRect.right;
         int ch = clientRect.bottom;
 
-        float totalKeyW = 16.3f;
-        float totalKeyH = 5 * KEY_H + 4 * ROW_GAP;
-        int margin = 10;
-        float scaleX = (cw - 2 * margin) / totalKeyW;
-        float scaleY = (ch - 2 * margin) / totalKeyH;
-        float scale = Math.Min(scaleX, scaleY);
-        int bottomReserve = Math.Max(20, (int)(scale * 0.55f));
-        float kbWidth = totalKeyW * scale;
-        float kbHeight = totalKeyH * scale;
-        int offsetX = margin + (int)((cw - 2 * margin - kbWidth) / 2);
-        int offsetY = margin + (int)((ch - 2 * margin - bottomReserve - kbHeight) / 2);
+        var geo = GetKeyboardGeometry(cw, ch);
+        float scale = geo.Scale;
+        int offsetX = geo.OffsetX;
+        int offsetY = geo.OffsetY;
 
         int hitIndex = -1;
         for (int i = 0; i < _visualKeys.Length; i++)

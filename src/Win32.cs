@@ -1,7 +1,7 @@
 // Déclarations Win32 partagées — P/Invoke, structures et constantes communes
 using System.Runtime.InteropServices;
 
-namespace AZERTYGlobalPortable;
+namespace AZERTYGlobal;
 
 /// <summary>
 /// Structures Win32 partagées entre les fenêtres de l'application.
@@ -180,11 +180,15 @@ static class Win32
     public const uint WM_ERASEBKGND = 0x0014;
     public const uint WM_SETFONT = 0x0030;
     public const uint WM_KEYDOWN = 0x0100;
+    public const uint WM_KEYUP = 0x0101;
     public const uint WM_CHAR = 0x0102;
     public const uint WM_COMMAND = 0x0111;
     public const uint WM_TIMER = 0x0113;
+    public const uint WM_CTLCOLORBTN = 0x0135;
+    public const uint WM_GETDLGCODE = 0x0087;
     public const uint WM_MOUSEMOVE = 0x0200;
     public const uint WM_LBUTTONDOWN = 0x0201;
+    public const uint WM_LBUTTONUP = 0x0202;
     public const uint WM_MOUSEWHEEL = 0x020A;
     public const uint WM_MOUSELEAVE = 0x02A3;
     public const uint WM_RBUTTONUP = 0x0205;
@@ -192,8 +196,16 @@ static class Win32
     public const uint WM_ACTIVATE = 0x0006;
     public const uint WM_GETMINMAXINFO = 0x0024;
     public const uint WM_SIZING = 0x0214;
+    public const uint WM_DPICHANGED = 0x02E0;
+    public const uint WM_SYSKEYDOWN = 0x0104;
+    public const uint WM_SYSKEYUP = 0x0105;
     public const uint WM_CTLCOLOREDIT = 0x0133;
     public const uint WM_CTLCOLORSTATIC = 0x0138;
+    public const uint WM_PASTE = 0x0302;
+    public const uint WM_CUT = 0x0300;
+    public const uint WM_CLEAR = 0x0303;
+    public const uint WM_UNDO = 0x0304;
+    public const uint WM_CONTEXTMENU = 0x007B;
     public const uint WM_SETCURSOR = 0x0020;
     public const uint WM_NCHITTEST = 0x0084;
     public const uint WM_SYSCOMMAND = 0x0112;
@@ -410,7 +422,7 @@ static class Win32
     // ═══════════════════════════════════════════════════════════════
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    public static extern bool GetMessageW(out MSG lpMsg, IntPtr hWnd, uint min, uint max);
+    public static extern int GetMessageW(out MSG lpMsg, IntPtr hWnd, uint min, uint max);
 
     [DllImport("user32.dll")]
     public static extern bool TranslateMessage(ref MSG lpMsg);
@@ -452,7 +464,7 @@ static class Win32
     // ═══════════════════════════════════════════════════════════════
 
     [DllImport("user32.dll")]
-    public static extern void SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+    public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
     [DllImport("user32.dll")]
     public static extern short GetAsyncKeyState(int vKey);
@@ -467,8 +479,18 @@ static class Win32
     public static extern uint MapVirtualKeyW(uint uCode, uint uMapType);
 
     [DllImport("user32.dll")]
+    public static extern uint MapVirtualKeyExW(uint uCode, uint uMapType, IntPtr dwhkl);
+
+    [DllImport("user32.dll")]
     public static extern int ToUnicode(uint wVirtKey, uint wScanCode, byte[] lpKeyState,
         [Out] System.Text.StringBuilder pwszBuff, int cchBuff, uint wFlags);
+
+    [DllImport("user32.dll")]
+    public static extern int ToUnicodeEx(uint wVirtKey, uint wScanCode, byte[] lpKeyState,
+        [Out] System.Text.StringBuilder pwszBuff, int cchBuff, uint wFlags, IntPtr dwhkl);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetKeyboardLayout(uint idThread);
 
     // ═══════════════════════════════════════════════════════════════
     // P/Invoke — Keyboard hook
@@ -505,6 +527,12 @@ static class Win32
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    public static extern int GetDlgCtrlID(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetFocus();
 
     [DllImport("user32.dll")]
     public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
@@ -546,6 +574,9 @@ static class Win32
 
     [DllImport("kernel32.dll")]
     public static extern bool GlobalUnlock(IntPtr hMem);
+
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GlobalFree(IntPtr hMem);
 
     // ═══════════════════════════════════════════════════════════════
     // P/Invoke — GDI+
@@ -649,4 +680,16 @@ static class Win32
 
     [DllImport("user32.dll")]
     public static extern int SetProcessDpiAwarenessContext(IntPtr value);
+
+    [DllImport("user32.dll")]
+    public static extern uint GetDoubleClickTime();
+
+    [DllImport("gdi32.dll")]
+    public static extern IntPtr GetStockObject(int fnObject);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern bool SetWindowTextW(IntPtr hWnd, string lpString);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetWindowTextW(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
 }

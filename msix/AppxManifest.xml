@@ -9,14 +9,14 @@
   <Identity
     Name="AZERTYGlobal.AZERTYGlobal"
     Publisher="CN=7FD049E3-1C58-42E0-A07F-A9712DE19E38"
-    Version="0.9.1.0"
+    Version="0.9.5.0"
     ProcessorArchitecture="x64" />
 
   <Properties>
-    <DisplayName>AZERTY Global</DisplayName>
+    <DisplayName>AZERTY Global - Clavier français amélioré</DisplayName>
     <PublisherDisplayName>AZERTY Global</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
-    <Description>Version portable d'AZERTY Global — disposition clavier française améliorée. Fonctionne sans installation ni droits administrateur.</Description>
+    <Description>L'AZERTY corrigé : majuscules accentuées, point direct, symboles dev accessibles, langues étrangères.</Description>
   </Properties>
 
   <Dependencies>
@@ -29,13 +29,13 @@
   </Resources>
 
   <Applications>
-    <Application Id="AZERTYGlobalPortable"
-      Executable="AZERTY Global Portable.exe"
+    <Application Id="AZERTYGlobal"
+      Executable="AZERTY Global.exe"
       EntryPoint="Windows.FullTrustApplication">
 
       <uap:VisualElements
-        DisplayName="AZERTY Global"
-        Description="Disposition clavier française améliorée — sans installation"
+        DisplayName="AZERTY Global - Clavier français amélioré"
+        Description="L'AZERTY corrigé : majuscules accentuées, point direct, symboles dev accessibles, langues étrangères."
         BackgroundColor="#1a1a2e"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
@@ -47,10 +47,10 @@
              L'utilisateur peut activer/désactiver depuis
              Paramètres > Applications > Démarrage -->
         <desktop:Extension Category="windows.startupTask"
-          Executable="AZERTY Global Portable.exe"
+          Executable="AZERTY Global.exe"
           EntryPoint="Windows.FullTrustApplication">
           <desktop:StartupTask
-            TaskId="AZERTYGlobalPortableStartup"
+            TaskId="AZERTYGlobalStartup"
             Enabled="false"
             DisplayName="AZERTY Global" />
         </desktop:Extension>
