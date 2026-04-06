@@ -1,6 +1,6 @@
 # AZERTY Global — Application Windows
 
-Application AZERTY Global pour Windows, disponible sur le [Microsoft Store](https://apps.microsoft.com/detail/AZERTY%20Global).
+Application AZERTY Global pour Windows, disponible sur le [Microsoft Store](https://apps.microsoft.com/detail/9N4BTS43SSSZ).
 
 ## Qu'est-ce qu'AZERTY Global ?
 
