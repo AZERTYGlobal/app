@@ -1,13 +1,14 @@
 # Build artifacts
 bin/
 obj/
-src/bin/
-src/obj/
 
 # Compiled binaries
 *.exe
 *.pdb
 *.msix
+
+# Test results
+TestResults/
 
 # User config
 config.json
