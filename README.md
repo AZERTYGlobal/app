@@ -18,7 +18,10 @@ L'application Windows permet d'utiliser AZERTY Global **sans installation systè
 - **Verrouillage Majuscule Intelligent** — N'affecte que les lettres : `É`, `È`, `Ç`, `À` en un appui
 - **Clavier virtuel** — Visualisation interactive de la disposition
 - **Recherche de caractères** — Trouvez n'importe quel caractère parmi les 1 000+ disponibles
-- **Icône dans la zone de notification** — Activation/désactivation rapide
+- **Module d'apprentissage** — Leçons interactives pour s'entraîner aux 5 améliorations
+- **Suspension automatique pour les jeux** — Détection des applications fullscreen et désactivation transparente du remapping
+- **Détection de l'application au premier plan** — Pour des comportements contextuels par application
+- **Icône dans la zone de notification** — Activation / désactivation rapide
 - **Aucune installation requise** — Fonctionne depuis le Microsoft Store
 
 ### Configuration requise
@@ -38,34 +41,51 @@ dotnet publish -c Release
 
 Le binaire compilé se trouve dans `src/bin/Release/net8.0-windows10.0.17763.0/win-x64/publish/`.
 
+### Tests
+
+Le projet inclut une suite de tests unitaires xUnit dans `src/AZERTYGlobal.Tests/`.
+
+```bash
+dotnet test src/AZERTYGlobal.Tests
+```
+
 ## Structure du projet
 
 ```
-src/                        Code source C#
-├── Program.cs              Point d'entrée
-├── TrayApplication.cs      Application tray (icône, menu)
-├── KeyboardHook.cs         Hook clavier bas niveau
-├── KeyMapper.cs            Mapping des touches (8 couches)
-├── LayoutLoader.cs         Chargement du JSON de disposition
-├── CharacterSearch.cs      Recherche de caractères
-├── VirtualKeyboard.cs      Clavier virtuel interactif
-├── OnboardingWindow.cs     Fenêtre de première utilisation
-├── SettingsWindow.cs       Fenêtre des paramètres
-├── ConfigManager.cs        Gestion de la configuration
-├── AutoStart.cs            Démarrage automatique
-├── GdiHelpers.cs           Utilitaires GDI+ (rendu texte)
-├── GdiImageLoader.cs       Chargement d'images GDI+
-├── Win32.cs                Interop Win32 / P/Invoke
-├── AZERTY Global 2026.json Disposition clavier (ressource embarquée)
-├── character-index.json    Index de recherche (ressource embarquée)
-├── favicon-azerty-global.png  Icône (ressource embarquée)
-└── discord-icon.png        Icône Discord (ressource embarquée)
-msix/                       Packaging Microsoft Store
-├── AppxManifest.xml        Manifeste MSIX
-└── Assets/                 Logos et screenshots Store
-scripts/                    Scripts de build
-├── Pack-MSIX.ps1           Packaging MSIX
-└── Verify-Release.ps1      Vérification pré-publication
+src/                              Code source C#
+├── Program.cs                    Point d'entrée
+├── TrayApplication.cs            Application tray (icône, menu)
+├── KeyboardHook.cs               Hook clavier bas niveau
+├── KeyMapper.cs                  Mapping des touches (8 couches)
+├── LayoutLoader.cs               Chargement du JSON de disposition
+├── CharacterSearch.cs            Recherche de caractères
+├── VirtualKeyboard.cs            Clavier virtuel interactif
+├── LearningModule.cs             Module d'apprentissage interactif
+├── OnboardingWindow.cs           Fenêtre de première utilisation
+├── SettingsWindow.cs             Fenêtre des paramètres
+├── ConfigManager.cs              Gestion de la configuration
+├── AutoStart.cs                  Démarrage automatique
+├── ForegroundMonitor.cs          Détection de l'application au premier plan
+├── GameRegistry.cs               Suspension automatique pour les jeux
+├── GdiHelpers.cs                 Utilitaires GDI+ (rendu texte)
+├── GdiImageLoader.cs             Chargement d'images GDI+
+├── Win32.cs                      Interop Win32 / P/Invoke
+├── AssemblyAttributes.cs         Attributs d'assemblage
+├── AZERTY Global 2026.json       Disposition clavier (ressource embarquée)
+├── character-index.json          Index de recherche (ressource embarquée)
+├── favicon-azerty-global.png     Icône (ressource embarquée)
+├── discord-icon.png              Icône Discord (ressource embarquée)
+├── Properties/                   Métadonnées du projet
+├── Win32Api/                     Interfaces et implémentations Win32 (testabilité)
+└── AZERTYGlobal.Tests/           Tests unitaires xUnit
+msix/                             Packaging Microsoft Store
+├── AppxManifest.xml              Manifeste MSIX
+├── Fiche Store.md                Descriptions FR/EN pour le Store
+├── README.md                     Documentation packaging
+└── Assets/                       Logos, screenshots et templates
+scripts/                          Scripts de build
+├── Pack-MSIX.ps1                 Packaging MSIX
+└── Verify-Release.ps1            Vérification pré-publication
 ```
 
 ## Licence

@@ -27,6 +27,13 @@ sealed class TrayApplication : IDisposable
     private const int IDM_SUPPORT = 1013;
     private const int IDM_FEEDBACK = 1014;
     private const int IDM_QUIT = 1005;
+    // Sous-menu compatibilité jeu (v0.9.7)
+    private const int IDM_COMPAT_AUTO = 1020;
+    private const int IDM_COMPAT_FORCE_ON = 1021;
+    private const int IDM_COMPAT_FORCE_OFF = 1022;
+#if DEBUG
+    private const int IDM_RESET_ONBOARDING = 1015;
+#endif
 
     // ── Shell_NotifyIcon ────────────────────────────────────────────
     private const uint NIM_ADD = 0;
@@ -37,11 +44,13 @@ sealed class TrayApplication : IDisposable
     private const uint NIF_TIP = 0x04;
     private const uint NIF_INFO = 0x10;
     private const uint NIIF_INFO = 0x01;
+    private const uint NIIF_WARNING = 0x02;
 
     // ── Menu flags ──────────────────────────────────────────────────
     private const uint MF_STRING = 0x0000;
     private const uint MF_SEPARATOR = 0x0800;
     private const uint MF_GRAYED = 0x0001;
+    private const uint MF_POPUP = 0x0010;
     private const uint MF_CHECKED = 0x0008;
     private const uint TPM_RIGHTBUTTON = 0x0002;
     private const uint TPM_BOTTOMALIGN = 0x0020;
@@ -60,11 +69,18 @@ sealed class TrayApplication : IDisposable
     private readonly Win32.WNDPROC _wndProcDelegate; // prevent GC
     private KeyboardHook? _hook;
     private KeyMapper? _mapper;
+    private Layout? _layout;
     private VirtualKeyboard? _virtualKeyboard;
     private CharacterSearch? _characterSearch;
     private OnboardingWindow? _onboarding;
     private SettingsWindow? _settings;
     private bool _enabled = true;
+
+    // Compatibilité jeux (v0.9.7) : couche de détection foreground + désactivation auto anti-cheat
+    private readonly IWin32Api _win32Api = new RealWin32Api();
+    private ForegroundMonitor? _foregroundMonitor;
+    private bool _wasEnabledBeforeAutoDisable;
+    private bool _autoDisabledForAntiCheat;
 
     public TrayApplication()
     {
@@ -120,6 +136,9 @@ sealed class TrayApplication : IDisposable
             if (shouldShowOnboarding)
             {
                 _onboarding = new OnboardingWindow();
+                _onboarding.Mapper = _mapper;
+                _onboarding.Hook = _hook;
+                _onboarding.AppLayout = _layout;
                 _onboarding.Show();
             }
             else
@@ -140,7 +159,8 @@ sealed class TrayApplication : IDisposable
     private void LoadAndStart()
     {
         var layout = LayoutLoader.LoadFromResource();
-        _mapper = new KeyMapper(layout);
+        _layout = layout;
+        _mapper = new KeyMapper(layout, _win32Api);
         _mapper.StateChanged += OnStateChanged;
         _mapper.ToggleRequested += OnToggle;
         _hook = new KeyboardHook(_mapper);
@@ -172,6 +192,62 @@ sealed class TrayApplication : IDisposable
         }
 
         Win32.SetForegroundWindow(_hWnd);
+
+        // Compatibilité jeux : instancier le ForegroundMonitor APRÈS création de la
+        // fenêtre tray (HWND requis pour le SetTimer debounce). Mode dégradé si échec.
+        try
+        {
+            _foregroundMonitor = new ForegroundMonitor(_win32Api, _hWnd);
+            _foregroundMonitor.ForegroundChanged += OnForegroundChanged;
+            _mapper.SetForegroundMonitor(_foregroundMonitor);
+        }
+        catch (Exception ex)
+        {
+            ConfigManager.Log("ForegroundMonitor init", ex);
+            _foregroundMonitor = null;
+        }
+
+        // Audit overrides invalides : un override forceOn sur un process désormais
+        // anti-cheat (liste mise à jour par release) doit être supprimé pour la sécurité utilisateur.
+        AuditCompatibilityOverridesAtStartup();
+    }
+
+    /// <summary>
+    /// Au démarrage, scanner les overrides utilisateur : si un override forceOn pointe
+    /// sur un process désormais listé anti-cheat (mise à jour de la liste hardcodée),
+    /// supprimer l'override + bulle d'avertissement (bypass NotificationsEnabled car
+    /// c'est une notification de sécurité, pas de confort).
+    /// </summary>
+    private void AuditCompatibilityOverridesAtStartup()
+    {
+        try
+        {
+            var overrides = ConfigManager.GetAllCompatibilityOverrides();
+            var conflicting = new List<string>();
+            foreach (var (proc, mode) in overrides)
+            {
+                if (mode == "forceOn" && GameRegistry.IsAntiCheatProcess(proc, null))
+                {
+                    ConfigManager.SetCompatibilityOverride(proc, null);
+                    conflicting.Add(proc);
+                    ConfigManager.LogCompatCriticalEvent("OverrideInvalidCleanup",
+                        $"removed forceOn for '{proc}' (now anti-cheat-listed)");
+                }
+            }
+            if (conflicting.Count > 0)
+            {
+                var list = string.Join(", ", conflicting);
+                // Bypass NotificationsEnabled : on utilise Shell_NotifyIconW directement
+                ShowSecurityBalloon("Compatibilité jeu désactivée",
+                    $"AZERTY Global a désactivé l'option de compatibilité pour : {list}. " +
+                    "Ces jeux sont désormais protégés par un anti-cheat. AZERTY Global se mettra " +
+                    "automatiquement en pause quand ils seront ouverts.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ConfigManager.Log("AuditCompatibilityOverridesAtStartup", ex);
+        }
     }
 
     // Timer IDs pour la réinstallation du hook après démarrage
@@ -221,24 +297,36 @@ sealed class TrayApplication : IDisposable
                     else if (mouseMsg == Win32.WM_LBUTTONDBLCLK)
                     {
                         Win32.KillTimer(_hWnd, (UIntPtr)TIMER_SINGLECLICK);
-                        _virtualKeyboard?.Toggle();
+                        if (_enabled) _virtualKeyboard?.Toggle();
                     }
                     return IntPtr.Zero;
 
                 case WM_APP_SEARCH:
-                    _characterSearch?.Toggle();
+                    if (_enabled)
+                        _characterSearch?.Toggle();
+                    else
+                        ShowBalloon("AZERTY Global", "est désactivé — Ctrl+Maj+Verr.Maj pour réactiver.");
                     return IntPtr.Zero;
 
                 case WM_APP_VKBD:
-                    _virtualKeyboard?.Toggle();
+                    if (_enabled)
+                        _virtualKeyboard?.Toggle();
+                    else
+                        ShowBalloon("AZERTY Global", "est désactivé — Ctrl+Maj+Verr.Maj pour réactiver.");
                     return IntPtr.Zero;
 
                 case Win32.WM_COMMAND:
                     switch (wParam.ToInt32() & 0xFFFF)
                     {
                         case IDM_TOGGLE: OnToggle(); break;
-                        case IDM_KEYBOARD: _virtualKeyboard?.Toggle(); break;
-                        case IDM_SEARCH: _characterSearch?.Toggle(); break;
+                        case IDM_KEYBOARD:
+                            if (_enabled || _virtualKeyboard?.IsVisible == true)
+                                _virtualKeyboard?.Toggle();
+                            break;
+                        case IDM_SEARCH:
+                            if (_enabled || _characterSearch?.IsVisible == true)
+                                _characterSearch?.Toggle();
+                            break;
                         case IDM_SETTINGS:
                             if (_settings == null)
                             {
@@ -256,6 +344,23 @@ sealed class TrayApplication : IDisposable
                                 _onboarding = new OnboardingWindow();
                             _onboarding.Show();
                             break;
+                        case IDM_COMPAT_AUTO:
+                            ApplyCompatibilityOverride(null);
+                            break;
+                        case IDM_COMPAT_FORCE_ON:
+                            ApplyCompatibilityOverride("forceOn");
+                            break;
+                        case IDM_COMPAT_FORCE_OFF:
+                            ApplyCompatibilityOverride("forceOff");
+                            break;
+#if DEBUG
+                        case IDM_RESET_ONBOARDING:
+                            if (_onboarding == null)
+                                _onboarding = new OnboardingWindow();
+                            _onboarding.ResetState();
+                            _onboarding.Show();
+                            break;
+#endif
                         case IDM_QUIT: OnExit(); break;
                     }
                     return IntPtr.Zero;
@@ -277,7 +382,17 @@ sealed class TrayApplication : IDisposable
                         Win32.KillTimer(_hWnd, (UIntPtr)TIMER_LAYOUT_CHECK);
                         CheckForegroundLayout();
                     }
+                    else if (timerId == ForegroundMonitor.TIMER_FOREGROUND_DEBOUNCE)
+                    {
+                        Win32.KillTimer(_hWnd, (UIntPtr)ForegroundMonitor.TIMER_FOREGROUND_DEBOUNCE);
+                        _foregroundMonitor?.Recompute();
+                    }
                     return IntPtr.Zero;
+
+                case Win32.WM_INPUTLANGCHANGE:
+                    // Le layout système a changé (ex: Win+Espace) → invalider le cache HKL
+                    _foregroundMonitor?.Recompute();
+                    break; // laisser DefWindowProc traiter aussi
 
                 case Win32.WM_DESTROY:
                     Win32.PostQuitMessage(0);
@@ -434,9 +549,11 @@ sealed class TrayApplication : IDisposable
         // Actions fréquentes
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_TOGGLE,
             _enabled ? "Désactiver\tCtrl+Maj+Verr.Maj" : "Activer\tCtrl+Maj+Verr.Maj");
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_KEYBOARD,
+        uint kbdFlags = _enabled || _virtualKeyboard?.IsVisible == true ? MF_STRING : MF_STRING | MF_GRAYED;
+        Win32.AppendMenuW(hMenu, kbdFlags, IDM_KEYBOARD,
             _virtualKeyboard?.IsVisible == true ? $"Masquer le clavier virtuel\tCtrl+Maj+{kbdKey}" : $"Clavier virtuel\tCtrl+Maj+{kbdKey}");
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_SEARCH, $"Rechercher un caractère\tCtrl+Maj+{searchKey}");
+        uint searchFlags = _enabled || _characterSearch?.IsVisible == true ? MF_STRING : MF_STRING | MF_GRAYED;
+        Win32.AppendMenuW(hMenu, searchFlags, IDM_SEARCH, $"Rechercher un caractère\tCtrl+Maj+{searchKey}");
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
 
         // Liens et info
@@ -447,8 +564,35 @@ sealed class TrayApplication : IDisposable
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_SUPPORT, "❤️ Soutenir le projet");
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
 
+        // Sous-menu compatibilité du process foreground (si détectable)
+        var fgProc = _foregroundMonitor?.CurrentProcessName;
+        if (!string.IsNullOrEmpty(fgProc))
+        {
+            var hSubMenu = Win32.CreatePopupMenu();
+            Win32.AppendMenuW(hSubMenu, MF_STRING, IDM_COMPAT_AUTO, "Auto (détection automatique)");
+            Win32.AppendMenuW(hSubMenu, MF_STRING, IDM_COMPAT_FORCE_ON, "Forcer compatibilité jeu");
+            Win32.AppendMenuW(hSubMenu, MF_STRING, IDM_COMPAT_FORCE_OFF, "Forcer désactivation");
+
+            // Marquer la radio active
+            var ovr = ConfigManager.GetCompatibilityOverride(fgProc);
+            uint activeId = ovr switch
+            {
+                "forceOn" => IDM_COMPAT_FORCE_ON,
+                "forceOff" => IDM_COMPAT_FORCE_OFF,
+                _ => IDM_COMPAT_AUTO
+            };
+            Win32.CheckMenuRadioItem(hSubMenu, IDM_COMPAT_AUTO, IDM_COMPAT_FORCE_OFF, activeId, Win32.MF_BYCOMMAND);
+
+            Win32.AppendMenuW(hMenu, MF_STRING | MF_POPUP, (nuint)hSubMenu, $"Compatibilité « {fgProc} »");
+            Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
+        }
+
         // Paramètres et fin
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_SETTINGS, "⚙️ Paramètres");
+#if DEBUG
+        Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_RESET_ONBOARDING, "🛠 [DEBUG] Réinitialiser onboarding");
+#endif
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_QUIT, "Quitter");
 
         Win32.GetCursorPos(out var pt);
@@ -467,6 +611,13 @@ sealed class TrayApplication : IDisposable
         // Resynchroniser l'état quand on réactive (CapsLock a pu changer pendant la désactivation)
         if (_enabled)
             _mapper?.SyncState();
+
+        // Fermer le clavier virtuel et la recherche quand on désactive
+        if (!_enabled)
+        {
+            if (_virtualKeyboard?.IsVisible == true) _virtualKeyboard.Hide();
+            if (_characterSearch?.IsVisible == true) _characterSearch.Hide();
+        }
 
         UpdateIcon();
         UpdateTooltip();
@@ -531,6 +682,7 @@ sealed class TrayApplication : IDisposable
         if (_cleaned) return;
         _cleaned = true;
 
+        _foregroundMonitor?.Dispose(); _foregroundMonitor = null;
         _hook?.Dispose(); _hook = null;
         _virtualKeyboard?.Dispose(); _virtualKeyboard = null;
         _characterSearch?.Dispose(); _characterSearch = null;
@@ -552,11 +704,11 @@ sealed class TrayApplication : IDisposable
         var oldIcon = _hIcon;
 
         // Déterminer le texte et le style de l'icône selon l'état
-        bool active = _enabled;
-        bool capsLock = _mapper?.CapsLockActive == true && _enabled;
+        bool active = _enabled && !_autoDisabledForAntiCheat;
+        bool capsLock = _mapper?.CapsLockActive == true && active;
         string iconText = "AG";
 
-        _hIcon = CreateTextIcon(iconText, active, capsLock);
+        _hIcon = CreateTextIcon(iconText, active, capsLock, _autoDisabledForAntiCheat);
 
         _nid.hIcon = _hIcon;
         _nid.uFlags = NIF_ICON;
@@ -583,7 +735,7 @@ sealed class TrayApplication : IDisposable
         Win32.Shell_NotifyIconW(NIM_MODIFY, ref _nid);
     }
 
-    /// <summary>Retourne le symbole d'affichage d'une touche morte.</summary>
+    /// <summary>Retourne le symbole d'affichage d'une touche morte (partagé avec LearningModule).</summary>
     internal static string GetDeadKeySymbol(string deadKeyName)
     {
         return deadKeyName switch
@@ -632,10 +784,88 @@ sealed class TrayApplication : IDisposable
     }
 
     /// <summary>
+    /// Bulle de notification de sécurité. Bypass <see cref="ConfigManager.NotificationsEnabled"/>
+    /// car cette information ne doit pas être manquée par l'utilisateur (anti-cheat,
+    /// override invalide cleanup, etc.).
+    /// </summary>
+    private void ShowSecurityBalloon(string title, string text)
+    {
+        _nid.uFlags = NIF_INFO;
+        _nid.szInfoTitle = title;
+        _nid.szInfo = text;
+        _nid.dwInfoFlags = NIIF_WARNING;
+        Win32.Shell_NotifyIconW(NIM_MODIFY, ref _nid);
+    }
+
+    /// <summary>
+    /// Handler du changement de mode foreground. Désactive auto si entrée dans un process
+    /// anti-cheat (avec bulle explicative), réactive auto à la sortie (avec bulle de retour).
+    /// Ne touche PAS <see cref="_enabled"/> qui reflète la volonté manuelle utilisateur :
+    /// on n'agit que sur <see cref="KeyboardHook.Enabled"/>.
+    /// </summary>
+    private void OnForegroundChanged()
+    {
+        if (_foregroundMonitor == null || _hook == null || _mapper == null) return;
+        var mode = _foregroundMonitor.CurrentMode;
+        var procName = _foregroundMonitor.CurrentProcessName ?? "";
+
+        if (mode == CompatibilityMode.DisabledAntiCheat && !_autoDisabledForAntiCheat)
+        {
+            // Entrée dans un process anti-cheat : désactivation auto
+            if (_enabled && _hook.Enabled)
+            {
+                _wasEnabledBeforeAutoDisable = true;
+                _mapper.ClearPassedThroughKeys(); // émet keyup synthétiques avant désactivation
+                _hook.Enabled = false;
+            }
+            _autoDisabledForAntiCheat = true;
+            UpdateIcon();
+            ShowBalloon("AZERTY Global",
+                $"désactivé temporairement pour {procName}\n(anti-cheat : injection de frappes interdite).");
+            ConfigManager.LogCompatCriticalEvent("AntiCheatDetected",
+                $"process={procName}, action=disable");
+        }
+        else if (mode != CompatibilityMode.DisabledAntiCheat && _autoDisabledForAntiCheat)
+        {
+            // Sortie d'un process anti-cheat : réactivation auto si on était actif avant
+            _autoDisabledForAntiCheat = false;
+            if (_wasEnabledBeforeAutoDisable && _enabled)
+            {
+                _hook.Enabled = true;
+                _mapper.SyncState();
+                ShowBalloon("AZERTY Global", "est de nouveau actif.");
+            }
+            _wasEnabledBeforeAutoDisable = false;
+            UpdateIcon();
+        }
+    }
+
+    /// <summary>
+    /// Applique un override utilisateur (Auto/forceOn/forceOff) sur le process foreground actuel.
+    /// Refuse forceOn sur process anti-cheat (sécurité utilisateur) avec bulle explicative.
+    /// </summary>
+    private void ApplyCompatibilityOverride(string? mode)
+    {
+        var proc = _foregroundMonitor?.CurrentProcessName;
+        if (string.IsNullOrEmpty(proc)) return;
+
+        if (mode == "forceOn" && GameRegistry.IsAntiCheatProcess(proc, _foregroundMonitor?.CurrentFullPath))
+        {
+            ShowSecurityBalloon("AZERTY Global",
+                $"AZERTY Global ne peut pas être activé sur {proc} : son anti-cheat " +
+                "pourrait considérer cela comme de la triche et bannir votre compte.");
+            return;
+        }
+
+        ConfigManager.SetCompatibilityOverride(proc, mode);
+        _foregroundMonitor?.Recompute();
+    }
+
+    /// <summary>
     /// Crée une icône 32x32 avec texte sur fond coloré.
     /// Bleu = actif, gris = inactif. Barre orange en bas si CapsLock.
     /// </summary>
-    private static IntPtr CreateTextIcon(string text, bool active, bool capsLock = false)
+    private static IntPtr CreateTextIcon(string text, bool active, bool capsLock = false, bool autoDisabled = false)
     {
         const int size = 32;
 
@@ -658,6 +888,15 @@ sealed class TrayApplication : IDisposable
             var hCapsBrush = Win32.CreateSolidBrush(0x0000A5FFu); // Orange (BBGGRR)
             Win32.FillRect(hdc, ref capsBar, hCapsBrush);
             Win32.DeleteObject(hCapsBrush);
+        }
+
+        // Indicateur "désactivé auto pour anti-cheat" : carré rouge en bas-droite
+        if (autoDisabled)
+        {
+            var dot = new Win32.RECT { left = size - 12, top = size - 12, right = size - 2, bottom = size - 2 };
+            var hRedBrush = Win32.CreateSolidBrush(0x000000FFu); // Rouge (BBGGRR)
+            Win32.FillRect(hdc, ref dot, hRedBrush);
+            Win32.DeleteObject(hRedBrush);
         }
 
         // Adapter la taille de police : plus petite pour les symboles longs, plus grande pour "AG"

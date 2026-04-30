@@ -9,7 +9,7 @@
   <Identity
     Name="AZERTYGlobal.AZERTYGlobal"
     Publisher="CN=7FD049E3-1C58-42E0-A07F-A9712DE19E38"
-    Version="0.9.5.0"
+    Version="0.9.7.0"
     ProcessorArchitecture="x64" />
 
   <Properties>

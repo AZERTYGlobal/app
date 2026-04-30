@@ -242,6 +242,7 @@ static class Win32
     public const uint DT_BOTTOM = 0x08;
     public const uint DT_WORDBREAK = 0x10;
     public const uint DT_SINGLELINE = 0x20;
+    public const uint DT_RIGHT = 0x02;
     public const uint DT_CALCRECT = 0x400;
     public const uint DT_NOPREFIX = 0x800;
     public const uint DT_END_ELLIPSIS = 0x8000;
@@ -285,6 +286,9 @@ static class Win32
 
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool EnableWindow(IntPtr hWnd, bool bEnable);
 
     [DllImport("user32.dll")]
     public static extern bool GetCursorPos(out POINT lpPoint);
@@ -383,6 +387,12 @@ static class Win32
 
     [DllImport("gdi32.dll")]
     public static extern IntPtr CreatePen(int fnPenStyle, int nWidth, uint crColor);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool MoveToEx(IntPtr hdc, int x, int y, IntPtr lpPoint);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool LineTo(IntPtr hdc, int x, int y);
 
     [DllImport("gdi32.dll")]
     public static extern bool RoundRect(IntPtr hdc, int left, int top, int right, int bottom, int w, int h);
@@ -692,4 +702,68 @@ static class Win32
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetWindowTextW(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
+    // ═══════════════════════════════════════════════════════════════
+    // P/Invoke — Process inspection (PSAPI) — pour ForegroundMonitor
+    // ═══════════════════════════════════════════════════════════════
+
+    [DllImport("psapi.dll", SetLastError = true)]
+    public static extern bool EnumProcessModulesEx(IntPtr hProcess, [Out] IntPtr[] lphModule, uint cb, out uint lpcbNeeded, uint dwFilterFlag);
+    public const uint LIST_MODULES_ALL = 0x03;
+
+    [DllImport("psapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern uint GetModuleFileNameExW(IntPtr hProcess, IntPtr hModule, [Out] System.Text.StringBuilder lpFilename, uint nSize);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, uint dwProcessId);
+    public const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+    public const uint PROCESS_VM_READ = 0x10;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool CloseHandle(IntPtr hObject);
+
+    /// <summary>Surcharge avec out uint pour récupérer le PID en plus du TID.</summary>
+    [DllImport("user32.dll", EntryPoint = "GetWindowThreadProcessId")]
+    public static extern uint GetWindowThreadProcessIdOut(IntPtr hWnd, out uint lpdwProcessId);
+
+    // ═══════════════════════════════════════════════════════════════
+    // P/Invoke — Layout natif (combo native)
+    // ═══════════════════════════════════════════════════════════════
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern short VkKeyScanExW(char ch, IntPtr dwhkl);
+
+    // ═══════════════════════════════════════════════════════════════
+    // P/Invoke — Window event hook (foreground tracking)
+    // ═══════════════════════════════════════════════════════════════
+
+    public delegate void WinEventDelegate(IntPtr hWinEventHook, uint eventType, IntPtr hwnd,
+        int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr hmodWinEventProc,
+        WinEventDelegate lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    public static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
+    public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+    public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+
+    // ═══════════════════════════════════════════════════════════════
+    // P/Invoke — Menu radio items (sous-menu compatibilité)
+    // ═══════════════════════════════════════════════════════════════
+
+    [DllImport("user32.dll")]
+    public static extern bool CheckMenuRadioItem(IntPtr hMenu, uint idFirst, uint idLast, uint idCheck, uint flags);
+
+    public const uint MF_BYCOMMAND = 0x00000000;
+    public const uint MF_BYPOSITION = 0x00000400;
+
+    // ═══════════════════════════════════════════════════════════════
+    // Constantes additionnelles (compat layer)
+    // ═══════════════════════════════════════════════════════════════
+
+    public const uint WM_INPUTLANGCHANGE = 0x0051;
+    public const uint VK_NUMLOCK = 0x90;
 }

@@ -1,5 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
+$architectures = @('x64', 'arm64')
+
 $projectRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 $srcDir = Join-Path $projectRoot 'src'
 $msixDir = Join-Path $projectRoot 'msix'
@@ -14,9 +16,7 @@ $todoPath = Join-Path $projectRoot 'TO-DO.md'
 $changelogPath = Join-Path $projectRoot 'Changelog.md'
 $contextAppPath = Resolve-Path (Join-Path $projectRoot '..\..\..\.agent\CONTEXT_APP_MICROSOFT_STORE.md')
 $contextProjectPath = Resolve-Path (Join-Path $projectRoot '..\..\..\.agent\CONTEXT_AZERTY_GLOBAL.md')
-$publishExePath = Join-Path $srcDir 'bin\Release\net8.0-windows10.0.17763.0\win-x64\publish\AZERTY Global.exe'
-$stagedExePath = Join-Path $msixDir 'AZERTY Global.exe'
-$msixPackagePath = Join-Path $msixDir 'AZERTYGlobal.msix'
+$bundlePath = Join-Path $msixDir 'AZERTYGlobal.msixbundle'
 
 function Get-FileText([string]$Path) {
     return [System.IO.File]::ReadAllText($Path)
@@ -61,6 +61,48 @@ function Get-ZipEntryHash([string]$ZipPath, [string]$EntryName) {
     }
 }
 
+function Get-ExeHashFromBundle([string]$BundlePath, [string]$MsixEntryName, [string]$ExeName) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $bundle = [System.IO.Compression.ZipFile]::OpenRead($BundlePath)
+    try {
+        $msixEntry = $bundle.Entries | Where-Object {
+            $_.FullName -eq $MsixEntryName -or
+            [System.Uri]::UnescapeDataString($_.FullName) -eq $MsixEntryName
+        } | Select-Object -First 1
+        if (-not $msixEntry) {
+            throw "Entrée $MsixEntryName introuvable dans le bundle"
+        }
+
+        # Extraire le .msix dans un fichier temporaire pour le lire comme ZIP
+        $tempMsix = [System.IO.Path]::GetTempFileName()
+        try {
+            $msixStream = $msixEntry.Open()
+            try {
+                $fileStream = [System.IO.File]::Create($tempMsix)
+                try {
+                    $msixStream.CopyTo($fileStream)
+                }
+                finally {
+                    $fileStream.Dispose()
+                }
+            }
+            finally {
+                $msixStream.Dispose()
+            }
+
+            return Get-ZipEntryHash $tempMsix $ExeName
+        }
+        finally {
+            Remove-Item $tempMsix -Force -ErrorAction SilentlyContinue
+        }
+    }
+    finally {
+        $bundle.Dispose()
+    }
+}
+
+# --- Vérification des versions ---
+
 [xml]$csproj = Get-FileText $csprojPath
 $version = $csproj.Project.PropertyGroup.Version
 if ([string]::IsNullOrWhiteSpace($version)) {
@@ -95,22 +137,36 @@ Assert-Match $changelogPath ("## Version {0}" -f [regex]::Escape($version)) 'Cha
 Assert-Match $contextAppPath ("> \*\*Version actuelle\*\* : {0}" -f [regex]::Escape($version)) 'Contexte app'
 Assert-Match $contextProjectPath ("\*\*Application Microsoft Store\*\* v{0}" -f [regex]::Escape($version)) 'Contexte projet'
 
-foreach ($path in @($publishExePath, $stagedExePath, $msixPackagePath)) {
-    if (-not (Test-Path $path)) {
-        throw "Fichier requis introuvable: $path"
+# --- Vérification des fichiers publiés ---
+
+foreach ($arch in $architectures) {
+    $publishExe = Join-Path $srcDir "bin\Release\net8.0-windows10.0.17763.0\win-$arch\publish\AZERTY Global.exe"
+    if (-not (Test-Path $publishExe)) {
+        throw "Fichier requis introuvable: $publishExe"
     }
 }
 
-$publishHash = (Get-FileHash $publishExePath -Algorithm SHA256).Hash
-$stagedHash = (Get-FileHash $stagedExePath -Algorithm SHA256).Hash
-if ($publishHash -ne $stagedHash) {
-    throw "L'exe publié et l'exe stagé dans msix/ ne correspondent pas"
+if (-not (Test-Path $bundlePath)) {
+    throw "Fichier requis introuvable: $bundlePath"
 }
 
-$packageHash = Get-ZipEntryHash $msixPackagePath 'AZERTY Global.exe'
-if ($publishHash -ne $packageHash) {
-    throw "L'exe embarqué dans AZERTYGlobal.msix ne correspond pas au publish courant"
+# --- Vérification des hashes (publish → bundle) ---
+
+foreach ($arch in $architectures) {
+    $publishExe = Join-Path $srcDir "bin\Release\net8.0-windows10.0.17763.0\win-$arch\publish\AZERTY Global.exe"
+    $publishHash = (Get-FileHash $publishExe -Algorithm SHA256).Hash
+
+    # Le bundle contient des .msix nommés AZERTYGlobal-{version}-{arch}.msix
+    $msixName = "AZERTYGlobal-{0}-{1}.msix" -f $storeVersion, $arch
+    $bundleHash = Get-ExeHashFromBundle $bundlePath $msixName 'AZERTY Global.exe'
+
+    if ($publishHash -ne $bundleHash) {
+        throw "L'exe $arch embarqué dans le bundle ne correspond pas au publish courant"
+    }
+
+    Write-Host "SHA256 $arch : $publishHash (publish = bundle)"
 }
 
+Write-Host ""
 Write-Host "Release vérifiée: version $version / package $storeVersion"
-Write-Host "SHA256 publish/staged/package: $publishHash"
+Write-Host "Architectures: $($architectures -join ', ')"

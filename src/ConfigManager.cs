@@ -11,7 +11,21 @@ namespace AZERTYGlobal;
 /// </summary>
 static class ConfigManager
 {
-    private static readonly string _configPath = GetConfigPath();
+    private static string _configPath = GetConfigPath();
+
+    /// <summary>
+    /// Hook de test : redirige config.json vers un fichier temporaire.
+    /// À n'utiliser que dans le projet de tests via InternalsVisibleTo.
+    /// </summary>
+    internal static void OverrideConfigPathForTests(string path)
+    {
+        lock (_lock)
+        {
+            _configPath = path;
+            _cache = null;
+            _compatibilityCache = null;
+        }
+    }
 
     // APPMODEL_ERROR_NO_PACKAGE (15700) = l'app n'est pas dans un package MSIX
     private const int APPMODEL_ERROR_NO_PACKAGE = 15700;
@@ -69,6 +83,7 @@ static class ConfigManager
     }
 
     private static Dictionary<string, JsonElement>? _cache;
+    private static Dictionary<string, string>? _compatibilityCache; // sous-objet compatibility (process → "forceOn"/"forceOff")
     private static readonly object _lock = new();
 
     /// <summary>Vérifie si l'onboarding a déjà été affiché.</summary>
@@ -212,6 +227,68 @@ static class ConfigManager
     /// </summary>
 
     // ═══════════════════════════════════════════════════════════════
+    // Compatibilité jeux — overrides par process et flag debug log
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Mode override utilisateur pour un process : "forceOn" (combo native), "forceOff"
+    /// (désactivation totale), ou null (mode auto). Lecture case-insensitive.
+    /// </summary>
+    public static string? GetCompatibilityOverride(string processName)
+    {
+        if (string.IsNullOrEmpty(processName)) return null;
+        lock (_lock)
+        {
+            EnsureLoaded();
+            if (_compatibilityCache == null) return null;
+            foreach (var (k, v) in _compatibilityCache)
+                if (string.Equals(k, processName, StringComparison.OrdinalIgnoreCase))
+                    return v;
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Définit ou supprime un override pour un process. mode = "forceOn" / "forceOff"
+    /// ou null pour retirer l'entrée (retour au mode auto).
+    /// </summary>
+    public static void SetCompatibilityOverride(string processName, string? mode)
+    {
+        if (string.IsNullOrEmpty(processName)) return;
+        if (mode != null && mode != "forceOn" && mode != "forceOff") return;
+        lock (_lock)
+        {
+            EnsureLoaded();
+            _compatibilityCache ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (mode == null)
+                _compatibilityCache.Remove(processName);
+            else
+                _compatibilityCache[processName] = mode;
+            Save();
+        }
+    }
+
+    /// <summary>Retourne une copie de la map des overrides (pour audit au démarrage).</summary>
+    public static Dictionary<string, string> GetAllCompatibilityOverrides()
+    {
+        lock (_lock)
+        {
+            EnsureLoaded();
+            return _compatibilityCache == null
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(_compatibilityCache, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// Active le journal de debug compat niveau 2 (statistiques agrégées d'émission).
+    /// Désactivé par défaut. Aucune frappe n'est jamais loguée, quel que soit le flag.
+    /// </summary>
+    public static bool CompatibilityDebugLog => GetBool("compatibilityDebugLog");
+
+    public static void SetCompatibilityDebugLog(bool enabled) => SetBool("compatibilityDebugLog", enabled);
+
+    // ═══════════════════════════════════════════════════════════════
     // Logging centralisé
     // ═══════════════════════════════════════════════════════════════
 
@@ -230,6 +307,66 @@ static class ConfigManager
         {
             try { Directory.CreateDirectory(logDir); File.AppendAllText(logFile, logEntry); } catch { }
         });
+    }
+
+    /// <summary>
+    /// Loggue un event de la couche compatibilité (changement de mode foreground,
+    /// désactivation auto anti-cheat, override cleanup, etc.) dans error.log.
+    /// **Aucune frappe utilisateur ne doit jamais être loguée**, conformément à la
+    /// politique de confidentialité onboarding. Ne loguer QUE des événements agrégés
+    /// sans contenu (process name, mode, action) — pas de codepoint, pas de char.
+    /// Async non-bloquant via ThreadPool, comme <see cref="Log"/>.
+    /// </summary>
+    public static void LogCompatEvent(string eventName, string details)
+    {
+        var logDir = LogDirectory;
+        var logEntry = $"[{DateTime.Now:s}] {eventName}: {details}\n";
+        var logFile = Path.Combine(logDir, "error.log");
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            try { Directory.CreateDirectory(logDir); File.AppendAllText(logFile, logEntry); } catch { }
+        });
+    }
+
+    /// <summary>
+    /// Variante synchrone de <see cref="LogCompatEvent"/> pour les events critiques
+    /// (AntiCheatDetected, OverrideInvalidCleanup) qui doivent être persistés même si
+    /// l'app crash juste après. Acquiert un lock sur _logFlushLock.
+    /// </summary>
+    private static readonly object _logFlushLock = new();
+    public static void LogCompatCriticalEvent(string eventName, string details)
+    {
+        var logDir = LogDirectory;
+        var logEntry = $"[{DateTime.Now:s}] {eventName}: {details}\n";
+        var logFile = Path.Combine(logDir, "error.log");
+        lock (_logFlushLock)
+        {
+            try { Directory.CreateDirectory(logDir); File.AppendAllText(logFile, logEntry); } catch { }
+        }
+    }
+
+    private const long LogRotationSizeBytes = 5 * 1024 * 1024; // 5 Mo
+
+    /// <summary>
+    /// Vérifie la taille de error.log au démarrage. Si > 5 Mo, renomme en error.log.old
+    /// (écrase l'éventuel précédent .old). Une seule rotation, pas d'archivage cumulatif.
+    /// À appeler une fois au démarrage de l'app, avant toute écriture de log.
+    /// </summary>
+    public static void RotateLogIfNeeded()
+    {
+        try
+        {
+            var logFile = Path.Combine(LogDirectory, "error.log");
+            if (!File.Exists(logFile)) return;
+            var info = new FileInfo(logFile);
+            if (info.Length < LogRotationSizeBytes) return;
+
+            var oldFile = Path.Combine(LogDirectory, "error.log.old");
+            if (File.Exists(oldFile))
+                File.Delete(oldFile);
+            File.Move(logFile, oldFile);
+        }
+        catch { /* best-effort, ne pas bloquer le démarrage */ }
     }
 
     private static bool GetBool(string key)
@@ -313,7 +450,24 @@ static class ConfigManager
                 var json = File.ReadAllText(_configPath);
                 using var doc = JsonDocument.Parse(json);
                 foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    if (prop.Name == "compatibility" && prop.Value.ValueKind == JsonValueKind.Object)
+                    {
+                        // Sous-objet compatibility : process → "forceOn"/"forceOff"
+                        _compatibilityCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var entry in prop.Value.EnumerateObject())
+                        {
+                            if (entry.Value.ValueKind == JsonValueKind.String)
+                            {
+                                var v = entry.Value.GetString();
+                                if (v == "forceOn" || v == "forceOff")
+                                    _compatibilityCache[entry.Name] = v;
+                            }
+                        }
+                        continue;
+                    }
                     _cache[prop.Name] = prop.Value.Clone();
+                }
             }
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
@@ -346,6 +500,18 @@ static class ConfigManager
                         case JsonValueKind.String: writer.WriteStringValue(val.GetString()); break;
                         default: writer.WriteStringValue(val.ToString()); break;
                     }
+                }
+                // Sous-objet compatibility (overrides utilisateur par process)
+                if (_compatibilityCache != null && _compatibilityCache.Count > 0)
+                {
+                    writer.WritePropertyName("compatibility");
+                    writer.WriteStartObject();
+                    foreach (var (proc, mode) in _compatibilityCache)
+                    {
+                        writer.WritePropertyName(proc);
+                        writer.WriteStringValue(mode);
+                    }
+                    writer.WriteEndObject();
                 }
                 writer.WriteEndObject();
                 writer.Flush();

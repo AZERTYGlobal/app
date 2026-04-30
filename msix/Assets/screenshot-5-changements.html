@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>5 améliorations</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;700;900&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #e8e8ec;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  .poster {
+    width: 1150px;
+    height: 768px;
+    display: flex;
+    flex-direction: column;
+    background: #ebebef;
+    overflow: hidden;
+  }
+
+  .header {
+    background: #1a1a2e;
+    padding: 32px 0 28px;
+    text-align: center;
+  }
+  .header h1 {
+    font-size: 3rem;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: 0.02em;
+  }
+  .header h1 span {
+    color: #4caf50;
+  }
+  .header p {
+    font-size: 1.3rem;
+    color: #aaa;
+    margin-top: 6px;
+    font-weight: 500;
+  }
+
+  .body {
+    flex: 1;
+    display: flex;
+  }
+
+  .changes {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 30px 60px;
+    gap: 28px;
+  }
+
+  .change {
+    display: flex;
+    align-items: flex-start;
+    gap: 22px;
+  }
+
+  .num {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: #4caf50;
+    color: #fff;
+    font-size: 1.8rem;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .change-content {
+    flex: 1;
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 24px;
+  }
+  .change:last-child .change-content {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .change-text h2 {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #1a1a2e;
+  }
+  .change-text p {
+    font-size: 1.25rem;
+    color: #666;
+    margin-top: 4px;
+    font-weight: 500;
+  }
+
+  .cta {
+    width: 330px;
+    background: #f0faf0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    padding-bottom: 80px;
+    text-align: center;
+    border-left: 2px solid #e0e0e0;
+  }
+  .cta .big-text {
+    font-size: 5rem;
+    font-weight: 900;
+    color: #2e7d32;
+    line-height: 1;
+  }
+  .cta .sub-text {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-top: 16px;
+  }
+  .cta .small-text {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #888;
+    margin-top: 12px;
+  }
+  .cta-logo {
+    width: 160px;
+    height: 160px;
+    margin-top: 24px;
+  }
+
+  .keys {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 52px;
+    min-width: 52px;
+    padding: 0 14px;
+    border-radius: 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: 1.3rem;
+    font-weight: 700;
+    background: #f5f5f5;
+    border: 2px solid #ddd;
+    color: #333;
+    box-shadow: 0 2px 0 #ccc;
+  }
+  kbd.highlight {
+    background: #e8f5e9;
+    border-color: #4caf50;
+    color: #2e7d32;
+    box-shadow: 0 2px 0 #81c784;
+  }
+  kbd.result {
+    background: #fff;
+    border-color: #4caf50;
+    color: #2e7d32;
+    font-size: 1.5rem;
+    font-weight: 900;
+    box-shadow: 0 2px 0 #81c784;
+  }
+  .arrow {
+    font-size: 1.2rem;
+    color: #999;
+  }
+
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 18px 0;
+    background: #fafafa;
+    border-top: 2px solid #f0f0f0;
+  }
+  .footer img {
+    width: 44px;
+    height: 44px;
+  }
+  .footer span {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #1a1a2e;
+  }
+  .footer .tagline {
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #888;
+    margin-left: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="poster">
+
+  <div class="header">
+    <h1><span>5</span> changements, c'est tout.</h1>
+    <p>Tout le reste est identique à votre AZERTY</p>
+  </div>
+
+  <div class="body">
+  <div class="changes">
+
+    <div class="change">
+      <div class="num">1</div>
+      <div class="change-content">
+        <div class="change-text">
+          <h2>Majuscules accentuées directes</h2>
+          <p>Verr. Maj. intelligent — É, È, Ç, À en un seul appui</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="change">
+      <div class="num">2</div>
+      <div class="change-content">
+        <div class="change-text">
+          <h2>Point en accès direct</h2>
+          <p>Le point et le point-virgule échangent leurs places</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="change">
+      <div class="num">3</div>
+      <div class="change-content">
+        <div class="change-text">
+          <h2>@ et # sur la touche ²</h2>
+          <p>Arobase et dièse accessibles sans AltGr</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="change">
+      <div class="num">4</div>
+      <div class="change-content">
+        <div class="change-text">
+          <h2>Symboles dev sur la rangée de repos</h2>
+          <p>{ } [ ] | \ sur AltGr + D F G H J K</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="change">
+      <div class="num">5</div>
+      <div class="change-content">
+        <div class="change-text">
+          <h2>Accents internationaux sur ù</h2>
+          <p>Accent aigu ´ et accent grave ` pour 200+ langues</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="cta">
+    <div class="big-text">99 %</div>
+    <div class="sub-text">de vos habitudes préservées</div>
+    <div class="small-text">Quelques heures suffisent pour s'y retrouver</div>
+    <img src="favicon-azerty-global.png" alt="" class="cta-logo">
+  </div>
+  </div>
+
+  <div class="footer">
+    <img src="favicon-azerty-global.png" alt="">
+    <span>AZERTY Global</span>
+    <span class="tagline">— L'AZERTY corrigé, pas réinventé.</span>
+  </div>
+
+</div>
+
+</body>
+</html>

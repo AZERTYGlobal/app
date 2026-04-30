@@ -35,7 +35,7 @@ sealed class VirtualKeyboard : IDisposable
     private const uint CLR_HL_STEP2_BG = 0x00203818;     // Fond vert discret
 
     // ── Mapping Web API key code → scancode ─────────────────────
-    private static readonly Dictionary<string, uint> KeyCodeToScancode = new()
+    internal static readonly Dictionary<string, uint> KeyCodeToScancode = new()
     {
         ["Backquote"] = 0x29,
         ["Digit1"] = 0x02, ["Digit2"] = 0x03, ["Digit3"] = 0x04, ["Digit4"] = 0x05,
@@ -76,7 +76,7 @@ sealed class VirtualKeyboard : IDisposable
     // ═══════════════════════════════════════════════════════════════
 
     /// <summary>Représente une touche visuelle sur le clavier.</summary>
-    private record struct VisualKey(
+    internal record struct VisualKey(
         float X, float Y, float W, float H,   // Position/taille en unités (1u = largeur touche standard)
         uint Scancode,                          // 0 = touche contextuelle (non remappée)
         string Label,                           // Label fixe en bas (repère AZERTY)
@@ -84,12 +84,12 @@ sealed class VirtualKeyboard : IDisposable
     );
 
     // Dimensions de référence (en unités de touche)
-    private const float KEY_H = 1f;
-    private const float KEY_GAP = 0.1f;
-    private const float ROW_GAP = 0.1f;
+    internal const float KEY_H = 1f;
+    internal const float KEY_GAP = 0.1f;
+    internal const float ROW_GAP = 0.1f;
 
     // Noms français des touches mortes
-    private static readonly Dictionary<string, string> _deadKeyNamesFr = new()
+    internal static readonly Dictionary<string, string> _deadKeyNamesFr = new()
     {
         ["dk_circumflex"] = "Accent circonflexe",
         ["dk_diaeresis"] = "Tréma",
@@ -123,7 +123,7 @@ sealed class VirtualKeyboard : IDisposable
     };
 
     /// <summary>Retourne le nom français d'une touche morte.</summary>
-    private static string GetDeadKeyFrenchName(string deadKeyId)
+    internal static string GetDeadKeyFrenchName(string deadKeyId)
     {
         return _deadKeyNamesFr.TryGetValue(deadKeyId, out var name) ? name.ToUpperInvariant() : deadKeyId;
     }
@@ -137,7 +137,7 @@ sealed class VirtualKeyboard : IDisposable
 
     private static readonly VisualKey[] _visualKeys = BuildKeyLayout();
 
-    private static VisualKey[] BuildKeyLayout()
+    internal static VisualKey[] BuildKeyLayout()
     {
         var keys = new List<VisualKey>();
         float y = 0;
@@ -265,14 +265,14 @@ sealed class VirtualKeyboard : IDisposable
 
     // ── Géométrie du clavier (partagée entre EnsureFonts, PaintContent, OnMouseMove) ──
 
-    private const float TOTAL_KEY_W = 16.3f; // Largeur max d'une rangée en unités
-    private const int KB_MARGIN = 10;
+    internal const float TOTAL_KEY_W = 16.3f; // Largeur max d'une rangée en unités
+    internal const int KB_MARGIN = 10;
 
-    private record struct KeyboardGeometry(
+    internal record struct KeyboardGeometry(
         float Scale, float KbWidth, float KbHeight,
         int OffsetX, int OffsetY, int BottomReserve);
 
-    private static KeyboardGeometry GetKeyboardGeometry(int cw, int ch)
+    internal static KeyboardGeometry GetKeyboardGeometry(int cw, int ch)
     {
         float totalKeyH = 5 * KEY_H + 4 * ROW_GAP;
         float scaleX = (cw - 2 * KB_MARGIN) / TOTAL_KEY_W;
@@ -375,6 +375,7 @@ sealed class VirtualKeyboard : IDisposable
     private const uint TTM_ADDTOOLW = 0x0432;
     private const uint TTM_DELTOOLW = 0x0433;
     private const uint TTM_UPDATETIPTEXTW = 0x0439;
+    private const uint TTM_NEWTOOLRECTW = 0x0434;
     private const uint TTM_TRACKACTIVATE = 0x0411;
     private const uint TTM_TRACKPOSITION = 0x0412;
     private const uint TTM_SETMAXTIPWIDTH = 0x0418;
@@ -412,6 +413,23 @@ sealed class VirtualKeyboard : IDisposable
         var ptr = Marshal.AllocHGlobal(Marshal.SizeOf<TOOLINFOW>());
         Marshal.StructureToPtr(ti, ptr, false);
         Win32.SendMessageW(_hTooltip, TTM_ADDTOOLW, IntPtr.Zero, ptr);
+        Marshal.FreeHGlobal(ptr);
+    }
+
+    private void UpdateTooltipRect()
+    {
+        if (_hTooltip == IntPtr.Zero || _hWnd == IntPtr.Zero) return;
+        Win32.GetClientRect(_hWnd, out var clientRect);
+        var ti = new TOOLINFOW
+        {
+            cbSize = (uint)Marshal.SizeOf<TOOLINFOW>(),
+            hwnd = _hWnd,
+            uId = (UIntPtr)1,
+            rect = clientRect
+        };
+        var ptr = Marshal.AllocHGlobal(Marshal.SizeOf<TOOLINFOW>());
+        Marshal.StructureToPtr(ti, ptr, false);
+        Win32.SendMessageW(_hTooltip, TTM_NEWTOOLRECTW, IntPtr.Zero, ptr);
         Marshal.FreeHGlobal(ptr);
     }
 
@@ -644,6 +662,7 @@ sealed class VirtualKeyboard : IDisposable
                 return (IntPtr)1; // Pas d'effacement — on peint tout dans WM_PAINT
 
             case Win32.WM_SIZE:
+                UpdateTooltipRect();
                 Invalidate();
                 return IntPtr.Zero;
 

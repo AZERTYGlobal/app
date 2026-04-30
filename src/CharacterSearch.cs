@@ -124,6 +124,9 @@ sealed class CharacterSearch : IDisposable
     // Mapping des touches mortes : dk_name → (key, layer) brut pour le highlight
     private Dictionary<string, (string key, string layer)> _deadKeyActivationRaw = new();
 
+    // Séparateurs pour tokeniser les noms/alias (doit matcher le site : tester-search.js)
+    private static readonly char[] SearchSeparators = { ' ', '-', '\'', '\u2019', '(', ')' };
+
     // Mapping key code (Web API style) → label AZERTY
     private static readonly Dictionary<string, string> KeyLabels = new()
     {
@@ -324,11 +327,11 @@ sealed class CharacterSearch : IDisposable
             // Pré-normaliser pour la recherche (évite NormalizeForSearch à chaque frappe)
             entry2.NormalizedNameFr = NormalizeForSearch(nameFr);
             entry2.NormalizedNameEn = NormalizeForSearch(nameEn);
-            entry2.NormalizedNameFrWords = entry2.NormalizedNameFr.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            entry2.NormalizedNameEnWords = entry2.NormalizedNameEn.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            entry2.NormalizedNameFrWords = entry2.NormalizedNameFr.Split(SearchSeparators, StringSplitOptions.RemoveEmptyEntries);
+            entry2.NormalizedNameEnWords = entry2.NormalizedNameEn.Split(SearchSeparators, StringSplitOptions.RemoveEmptyEntries);
             entry2.NormalizedChar = NormalizeForSearch(charStr);
             entry2.NormalizedAliasWords = aliases.Select(a =>
-                NormalizeForSearch(a).Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                NormalizeForSearch(a).Split(SearchSeparators, StringSplitOptions.RemoveEmptyEntries)
             ).ToArray();
 
             _allEntries.Add(entry2);
@@ -403,7 +406,7 @@ sealed class CharacterSearch : IDisposable
         query = query.Trim();
         var lowerQuery = query.ToLowerInvariant();
         var normalizedQuery = NormalizeForSearch(query);
-        var queryWords = normalizedQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var queryWords = normalizedQuery.Split(SearchSeparators, StringSplitOptions.RemoveEmptyEntries);
         var originalQueryWords = lowerQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
         // Score et tri
@@ -509,29 +512,25 @@ sealed class CharacterSearch : IDisposable
 
         // ── Bonus (identiques au site web) ──
 
-        // Bonus Latin de base (U+0020 à U+007F)
-        if (int.TryParse(entry.CodePoint.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out int cpNum)
-            && cpNum >= 0x0020 && cpNum <= 0x007F)
-            score += 15;
-
-        // Bonus si le caractère normalisé correspond à un mot de la requête
-        if (queryWords.Any(w => entry.NormalizedChar == w))
-            score += 10;
-
-        // Bonus correspondance exacte accent (le caractère tapé est le résultat)
         var lowerChar = entry.Character.ToLowerInvariant();
-        if (originalQueryWords.Contains(lowerChar) || originalQueryWords.Contains(entry.Character))
+
+        // Bonus correspondance exacte (+50) ou fallback sans diacritiques (+10) — mutuellement exclusifs
+        if (originalQueryWords.Contains(entry.Character) || originalQueryWords.Contains(lowerChar))
             score += 50;
+        else if (queryWords.Any(w => entry.NormalizedChar == w))
+            score += 10;
 
         // Bonus massif pour recherche d'un seul caractère exact
         if (originalQueryWords.Length == 1 && originalQueryWords[0].Length == 1 &&
             (entry.Character == originalQueryWords[0] ||
-             entry.Character.Equals(originalQueryWords[0], StringComparison.OrdinalIgnoreCase)))
+             lowerChar == originalQueryWords[0].ToLowerInvariant()))
             score += 100;
 
-        // Bonus pour les touches mortes (dk:name) — identique au site web
-        if (entry.Character.StartsWith("dk:"))
-            score += 30;
+        // Bonus Latin de base (U+0020 à U+007F) — parse défensif (les dk:* ont "DEAD_KEY")
+        if (entry.CodePoint.StartsWith("U+", StringComparison.Ordinal)
+            && int.TryParse(entry.CodePoint.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out int cpNum)
+            && cpNum >= 0x0020 && cpNum <= 0x007F)
+            score += 15;
 
         // Bonus minuscule (plus fréquemment recherché que majuscule)
         if (entry.Character.Length == 1 && char.IsLetter(entry.Character[0])
@@ -541,6 +540,10 @@ sealed class CharacterSearch : IDisposable
         // Bonus accès direct (méthode recommandée est directe, pas touche morte)
         if (entry.IsDirectAccess)
             score += 10;
+
+        // Bonus pour les touches mortes (dk:name)
+        if (entry.Character.StartsWith("dk:"))
+            score += 30;
 
         // Bonus si le nom français commence par la requête (match plus spécifique)
         if (entry.NormalizedNameFr.Length > 0 && entry.NormalizedNameFr.StartsWith(normalizedQuery))

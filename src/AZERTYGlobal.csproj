@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>AZERTY Global</AssemblyName>
     <RootNamespace>AZERTYGlobal</RootNamespace>
-    <Version>0.9.5</Version>
+    <Version>0.9.7</Version>
     <Company>AZERTY Global</Company>
     <Product>AZERTY Global</Product>
     <Copyright>© 2017-2026 Antoine Olivier — EUPL 1.2</Copyright>
@@ -29,6 +29,16 @@
     <OptimizationPreference>Size</OptimizationPreference>
 
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Exclure les doublons Proton Drive (fichiers "Name clash") -->
+    <Compile Remove="**/*(# Name clash *).cs" />
+    <!-- Exclure le sous-dossier du projet de tests pour éviter la double compilation -->
+    <Compile Remove="AZERTYGlobal.Tests/**/*.cs" />
+  </ItemGroup>
+
+  <!-- InternalsVisibleTo déclaré directement dans AssemblyAttributes.cs car
+       GenerateAssemblyInfo est désactivé. -->
 
   <ItemGroup>
     <!-- JSON embarqués dans l'exe comme ressources -->

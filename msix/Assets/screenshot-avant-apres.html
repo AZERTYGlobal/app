@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Avant / Après</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #e8e8ec;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  .poster {
+    width: 1366px;
+    height: 768px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .top {
+    background: #1a1a2e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 44px;
+    padding: 36px 0 32px;
+  }
+  .char {
+    font-size: 5rem;
+    font-weight: 900;
+    color: #fff;
+  }
+
+  .columns {
+    flex: 1;
+    display: flex;
+  }
+  .col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    padding: 24px 24px;
+  }
+  .col-before { background: #e8d0d0; }
+  .col-after  { background: #d0e8d4; }
+
+  .col-title {
+    font-size: 2.8rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 10px;
+  }
+  .col-before .col-title { color: #cc3333; }
+  .col-after  .col-title { color: #22883a; }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+  }
+
+  .shortcut {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 72px;
+    min-width: 72px;
+    padding: 0 22px;
+    border-radius: 12px;
+    font-family: 'Inter', sans-serif;
+    font-size: 1.8rem;
+    font-weight: 700;
+  }
+  .col-before kbd {
+    background: #fff;
+    border: 2.5px solid #ddb8b8;
+    color: #992222;
+    box-shadow: 0 3px 0 #ccaaaa;
+  }
+  .col-after kbd {
+    background: #fff;
+    border: 2.5px solid #b8ddc0;
+    color: #1a6630;
+    box-shadow: 0 3px 0 #aaccaa;
+  }
+  .col-after kbd.caps {
+    background: #fff3e0;
+    border-color: #e8a840;
+    color: #b07010;
+    box-shadow: 0 3px 0 #d4993a;
+  }
+  .col-after kbd.altgr {
+    background: #ede7f6;
+    border-color: #9575cd;
+    color: #5e35b1;
+    box-shadow: 0 3px 0 #8568b8;
+  }
+  .plus {
+    font-size: 1.4rem;
+    font-weight: 700;
+    opacity: 0.3;
+  }
+
+  .col-note-before {
+    font-size: 1.9rem;
+    font-weight: 900;
+    margin-top: 14px;
+    color: #cc3333;
+  }
+
+  .col-note-after {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .col-note-after img {
+    width: 72px;
+    height: 72px;
+  }
+  .col-note-after span {
+    font-size: 2.6rem;
+    font-weight: 900;
+    color: #1a6630;
+  }
+
+  .bottom {
+    display: flex;
+    align-items: stretch;
+  }
+  .bottom-half {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 0;
+  }
+  .bottom-before { background: #e8d0d0; }
+  .bottom-after  { background: #d0e8d4; }
+  .bottom-text {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #1a1a2e;
+    letter-spacing: 0.03em;
+  }
+
+  .divider {
+    width: 2px;
+    background: rgba(0,0,0,0.08);
+    align-self: stretch;
+  }
+</style>
+</head>
+<body>
+
+<div class="poster">
+
+  <div class="top">
+    <span class="char">É</span>
+    <span class="char">È</span>
+    <span class="char">Ç</span>
+    <span class="char">À</span>
+    <span class="char">œ</span>
+    <span class="char">«</span>
+  </div>
+
+  <div class="columns">
+
+    <div class="col col-before">
+      <div class="col-title">Avant</div>
+
+      <div class="row">
+        <div class="shortcut">
+          <kbd>Alt</kbd><span class="plus">+</span><kbd>0201</kbd>
+        </div>
+        <div class="shortcut">
+          <kbd>Alt</kbd><span class="plus">+</span><kbd>0200</kbd>
+        </div>
+      </div>
+      <div class="row">
+        <div class="shortcut">
+          <kbd>Alt</kbd><span class="plus">+</span><kbd>0199</kbd>
+        </div>
+        <div class="shortcut">
+          <kbd>Alt</kbd><span class="plus">+</span><kbd>0192</kbd>
+        </div>
+      </div>
+      <div class="row">
+        <div class="shortcut">
+          <kbd>Alt</kbd><span class="plus">+</span><kbd>0156</kbd>
+        </div>
+        <div class="shortcut">
+          <kbd>Alt</kbd><span class="plus">+</span><kbd>0171</kbd>
+        </div>
+      </div>
+
+      <div class="col-note-before">Pavé numérique obligatoire</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="col col-after">
+      <div class="col-title">Après</div>
+
+      <div class="row">
+        <div class="shortcut">
+          <kbd class="caps">Verr. Maj.</kbd><span class="plus">+</span><kbd>é</kbd>
+        </div>
+        <div class="shortcut">
+          <kbd class="caps">Verr. Maj.</kbd><span class="plus">+</span><kbd>è</kbd>
+        </div>
+      </div>
+      <div class="row">
+        <div class="shortcut">
+          <kbd class="caps">Verr. Maj.</kbd><span class="plus">+</span><kbd>ç</kbd>
+        </div>
+        <div class="shortcut">
+          <kbd class="caps">Verr. Maj.</kbd><span class="plus">+</span><kbd>à</kbd>
+        </div>
+      </div>
+      <div class="row">
+        <div class="shortcut">
+          <kbd class="altgr">AltGr</kbd><span class="plus">+</span><kbd>O</kbd>
+        </div>
+        <div class="shortcut">
+          <kbd class="altgr">AltGr</kbd><span class="plus">+</span><kbd>W</kbd>
+        </div>
+      </div>
+
+      <div class="col-note-after">
+        <img src="favicon-azerty-global.png" alt="">
+        <span>AZERTY Global</span>
+      </div>
+    </div>
+
+  </div>
+
+
+</div>
+
+</body>
+</html>

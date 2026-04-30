@@ -7,7 +7,7 @@ namespace AZERTYGlobal;
 static class Program
 {
     /// <summary>Version affichée partout (tooltip, À propos, etc.).</summary>
-    internal const string Version = "0.9.5";
+    internal const string Version = "0.9.7";
 
     [STAThread]
     static void Main()
@@ -25,22 +25,14 @@ static class Program
             return;
         }
 
+        // Rotation log centralisée : si error.log > 5 Mo, renommer en error.log.old
+        ConfigManager.RotateLogIfNeeded();
+
         // Gestion des erreurs fatales (le handler ne peut pas empêcher la terminaison)
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
-            // En mode MSIX, BaseDirectory est en lecture seule → écrire dans LocalAppData
-            var logDir = ConfigManager.IsPackaged
-                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AZERTY Global")
-                : AppContext.BaseDirectory;
-            var logPath = Path.Combine(logDir, "error.log");
-            // Rotation : si le log dépasse 1 Mo, on le tronque
-            try
-            {
-                if (File.Exists(logPath) && new FileInfo(logPath).Length > 1_048_576)
-                    File.WriteAllText(logPath, "[Log tronqué — taille max atteinte]\n");
-            }
-            catch { /* Ignorer erreur de rotation */ }
-            try { Directory.CreateDirectory(logDir); } catch { }
+            var logPath = Path.Combine(ConfigManager.LogDirectory, "error.log");
+            try { Directory.CreateDirectory(ConfigManager.LogDirectory); } catch { }
             try
             {
                 File.AppendAllText(logPath, $"[{DateTime.Now:s}] FATAL: {e.ExceptionObject}\n");

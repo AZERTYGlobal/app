@@ -29,8 +29,12 @@ sealed class KeyMapper
     private const uint INPUT_KEYBOARD = 1;
     private const uint KEYEVENTF_UNICODE = 0x0004;
     private const uint KEYEVENTF_KEYUP = 0x0002;
+    private const uint KEYEVENTF_SCANCODE = 0x0008;
 
     private readonly Layout _layout;
+    private readonly IWin32Api _api;
+    private ForegroundMonitor? _foregroundMonitor;
+
     private string? _activeDeadKey;
     private bool _capsLockState;
 
@@ -42,8 +46,11 @@ sealed class KeyMapper
     private bool _leftAltDown;
     private bool _rightAltDown; // AltGr
 
-    // Touches passées en pass-through (compatibilité jeux) — ne pas bloquer leur keyup
+    // Touches passées en pass-through (compatibilité jeux) — ne pas bloquer leur keyup.
+    // Lock obligatoire car ClearPassedThroughKeys peut être appelé depuis le thread
+    // WinEventHook (OOC) tandis que ProcessKey accède au set depuis le thread keyboard hook.
     private readonly HashSet<uint> _passedThroughKeys = new();
+    private readonly object _passedThroughKeysLock = new();
 
     public bool CapsLockActive => _capsLockState;
     public string? ActiveDeadKey => _activeDeadKey;
@@ -58,15 +65,29 @@ sealed class KeyMapper
     /// <summary>Événement déclenché quand Ctrl+Shift+CapsLock est pressé (toggle on/off).</summary>
     public event Action? ToggleRequested;
 
-    public KeyMapper(Layout layout)
+    public KeyMapper(Layout layout) : this(layout, new RealWin32Api()) { }
+
+    /// <summary>
+    /// Constructeur principal pour les tests (IWin32Api injecté).
+    /// La version <see cref="KeyMapper(Layout)"/> appelle celle-ci avec un RealWin32Api.
+    /// </summary>
+    internal KeyMapper(Layout layout, IWin32Api api)
     {
         _layout = layout;
+        _api = api;
         // Lire l'état initial du Caps Lock
-        _capsLockState = (Win32.GetKeyState(0x14) & 0x0001) != 0;
+        _capsLockState = (_api.GetKeyState(0x14) & 0x0001) != 0;
         // Vider le buffer de touche morte du layout Windows sous-jacent
         // (l'utilisateur a pu activer une DK système avant le démarrage du hook)
         FlushSystemDeadKey();
     }
+
+    /// <summary>
+    /// Injecte le ForegroundMonitor pour permettre l'émission en mode combo native.
+    /// Null-safe : si non injecté, fallback Unicode (comportement v0.9.6).
+    /// Appelé depuis TrayApplication après création de la fenêtre tray.
+    /// </summary>
+    public void SetForegroundMonitor(ForegroundMonitor? monitor) => _foregroundMonitor = monitor;
 
     /// <summary>
     /// Resynchronise l'état interne avec l'état réel du système.
@@ -90,11 +111,53 @@ sealed class KeyMapper
         // (l'utilisateur a pu activer une DK système pendant que le remapping était désactivé)
         FlushSystemDeadKey();
 
-        // Réinitialiser les touches en pass-through (un keyup a pu être manqué)
-        _passedThroughKeys.Clear();
+        // Réinitialiser les touches en pass-through, en émettant un keyup synthétique
+        // pour chaque scancode encore considéré enfoncé. Sans ça, une touche maintenue
+        // au moment d'un toggle off→on resterait perçue comme down par le foreground app
+        // (apps qui bindent par scancode : GLFW, SDL, DirectInput).
+        ClearPassedThroughKeys();
 
         if (changed)
             StateChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Vide le set des touches pass-through en émettant un keyup synthétique pour
+    /// chacune. Inoffensif si la touche n'est plus physiquement enfoncée (Windows
+    /// ignore proprement). Évite les "stuck keys" côté apps qui suivent l'état
+    /// up/down par scancode.
+    /// </summary>
+    internal void ClearPassedThroughKeys()
+    {
+        Win32.INPUT[]? inputs = null;
+        lock (_passedThroughKeysLock)
+        {
+            if (_passedThroughKeys.Count == 0) return;
+            inputs = new Win32.INPUT[_passedThroughKeys.Count];
+            int i = 0;
+            foreach (var scanCode in _passedThroughKeys)
+            {
+                inputs[i++] = new Win32.INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new Win32.INPUTUNION
+                    {
+                        ki = new Win32.KEYBDINPUT
+                        {
+                            wVk = 0,
+                            wScan = (ushort)scanCode,
+                            dwFlags = KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP,
+                            time = 0,
+                            dwExtraInfo = KeyboardHook.INJECTED_FLAG
+                        }
+                    }
+                };
+            }
+            _passedThroughKeys.Clear();
+        }
+        // Émission hors lock pour ne pas bloquer le keyboard hook si SendInput est lent
+        if (inputs.Length > 0)
+            _api.SendInput(inputs);
     }
 
     /// <summary>
@@ -251,9 +314,12 @@ sealed class KeyMapper
         CleanupStaleModifiers();
 
         // Garde : si des keyup ont été manqués, le HashSet grandit sans limite.
-        // 20 touches simultanées est physiquement impossible — vider le set.
-        if (_passedThroughKeys.Count > 20)
-            _passedThroughKeys.Clear();
+        // 20 touches simultanées est physiquement impossible — vider le set,
+        // en émettant des keyup synthétiques pour éviter des stuck keys côté apps.
+        bool overflow;
+        lock (_passedThroughKeysLock) overflow = _passedThroughKeys.Count > 20;
+        if (overflow)
+            ClearPassedThroughKeys();
 
         // Caps Lock : tracker l'état interne
         // Note : Ctrl+Shift+CapsLock (toggle on/off) est géré en amont dans le hook
@@ -302,6 +368,11 @@ sealed class KeyMapper
             char c = char.ToUpper(baseChar[0]);
             if (c >= 'A' && c <= 'Z')
             {
+                // Si la touche physique produit déjà ce VK sur le layout natif,
+                // pass-through pour préserver le scancode (apps qui bindent par
+                // position physique : GLFW, SDL, DirectInput — ex Ctrl+A drop dans Minecraft).
+                if (Win32.MapVirtualKeyW(scanCode, 1) == c)
+                    return false;
                 SendVirtualKey((ushort)c, isKeyDown);
                 return true;
             }
@@ -349,7 +420,9 @@ sealed class KeyMapper
         // Bloquer les keyup des touches remappées, mais laisser passer celles en pass-through.
         if (!isKeyDown)
         {
-            if (_passedThroughKeys.Remove(scanCode))
+            bool wasPassedThrough;
+            lock (_passedThroughKeysLock) wasPassedThrough = _passedThroughKeys.Remove(scanCode);
+            if (wasPassedThrough)
                 return false; // Laisser passer le keyup (touche identique au layout natif)
             return _layout.Keys.ContainsKey(scanCode);
         }
@@ -387,12 +460,12 @@ sealed class KeyMapper
                     var transformed = newDk?.Apply(isolated);
                     if (transformed != null)
                     {
-                        SendUnicodeString(transformed);
+                        EmitText(transformed);
                         StateChanged?.Invoke();
                         return true;
                     }
                     // Pas de correspondance : envoyer l'isolé de la première, activer la nouvelle
-                    SendUnicodeString(isolated);
+                    EmitText(isolated);
                 }
             }
             _activeDeadKey = output;
@@ -413,7 +486,7 @@ sealed class KeyMapper
                 var transformed = dk.Apply(output);
                 if (transformed != null)
                 {
-                    SendUnicodeString(transformed);
+                    EmitText(transformed);
 
                     return true;
                 }
@@ -421,8 +494,8 @@ sealed class KeyMapper
                 // Pas de correspondance : envoyer le diacritique isolé + le caractère
                 var isolatedChar = dk.GetIsolated();
                 if (isolatedChar != null)
-                    SendUnicodeString(isolatedChar);
-                SendUnicodeString(output);
+                    EmitText(isolatedChar);
+                EmitText(output);
 
                 return true;
             }
@@ -430,13 +503,13 @@ sealed class KeyMapper
 
         // Caractère normal — si le layout Windows natif produit le même caractère,
         // laisser passer la touche originale (compatibilité jeux/DirectInput)
-        if (CanPassThrough(scanCode, output))
+        if (CanPassThrough(scanCode, output, keyDef))
         {
-            _passedThroughKeys.Add(scanCode);
+            lock (_passedThroughKeysLock) _passedThroughKeys.Add(scanCode);
             return false;
         }
 
-        SendUnicodeString(output);
+        EmitText(output);
         return true;
     }
 
@@ -444,7 +517,7 @@ sealed class KeyMapper
     /// Vérifie si le layout Windows natif produit le même caractère pour ce scancode.
     /// Si oui, on peut laisser passer la touche originale (compatibilité jeux).
     /// </summary>
-    private bool CanPassThrough(uint scanCode, string output)
+    private bool CanPassThrough(uint scanCode, string output, KeyDefinition keyDef)
     {
         // Seulement pour les caractères simples, pas AltGr (qui produit des chars spéciaux)
         // Pas de pass-through avec Caps Lock : le Smart Caps Lock d'AZERTY Global diffère
@@ -467,7 +540,15 @@ sealed class KeyMapper
         bool needsCtrl = (charMods & 2) != 0;
         bool needsAlt = (charMods & 4) != 0;
 
-        return charVk == (byte)vk && needsShift == IsShiftDown && !needsCtrl && !needsAlt;
+        // Si base == shift sur la touche AZ Global, le Shift est non-pertinent pour
+        // sa sortie : on autorise le pass-through quel que soit son état (cas de la
+        // barre d'espace, qui produit ' ' aussi bien sans qu'avec Shift — sinon
+        // sprinter en maintenant Shift cassait le keydown VK_SPACE en jeu).
+        bool shiftIrrelevant = keyDef.Base != null && keyDef.Base == keyDef.Shift;
+
+        return charVk == (byte)vk
+            && (shiftIrrelevant || needsShift == IsShiftDown)
+            && !needsCtrl && !needsAlt;
     }
 
     /// <summary>
@@ -495,41 +576,98 @@ sealed class KeyMapper
     }
 
     /// <summary>
-    /// Envoie une chaîne de caractères Unicode via SendInput.
-    /// Gère les surrogate pairs (caractères hors BMP, U+10000+).
+    /// Émet une chaîne de caractères vers la fenêtre active.
+    /// Dispatch selon le mode foreground :
+    /// - Default → KEYEVENTF_UNICODE (comportement v0.9.6)
+    /// - NativeCombo → combo native via VkKeyScanExW + Alt+code fallback
+    /// - DisabledAntiCheat → ne devrait pas arriver (hook désactivé en amont) → fallback Unicode
+    /// Tous les events d'une chaîne sont concaténés en un INPUT[] global puis envoyés
+    /// en un seul SendInput pour atomicité (cf. plan v0.9.7 § Limites SendInput).
     /// </summary>
-    private void SendUnicodeString(string text)
+    internal void EmitText(string text)
     {
-        // Pré-dimensionné : 2 inputs par char BMP (down+up), 4 par surrogate pair
-        var inputs = new Win32.INPUT[text.Length * 4];
-        int count = 0;
+        // Snapshot atomique du mode foreground et du HKL
+        var mode = _foregroundMonitor?.CurrentMode ?? CompatibilityMode.Default;
+        var hkl = _foregroundMonitor?.CurrentHkl ?? IntPtr.Zero;
 
+        var inputs = new List<Win32.INPUT>(text.Length * 16);
         for (int i = 0; i < text.Length; i++)
         {
             char c = text[i];
-
+            // Surrogate pair → fallback Unicode (Alt+code ne couvre pas > 0xFFFF)
             if (char.IsHighSurrogate(c) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
             {
-                // Surrogate pair : envoyer les deux halves en séquence (down+down, up+up)
-                char high = c;
-                char low = text[++i];
+                BuildUnicodeInputs(c, text[++i], inputs);
+                continue;
+            }
 
-                // Key down (high puis low)
-                inputs[count++] = MakeUnicodeInput(high, false);
-                inputs[count++] = MakeUnicodeInput(low, false);
-
-                // Key up (high puis low)
-                inputs[count++] = MakeUnicodeInput(high, true);
-                inputs[count++] = MakeUnicodeInput(low, true);
+            if (mode == CompatibilityMode.NativeCombo && hkl != IntPtr.Zero)
+            {
+                // Tenter combo native ; si caractère inaccessible sur layout natif → Alt+code ;
+                // si codepoint > 0xFF → fallback Unicode (Alt+code décimal limité à Win-1252)
+                if (!BuildNativeComboInputs(c, hkl, inputs))
+                {
+                    if (c <= 0xFF)
+                        BuildAltCodeInputs(c, inputs);
+                    else
+                        BuildUnicodeInputs(c, null, inputs);
+                }
             }
             else
             {
-                inputs[count++] = MakeUnicodeInput(c, false);
-                inputs[count++] = MakeUnicodeInput(c, true);
+                BuildUnicodeInputs(c, null, inputs);
             }
         }
 
-        Win32.SendInput((uint)count, inputs, Marshal.SizeOf<Win32.INPUT>());
+        if (inputs.Count > 0)
+            _api.SendInput(inputs.ToArray());
+    }
+
+    /// <summary>
+    /// Tente de construire la séquence d'INPUT pour produire le caractère via une combo
+    /// native du layout sous-jacent (VK + mods + scancode valide). Retourne false si le
+    /// caractère n'est pas accessible directement (l'appelant tombera sur Alt+code).
+    /// </summary>
+    internal bool BuildNativeComboInputs(char c, IntPtr hkl, List<Win32.INPUT> inputs)
+    {
+        short vkScan = _api.VkKeyScanExW(c, hkl);
+        if (vkScan == -1) return false;
+
+        byte vk = (byte)(vkScan & 0xFF);
+        if (vk == 0) return false;
+
+        int mods = (vkScan >> 8) & 0xFF;
+        bool needsShift = (mods & 1) != 0;
+        bool needsCtrl  = (mods & 2) != 0;
+        bool needsAlt   = (mods & 4) != 0;
+        bool needsAltGr = needsCtrl && needsAlt; // convention Win32 : Ctrl|Alt = AltGr
+
+        uint scanCode = _api.MapVirtualKeyExW(vk, 0 /*MAPVK_VK_TO_VSC*/, hkl);
+        if (scanCode == 0) return false;
+
+        BuildVkComboInputs(vk, (ushort)scanCode, needsShift, needsAltGr,
+            needsCtrl && !needsAltGr, needsAlt && !needsAltGr, inputs);
+        return true;
+    }
+
+    /// <summary>
+    /// Construit les events pour un caractère via KEYEVENTF_UNICODE (méthode v0.9.6).
+    /// Pour un BMP : down+up. Pour surrogate pair : 4 events (down+down, up+up).
+    /// </summary>
+    internal void BuildUnicodeInputs(char high, char? low, List<Win32.INPUT> inputs)
+    {
+        if (low.HasValue)
+        {
+            inputs.Add(MakeUnicodeInput(high, false));
+            inputs.Add(MakeUnicodeInput(low.Value, false));
+            inputs.Add(MakeUnicodeInput(high, true));
+            inputs.Add(MakeUnicodeInput(low.Value, true));
+        }
+        else
+        {
+            inputs.Add(MakeUnicodeInput(high, false));
+            inputs.Add(MakeUnicodeInput(high, true));
+        }
     }
 
     private static Win32.INPUT MakeUnicodeInput(char c, bool keyUp) => new()
@@ -542,6 +680,144 @@ sealed class KeyMapper
                 wVk = 0,
                 wScan = c,
                 dwFlags = KEYEVENTF_UNICODE | (keyUp ? KEYEVENTF_KEYUP : 0),
+                time = 0,
+                dwExtraInfo = KeyboardHook.INJECTED_FLAG
+            }
+        }
+    };
+
+    /// <summary>
+    /// Construit la séquence d'INPUT pour produire un caractère via une combo VK + mods
+    /// avec un scancode valide (compatible apps qui bindent par scancode : GLFW, SDL).
+    /// Aligne les modificateurs physiques sur ceux requis (release/press temporaires
+    /// uniquement si l'état physique diffère), toggle CapsLock conditionnellement.
+    /// </summary>
+    internal void BuildVkComboInputs(byte vk, ushort scanCode, bool needsShift, bool needsAltGr,
+        bool needsCtrl, bool needsAlt, List<Win32.INPUT> inputs)
+    {
+        bool hasShift = IsShiftDown;
+        bool hasAltGr = IsAltGrDown;
+        bool hasCtrlAlone = IsCtrlDown && !hasAltGr;
+        bool hasAltAlone = _leftAltDown && !hasAltGr;
+        bool capsActive = _capsLockState;
+
+        // Toggle CapsLock conditionnel : seulement si la combo en serait affectée
+        // (Shift sur lettre ou rangée numérique). Pour AltGr+chiffre : pas d'effet.
+        bool capsToggleNeeded = capsActive && needsShift && !needsAltGr;
+
+        // Préparation : aligner les modifs physiques sur celles requises.
+        // MakeVkInput(vk, scan, keyUp) — keyUp=true envoie KEYEVENTF_KEYUP.
+        // Si hasX (déjà tenu) et !needsX → on doit RELEASE (keyUp=true).
+        // Si !hasX et needsX → on doit PRESS (keyUp=false).
+        if (capsToggleNeeded)
+        {
+            inputs.Add(MakeVkInput(VK_CAPITAL, 0, false));
+            inputs.Add(MakeVkInput(VK_CAPITAL, 0, true));
+        }
+        if (hasShift != needsShift)  inputs.Add(MakeVkInput(VK_LSHIFT, 0, hasShift));
+        if (needsAltGr != hasAltGr)  inputs.Add(MakeVkInput(VK_RMENU, 0, hasAltGr));
+        if (!needsAltGr)
+        {
+            if (needsCtrl != hasCtrlAlone) inputs.Add(MakeVkInput(VK_LCONTROL, 0, hasCtrlAlone));
+            if (needsAlt != hasAltAlone)   inputs.Add(MakeVkInput(VK_LMENU, 0, hasAltAlone));
+        }
+
+        // Press + release du VK avec scancode valide
+        inputs.Add(MakeVkInput(vk, scanCode, false));
+        inputs.Add(MakeVkInput(vk, scanCode, true));
+
+        // Restauration symétrique : action inverse de la préparation
+        if (!needsAltGr)
+        {
+            if (needsAlt != hasAltAlone)   inputs.Add(MakeVkInput(VK_LMENU, 0, !hasAltAlone));
+            if (needsCtrl != hasCtrlAlone) inputs.Add(MakeVkInput(VK_LCONTROL, 0, !hasCtrlAlone));
+        }
+        if (needsAltGr != hasAltGr)  inputs.Add(MakeVkInput(VK_RMENU, 0, !hasAltGr));
+        if (hasShift != needsShift)  inputs.Add(MakeVkInput(VK_LSHIFT, 0, !hasShift));
+        if (capsToggleNeeded)
+        {
+            inputs.Add(MakeVkInput(VK_CAPITAL, 0, false));
+            inputs.Add(MakeVkInput(VK_CAPITAL, 0, true));
+        }
+    }
+
+    /// <summary>
+    /// Construit la séquence Alt+0XXX pour injecter un caractère universellement
+    /// (Alt down + Numpad 0/X/X/X + Alt up → Windows produit le WM_CHAR au release Alt).
+    /// Toggle NumLock si OFF, release des modifs physiques tenus, restore symétrique.
+    /// Le caractère doit être ≤ 0xFF (Win-1252) pour que Alt+code décimal fonctionne.
+    /// </summary>
+    internal void BuildAltCodeInputs(char c, List<Win32.INPUT> inputs)
+    {
+        int code = c; // codepoint décimal Win-1252
+        bool numLockOn = (_api.GetKeyState((int)Win32.VK_NUMLOCK) & 0x0001) != 0;
+
+        // Snapshot modifs physiques tenus à release temporairement
+        bool hasShift = IsShiftDown;
+        bool hasAltGr = IsAltGrDown;
+        bool hasLCtrl = _leftCtrlDown && !hasAltGr;
+        bool hasRCtrl = _rightCtrlDown && !hasAltGr;
+        bool hasLAlt = _leftAltDown && !hasAltGr;
+
+        // Préparation : NumLock ON, release des modifs en trop
+        if (!numLockOn)
+        {
+            inputs.Add(MakeVkInput(Win32.VK_NUMLOCK, 0, false));
+            inputs.Add(MakeVkInput(Win32.VK_NUMLOCK, 0, true));
+        }
+        if (hasShift) inputs.Add(MakeVkInput(VK_LSHIFT, 0, true));
+        if (hasAltGr) inputs.Add(MakeVkInput(VK_RMENU, 0, true));
+        if (hasLCtrl) inputs.Add(MakeVkInput(VK_LCONTROL, 0, true));
+        if (hasRCtrl) inputs.Add(MakeVkInput(VK_RCONTROL, 0, true));
+        if (hasLAlt)  inputs.Add(MakeVkInput(VK_LMENU, 0, true));
+
+        // LAlt down + Numpad 0XXX + LAlt up
+        inputs.Add(MakeVkInput(VK_LMENU, 0x38 /*SC_LMENU*/, false));
+        // 4 chiffres décimaux : 0, centaines, dizaines, unités
+        AppendNumpadDigit(0, inputs);
+        AppendNumpadDigit((code / 100) % 10, inputs);
+        AppendNumpadDigit((code / 10) % 10, inputs);
+        AppendNumpadDigit(code % 10, inputs);
+        inputs.Add(MakeVkInput(VK_LMENU, 0x38, true));
+
+        // Restauration symétrique des modifs
+        if (hasLAlt)  inputs.Add(MakeVkInput(VK_LMENU, 0, false));
+        if (hasRCtrl) inputs.Add(MakeVkInput(VK_RCONTROL, 0, false));
+        if (hasLCtrl) inputs.Add(MakeVkInput(VK_LCONTROL, 0, false));
+        if (hasAltGr) inputs.Add(MakeVkInput(VK_RMENU, 0, false));
+        if (hasShift) inputs.Add(MakeVkInput(VK_LSHIFT, 0, false));
+        if (!numLockOn)
+        {
+            inputs.Add(MakeVkInput(Win32.VK_NUMLOCK, 0, false));
+            inputs.Add(MakeVkInput(Win32.VK_NUMLOCK, 0, true));
+        }
+    }
+
+    /// <summary>Append press+release pour un chiffre du Numpad (0-9). Utilisé par Alt+code.</summary>
+    private static void AppendNumpadDigit(int digit, List<Win32.INPUT> inputs)
+    {
+        // Scancodes Numpad : 0=SC52, 1=SC4F, 2=SC50, 3=SC51, 4=SC4B, 5=SC4C, 6=SC4D, 7=SC47, 8=SC48, 9=SC49
+        ushort scan = digit switch
+        {
+            0 => 0x52, 1 => 0x4F, 2 => 0x50, 3 => 0x51, 4 => 0x4B,
+            5 => 0x4C, 6 => 0x4D, 7 => 0x47, 8 => 0x48, 9 => 0x49,
+            _ => 0
+        };
+        byte vk = (byte)(0x60 + digit); // VK_NUMPAD0 = 0x60
+        inputs.Add(MakeVkInput(vk, scan, false));
+        inputs.Add(MakeVkInput(vk, scan, true));
+    }
+
+    private static Win32.INPUT MakeVkInput(uint vk, ushort scanCode, bool keyUp) => new()
+    {
+        type = INPUT_KEYBOARD,
+        u = new Win32.INPUTUNION
+        {
+            ki = new Win32.KEYBDINPUT
+            {
+                wVk = (ushort)vk,
+                wScan = scanCode,
+                dwFlags = keyUp ? KEYEVENTF_KEYUP : 0,
                 time = 0,
                 dwExtraInfo = KeyboardHook.INJECTED_FLAG
             }

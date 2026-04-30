@@ -1,4 +1,4 @@
-// Fenêtre d'accueil — wizard 3 étapes affiché au premier lancement
+﻿// Fenêtre d'accueil — wizard 3 étapes affiché au premier lancement
 using System.Runtime.InteropServices;
 
 namespace AZERTYGlobal;
@@ -24,22 +24,24 @@ sealed class OnboardingWindow : IDisposable
     private const int IDC_BTN_NEXT = 2002;
     private const int IDC_BTN_PREV = 2003;
     private const int IDC_LINK_GUIDE = 2004;
-    private const int IDC_LINK_LESSONS = 2005;
     private const int IDC_CHK_AUTOSTART = 2006;
     private const int IDC_LINK_BETA_BANNER = 2007;
     private const int IDC_LINK_BETA = 2008;
     private const int IDC_LINK_DISCORD = 2010;
-    private const int IDC_NOTE = 2011;
 
     // Dimensions de base (96 DPI)
     private const int BASE_WIN_W = 560;
-    private const int BASE_WIN_H = 750;
+    private const int BASE_WIN_H = 810;
     private const float ONBOARDING_UI_SCALE = 0.75f;
     private const int BASE_MARGIN = 28;
     private const int BASE_BOTTOM_MARGIN = 52;
     private const int BASE_LINK_H = 24;
     private const int BASE_LINK_SPACING = 30;
     private const int BASE_BTN_H = 36;
+    private const int BASE_BTN_W_NEXT_MIN = 140;
+    private const int BASE_BTN_W_PREV = 120;
+    private const int BASE_LINK_BANNER_W = 160;
+    private const int BASE_BTN_TEXT_PAD = 28;
 
     // ── Colors (COLORREF = 0x00BBGGRR) ───────────────────────────────
     private const uint CLR_BG = 0x00DDDDDD;
@@ -68,6 +70,8 @@ sealed class OnboardingWindow : IDisposable
     private const uint CLR_PILL_TEXT = 0x00201C18;
     private const uint CLR_WARNING_TEXT = 0x00174D6E;
     private const uint CLR_INLINE_HIGHLIGHT = 0x000078D4;
+    private const uint CLR_SEPARATOR = 0x00D0D0D0;
+    private const uint CLR_REASSURE = 0x00666666;
     private const uint ARGB_STEP_CIRCLE = 0xFF0078D4;
     private const uint ARGB_WHITE = 0xFFFFFFFF;
 
@@ -78,6 +82,13 @@ sealed class OnboardingWindow : IDisposable
     // ═══════════════════════════════════════════════════════════════
     private IntPtr _hWnd;
     private int _currentStep;
+    private bool _learningModuleDone;
+    private LearningModule? _learningModule;
+
+    // Références passées par TrayApplication pour le LearningModule
+    public KeyMapper? Mapper { get; set; }
+    public KeyboardHook? Hook { get; set; }
+    public Layout? AppLayout { get; set; }
 
     // Y du contenu (après le header) — recalculé à chaque OnPaint
     private int _contentY;
@@ -91,10 +102,8 @@ sealed class OnboardingWindow : IDisposable
 
     // Contrôles — Étape 3
     private IntPtr _hWndLinkGuide;
-    private IntPtr _hWndLinkLessons;
     private IntPtr _hWndLinkBeta;
     private IntPtr _hWndLinkDiscord;
-    private IntPtr _hWndNote;
     private IntPtr _hWndChkAutoStart;
     private IntPtr _hWndChkDontShow;
 
@@ -107,7 +116,6 @@ sealed class OnboardingWindow : IDisposable
     private readonly IntPtr _hBgBrush;
     private readonly IntPtr _hBannerBgBrush;
     private readonly IntPtr _hPanelBrush;
-    private readonly IntPtr _hNoteBrush;
 
     // GDI+ resources
     private IntPtr _gdipToken;
@@ -129,7 +137,6 @@ sealed class OnboardingWindow : IDisposable
     private IntPtr _hFontBold;
     private IntPtr _hFontLink;
     private IntPtr _hFontSmall;
-    private IntPtr _hFontNote;
     private IntPtr _hFontButton;
     private IntPtr _hFontBannerBold;
     private IntPtr _hFontStepSummary;
@@ -146,7 +153,6 @@ sealed class OnboardingWindow : IDisposable
         _hBgBrush = Win32.CreateSolidBrush(CLR_BG);
         _hBannerBgBrush = Win32.CreateSolidBrush(CLR_BANNER_BG);
         _hPanelBrush = Win32.CreateSolidBrush(CLR_PANEL_BG);
-        _hNoteBrush = Win32.CreateSolidBrush(CLR_NOTE_BG);
 
         // DPI initial (moniteur principal — sera corrigé par GetDpiForWindow après création)
         var hdcScreen = Win32.GetDC(IntPtr.Zero);
@@ -191,7 +197,6 @@ sealed class OnboardingWindow : IDisposable
         _hFontBold = Win32.CreateFontW(-S(17), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontLink = Win32.CreateFontW(-S(16), 0, 0, 0, 400, 0, 1, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontSmall = Win32.CreateFontW(-S(14), 0, 0, 0, 400, 1, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
-        _hFontNote = Win32.CreateFontW(-S(15), 0, 0, 0, 700, 1, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontButton = Win32.CreateFontW(-S(17), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontBannerBold = Win32.CreateFontW(-S(21), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontStepSummary = Win32.CreateFontW(-S(20), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
@@ -209,7 +214,6 @@ sealed class OnboardingWindow : IDisposable
         Win32.DeleteObject(_hFontBold);
         Win32.DeleteObject(_hFontLink);
         Win32.DeleteObject(_hFontSmall);
-        Win32.DeleteObject(_hFontNote);
         Win32.DeleteObject(_hFontButton);
         Win32.DeleteObject(_hFontBannerBold);
         Win32.DeleteObject(_hFontStepSummary);
@@ -231,12 +235,9 @@ sealed class OnboardingWindow : IDisposable
         Win32.SendMessageW(_hWndBtnPrev, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
         Win32.SendMessageW(_hWndLinkBetaBanner, Win32.WM_SETFONT, _hFontLink, (IntPtr)1);
         Win32.SendMessageW(_hWndLinkGuide, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
-        Win32.SendMessageW(_hWndLinkLessons, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
         Win32.SendMessageW(_hWndLinkBeta, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
         Win32.SendMessageW(_hWndLinkDiscord, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
         Win32.SetWindowTextW(_hWndLinkDiscord, "Échanger avec les autres testeurs");
-        Win32.SendMessageW(_hWndNote, Win32.WM_SETFONT, _hFontNote, (IntPtr)1);
-        Win32.SetWindowTextW(_hWndNote, "\u26A0 Le testeur en ligne n\u00E9cessite de d\u00E9sactiver temporairement l'application.");
         Win32.SendMessageW(_hWndChkAutoStart, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
         Win32.SendMessageW(_hWndChkDontShow, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
     }
@@ -265,21 +266,21 @@ sealed class OnboardingWindow : IDisposable
         int margin = S(BASE_MARGIN);
         int winW = S(BASE_WIN_W);
         int bottomY = S(BASE_WIN_H) - S(BASE_BOTTOM_MARGIN);
-        GetStep3Layout(_contentY, winW, out _, out _, out _,
+        GetStep3Layout(_contentY, winW, out _, out _,
             out int linksX, out int linksWidth, out int linkStartY, out int linkRowH, out int linkControlHeight,
-            out int noteX, out int noteWidth, out int noteY, out int noteHeight,
             out int checkboxX, out int checkboxWidth, out int checkboxY, out int checkboxSpacing, out int checkboxHeight);
 
-        // Navigation
-        Win32.MoveWindow(_hWndBtnNext, winW - margin - S(140), bottomY, S(140), S(BASE_BTN_H), true);
-        Win32.MoveWindow(_hWndBtnPrev, margin, bottomY, S(120), S(BASE_BTN_H), true);
+        // Navigation — bouton « Suivant » dimensionné dynamiquement selon son texte courant
+        var nextText = new System.Text.StringBuilder(64);
+        Win32.GetWindowTextW(_hWndBtnNext, nextText, nextText.Capacity);
+        var nextGeom = ComputeNextButtonGeometry(nextText.ToString(), winW, margin);
+        Win32.MoveWindow(_hWndBtnNext, nextGeom.x, bottomY, nextGeom.width, S(BASE_BTN_H), true);
+        Win32.MoveWindow(_hWndBtnPrev, margin, bottomY, S(BASE_BTN_W_PREV), S(BASE_BTN_H), true);
 
-        // Étape 3 — liens et préférences dans une grille fixe
+        // Étape 3 — 3 liens (Guide, Bêta, Discord) dans une grille fixe
         Win32.MoveWindow(_hWndLinkGuide, linksX, linkStartY, linksWidth, linkControlHeight, true);
-        Win32.MoveWindow(_hWndLinkLessons, linksX, linkStartY + linkRowH, linksWidth, linkControlHeight, true);
-        Win32.MoveWindow(_hWndLinkBeta, linksX, linkStartY + linkRowH * 2, linksWidth, linkControlHeight, true);
-        Win32.MoveWindow(_hWndLinkDiscord, linksX, linkStartY + linkRowH * 3, linksWidth, linkControlHeight, true);
-        Win32.MoveWindow(_hWndNote, noteX, noteY, noteWidth, noteHeight, true);
+        Win32.MoveWindow(_hWndLinkBeta, linksX, linkStartY + linkRowH, linksWidth, linkControlHeight, true);
+        Win32.MoveWindow(_hWndLinkDiscord, linksX, linkStartY + linkRowH * 2, linksWidth, linkControlHeight, true);
 
         // Préférences
         Win32.MoveWindow(_hWndChkAutoStart, checkboxX, checkboxY, checkboxWidth, checkboxHeight, true);
@@ -366,16 +367,16 @@ sealed class OnboardingWindow : IDisposable
         int bottomY = S(BASE_WIN_H) - S(BASE_BOTTOM_MARGIN);
         int linkH = S(28);
 
-        // ══ Navigation ══
+        // ══ Navigation ══ (largeur initiale = minimum ; ajustée dynamiquement dans UpdateStepVisibility)
         _hWndBtnNext = Win32.CreateWindowExW(0, "BUTTON", "Suivant",
             Win32.WS_CHILD | Win32.WS_VISIBLE | 0x0001 | Win32.WS_TABSTOP,
-            winW - margin - S(140), bottomY, S(140), S(BASE_BTN_H),
+            winW - margin - S(BASE_BTN_W_NEXT_MIN), bottomY, S(BASE_BTN_W_NEXT_MIN), S(BASE_BTN_H),
             _hWnd, (IntPtr)IDC_BTN_NEXT, hInstance, IntPtr.Zero);
         Win32.SendMessageW(_hWndBtnNext, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
 
         _hWndBtnPrev = Win32.CreateWindowExW(0, "BUTTON", "Précédent",
             Win32.WS_CHILD | Win32.WS_TABSTOP,
-            margin, bottomY, S(120), S(BASE_BTN_H),
+            margin, bottomY, S(BASE_BTN_W_PREV), S(BASE_BTN_H),
             _hWnd, (IntPtr)IDC_BTN_PREV, hInstance, IntPtr.Zero);
         Win32.SendMessageW(_hWndBtnPrev, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
 
@@ -397,12 +398,6 @@ sealed class OnboardingWindow : IDisposable
         Win32.SendMessageW(_hWndLinkGuide, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
         Win32.SetWindowSubclass(_hWndLinkGuide, _linkSubclassProc, (UIntPtr)1, IntPtr.Zero);
 
-        _hWndLinkLessons = Win32.CreateWindowExW(0, "STATIC", "S'entraîner avec les leçons de frappe",
-            Win32.WS_CHILD | SS_NOTIFY | Win32.WS_TABSTOP, margin, y, S(360), linkH,
-            _hWnd, (IntPtr)IDC_LINK_LESSONS, hInstance, IntPtr.Zero);
-        Win32.SendMessageW(_hWndLinkLessons, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
-        Win32.SetWindowSubclass(_hWndLinkLessons, _linkSubclassProc, (UIntPtr)2, IntPtr.Zero);
-
         _hWndLinkBeta = Win32.CreateWindowExW(0, "STATIC", "Donner son avis sur la bêta",
             Win32.WS_CHILD | SS_NOTIFY | Win32.WS_TABSTOP, margin, y, S(280), linkH,
             _hWnd, (IntPtr)IDC_LINK_BETA, hInstance, IntPtr.Zero);
@@ -414,12 +409,6 @@ sealed class OnboardingWindow : IDisposable
             _hWnd, (IntPtr)IDC_LINK_DISCORD, hInstance, IntPtr.Zero);
         Win32.SendMessageW(_hWndLinkDiscord, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
         Win32.SetWindowSubclass(_hWndLinkDiscord, _linkSubclassProc, (UIntPtr)5, IntPtr.Zero);
-
-        _hWndNote = Win32.CreateWindowExW(0, "STATIC",
-            "⚠ Le testeur en ligne nécessite de désactiver temporairement l'application.",
-            Win32.WS_CHILD, margin, y, S(380), S(20),
-            _hWnd, (IntPtr)IDC_NOTE, hInstance, IntPtr.Zero);
-        Win32.SendMessageW(_hWndNote, Win32.WM_SETFONT, _hFontNote, (IntPtr)1);
 
         _hWndChkAutoStart = Win32.CreateWindowExW(0, "BUTTON", "Lancer au démarrage de Windows",
             Win32.WS_CHILD | BS_AUTOCHECKBOX | Win32.WS_TABSTOP,
@@ -444,15 +433,22 @@ sealed class OnboardingWindow : IDisposable
 
         int step3Vis = _currentStep == 2 ? 1 : 0;
         Win32.ShowWindow(_hWndLinkGuide, step3Vis);
-        Win32.ShowWindow(_hWndLinkLessons, step3Vis);
         Win32.ShowWindow(_hWndLinkBeta, step3Vis);
         Win32.ShowWindow(_hWndLinkDiscord, step3Vis);
-        Win32.ShowWindow(_hWndNote, step3Vis);
         Win32.ShowWindow(_hWndChkAutoStart, step3Vis);
         Win32.ShowWindow(_hWndChkDontShow, step3Vis);
 
         Win32.ShowWindow(_hWndBtnPrev, _currentStep > 0 ? 1 : 0);
-        Win32.SetWindowTextW(_hWndBtnNext, _currentStep == 2 ? "C'est parti !" : "Suivant");
+        string nextText = _currentStep == 2 ? "C'est parti !"
+            : (_currentStep == 0 && !_learningModuleDone ? "Essayer maintenant" : "Suivant");
+        Win32.SetWindowTextW(_hWndBtnNext, nextText);
+
+        // Redimensionner le bouton selon le nouveau texte
+        int btnWinW = S(BASE_WIN_W);
+        int btnMargin = S(BASE_MARGIN);
+        int btnBottomY = S(BASE_WIN_H) - S(BASE_BOTTOM_MARGIN);
+        var nextGeom = ComputeNextButtonGeometry(nextText, btnWinW, btnMargin);
+        Win32.MoveWindow(_hWndBtnNext, nextGeom.x, btnBottomY, nextGeom.width, S(BASE_BTN_H), true);
 
         // Repositionner le lien bandeau bêta (étape 1)
         // Le positionnement précis est fait dans PaintStep1 après mesure du texte,
@@ -481,6 +477,14 @@ sealed class OnboardingWindow : IDisposable
         Win32.ShowWindow(_hWnd, 1);
         Win32.SetForegroundWindow(_hWnd);
         _visible = true;
+    }
+
+    /// <summary>Remet l'onboarding à zéro (étape 1, exercice non fait) et réautorise son affichage automatique.</summary>
+    public void ResetState()
+    {
+        _currentStep = 0;
+        _learningModuleDone = false;
+        ConfigManager.SetShowOnboardingAtStartup(true);
     }
 
     public void Close()
@@ -534,7 +538,14 @@ sealed class OnboardingWindow : IDisposable
                 switch (id)
                 {
                     case IDC_BTN_NEXT:
-                        if (_currentStep < 2) { _currentStep++; UpdateStepVisibility(); }
+                        if (_currentStep == 0 && !_learningModuleDone)
+                        {
+                            // Étape 1 → lancer le mini-module d'apprentissage
+                            // L'utilisateur reste sur l'étape 1 ; le bouton se transformera en
+                            // « Suivant » une fois le module fermé (cf. callback OnClosed dans LaunchLearningModule).
+                            LaunchLearningModule();
+                        }
+                        else if (_currentStep < 2) { _currentStep++; UpdateStepVisibility(); }
                         else Close();
                         break;
                     case IDC_BTN_PREV:
@@ -544,8 +555,6 @@ sealed class OnboardingWindow : IDisposable
                         if (code == 0) OpenLink("https://azerty.global/beta"); break;
                     case IDC_LINK_GUIDE:
                         if (code == 0) OpenLink("https://azerty.global/guide"); break;
-                    case IDC_LINK_LESSONS:
-                        if (code == 0) OpenLink("https://azerty.global/?mode=lessons"); break;
                     case IDC_LINK_DISCORD:
                         if (code == 0) OpenLink("https://discord.gg/nYknqshJz3"); break;
                 }
@@ -555,7 +564,7 @@ sealed class OnboardingWindow : IDisposable
             {
                 IntPtr hdcStatic = wParam;
                 IntPtr hCtrl = lParam;
-                if (hCtrl == _hWndLinkGuide || hCtrl == _hWndLinkLessons ||
+                if (hCtrl == _hWndLinkGuide ||
                     hCtrl == _hWndLinkBeta || hCtrl == _hWndLinkDiscord)
                 {
                     Win32.SetBkMode(hdcStatic, 1);
@@ -576,19 +585,13 @@ sealed class OnboardingWindow : IDisposable
                     Win32.SetTextColor(hdcStatic, CLR_TEXT);
                     return _hPanelBrush;
                 }
-                if (hCtrl == _hWndNote)
-                {
-                    Win32.SetBkMode(hdcStatic, 1);
-                    Win32.SetTextColor(hdcStatic, CLR_WARNING_TEXT);
-                    return _hNoteBrush;
-                }
                 Win32.SetBkMode(hdcStatic, 1);
                 Win32.SetTextColor(hdcStatic, 0x00888888);
                 return _hBgBrush;
             }
 
             case Win32.WM_SETCURSOR:
-                if (wParam == _hWndLinkGuide || wParam == _hWndLinkLessons ||
+                if (wParam == _hWndLinkGuide ||
                     wParam == _hWndLinkBeta || wParam == _hWndLinkDiscord ||
                     wParam == _hWndLinkBetaBanner)
                 {
@@ -635,6 +638,24 @@ sealed class OnboardingWindow : IDisposable
     {
         Win32.ShellExecuteW(IntPtr.Zero, "open", url, null, null, 1);
         Win32.SetWindowPos(_hWnd, (IntPtr)(-2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040);
+    }
+
+    private void LaunchLearningModule()
+    {
+        if (Mapper == null || Hook == null || AppLayout == null) return;
+
+        _learningModule?.Dispose();
+        _learningModule = new LearningModule(_hWnd, Mapper, Hook, AppLayout);
+        _learningModule.OnClosed = () =>
+        {
+            _learningModuleDone = true;
+            _learningModule?.Dispose();
+            _learningModule = null;
+            // Mettre à jour le bouton (« Essayer maintenant » → « Suivant ») et redessiner
+            UpdateStepVisibility();
+            Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
+        };
+        _learningModule.Show();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -827,19 +848,15 @@ sealed class OnboardingWindow : IDisposable
     // Étape 1 — Les 5 améliorations + bandeau bêta
     // ═══════════════════════════════════════════════════════════════
     private void GetStep3Layout(int topY, int winW,
-        out Win32.RECT resourcesPanel, out Win32.RECT noteRect, out Win32.RECT prefsPanel,
+        out Win32.RECT resourcesPanel, out Win32.RECT prefsPanel,
         out int linksX, out int linksWidth, out int linkStartY, out int linkRowH, out int linkControlHeight,
-        out int noteX, out int noteWidth, out int noteY, out int noteHeight,
         out int checkboxX, out int checkboxWidth, out int checkboxY, out int checkboxSpacing, out int checkboxHeight)
     {
         int margin = S(BASE_MARGIN);
         int panelWidth = winW - margin * 2;
         int panelPaddingX = S(18);
-        const string noteText = "\u26A0 Le testeur en ligne n\u00E9cessite de d\u00E9sactiver temporairement l'application.";
         int resourcePaddingTop = S(16);
         int resourcePaddingBottom = S(12);
-        int notePaddingTop = S(10);
-        int notePaddingBottom = S(10);
         int prefsPaddingTop = S(16);
         int prefsPaddingBottom = S(16);
         int panelGap = S(14);
@@ -850,7 +867,8 @@ sealed class OnboardingWindow : IDisposable
             int pageTitleHeight = MeasureSingleLineHeight(hdc, _hFontPageTitle);
             linkControlHeight = Math.Max(S(28), MeasureSingleLineHeight(hdc, _hFontLinkStrong) + S(6));
             linkRowH = linkControlHeight + S(2);
-            int resourcesHeight = resourcePaddingTop + linkRowH * 4 + resourcePaddingBottom;
+            // Le panel ressources contient désormais 3 liens (Guide, Bêta, Discord)
+            int resourcesHeight = resourcePaddingTop + linkRowH * 3 + resourcePaddingBottom;
             int panelTop = topY + pageTitleHeight + S(12);
 
             resourcesPanel = new Win32.RECT
@@ -865,25 +883,11 @@ sealed class OnboardingWindow : IDisposable
             linksWidth = panelWidth - panelPaddingX * 2;
             linkStartY = resourcesPanel.top + resourcePaddingTop;
 
-            int noteTop = resourcesPanel.bottom + panelGap;
-            noteX = margin + S(12);
-            noteWidth = panelWidth - S(24);
-            noteHeight = MeasureTextHeight(hdc, _hFontNote, noteText, noteWidth) + S(4);
-            int noteBlockHeight = notePaddingTop + noteHeight + notePaddingBottom;
-            noteY = noteTop + notePaddingTop;
-            noteRect = new Win32.RECT
-            {
-                left = margin,
-                top = noteTop,
-                right = margin + panelWidth,
-                bottom = noteTop + noteBlockHeight
-            };
-
             checkboxX = margin + panelPaddingX;
             checkboxWidth = panelWidth - panelPaddingX * 2;
             checkboxHeight = Math.Max(S(26), MeasureSingleLineHeight(hdc, _hFontBold) + S(10));
             int prefsTitleHeight = MeasureSingleLineHeight(hdc, _hFontPageTitle);
-            int prefsTop = noteRect.bottom + panelGap + prefsTitleHeight + S(8);
+            int prefsTop = resourcesPanel.bottom + panelGap + prefsTitleHeight + S(8);
             checkboxY = prefsTop + prefsPaddingTop;
             checkboxSpacing = checkboxHeight + S(10);
             int prefsHeight = prefsPaddingTop + checkboxHeight * 2 + S(10) + prefsPaddingBottom;
@@ -908,6 +912,26 @@ sealed class OnboardingWindow : IDisposable
 
     private int MeasureSingleLineWidth(IntPtr hdc, IntPtr hFont, string text)
         => GdiHelpers.MeasureSingleLineWidth(hdc, hFont, text);
+
+    /// <summary>
+    /// Mesure le texte du bouton « Suivant / Essayer maintenant / C'est parti ! » et
+    /// retourne sa position X (alignée à droite) et sa largeur (≥ BASE_BTN_W_NEXT_MIN).
+    /// </summary>
+    private (int x, int width) ComputeNextButtonGeometry(string text, int winW, int margin)
+    {
+        IntPtr hdc = Win32.GetDC(_hWnd);
+        try
+        {
+            int textWidth = MeasureSingleLineWidth(hdc, _hFontButton, text);
+            int width = Math.Max(S(BASE_BTN_W_NEXT_MIN), textWidth + S(BASE_BTN_TEXT_PAD * 2));
+            int x = winW - margin - width;
+            return (x, width);
+        }
+        finally
+        {
+            Win32.ReleaseDC(_hWnd, hdc);
+        }
+    }
 
     private int MeasureSingleLineHeight(IntPtr hdc, IntPtr hFont)
         => GdiHelpers.MeasureSingleLineHeight(hdc, hFont);
@@ -972,7 +996,16 @@ sealed class OnboardingWindow : IDisposable
             "{ } [ ] \\ | sur la rangée de repos avec AltGr.");
         DrawFeatureWithHighlight(hdc, margin, cw, ref y, "5",
             "Accents internationaux",
-            "Accents aigu, grave et tilde sur la touche à droite du M");
+            "Accents aigu, grave et tilde sur la touche à droite du M.");
+
+        // ── Mention rassurante (vie privée) ──
+        y += S(8);
+        Win32.SelectObject(hdc, _hFontSmall);
+        Win32.SetTextColor(hdc, CLR_REASSURE);
+        const string reassure = "Cette application améliore votre clavier. Aucune frappe n'est enregistrée ni transmise.";
+        var reassureRect = new Win32.RECT { left = margin, top = y, right = cw - margin, bottom = y + S(40) };
+        Win32.DrawTextW(hdc, reassure, -1, ref reassureRect,
+            Win32.DT_LEFT | Win32.DT_WORDBREAK | Win32.DT_NOPREFIX);
     }
 
     private void DrawFeature(IntPtr hdc, int margin, int cw, ref int y, string number, string title, string description)
@@ -1006,84 +1039,6 @@ sealed class OnboardingWindow : IDisposable
         DrawStepCardWithRuns(hdc, margin, cw, ref y, "4",
             "Recherchez n'importe quel caractère",
             GetShortcutRuns(null, "Ctrl + Maj + W", " puis tapez le nom d'un caractère pour le copier et voir comment le taper sur le clavier virtuel."));
-    }
-
-    /// <summary>Dessine un cercle numéroté en GDI+ (anti-aliasé).</summary>
-    private void DrawNumberedCircle(IntPtr gfx, int x, int y, int size, string number)
-    {
-        Win32.GdipCreateSolidFill(ARGB_STEP_CIRCLE, out IntPtr blueBrush);
-        Win32.GdipFillEllipseI(gfx, blueBrush, x, y, size, size);
-        Win32.GdipCreateFontFamilyFromName("Segoe UI", IntPtr.Zero, out IntPtr fontFamily);
-        Win32.GdipCreateFont(fontFamily, 10f * _dpiScale, 1, 2, out IntPtr gdipFont);
-        Win32.GdipCreateStringFormat(0, 0, out IntPtr strFormat);
-        Win32.GdipSetStringFormatAlign(strFormat, 1);
-        Win32.GdipSetStringFormatLineAlign(strFormat, 1);
-        Win32.GdipCreateSolidFill(ARGB_WHITE, out IntPtr whiteBrush);
-        var circleRect = new Win32.RectF { X = x, Y = y, Width = size, Height = size };
-        Win32.GdipDrawString(gfx, number, number.Length, gdipFont, ref circleRect, strFormat, whiteBrush);
-        Win32.GdipDeleteBrush(whiteBrush);
-        Win32.GdipDeleteBrush(blueBrush);
-        Win32.GdipDeleteStringFormat(strFormat);
-        Win32.GdipDeleteFont(gdipFont);
-        Win32.GdipDeleteFontFamily(fontFamily);
-    }
-
-    private void DrawStep(IntPtr hdc, IntPtr gfx, int margin, int cw, ref int y, string number, string title, string description)
-    {
-        int circleSize = S(28);
-        int textX = margin + circleSize + S(10);
-
-        DrawNumberedCircle(gfx, margin, y, circleSize, number);
-
-        Win32.SelectObject(hdc, _hFontBold);
-        Win32.SetTextColor(hdc, CLR_STEP_TITLE);
-        var titleRect = new Win32.RECT { left = textX, top = y + S(2), right = cw - margin, bottom = y + S(26) };
-        Win32.DrawTextW(hdc, title, -1, ref titleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
-        y += S(28);
-
-        Win32.SelectObject(hdc, _hFontText);
-        Win32.SetTextColor(hdc, CLR_TEXT);
-        var measureDesc = new Win32.RECT { left = textX, top = 0, right = cw - margin, bottom = S(100) };
-        Win32.DrawTextW(hdc, description, -1, ref measureDesc, Win32.DT_LEFT | Win32.DT_WORDBREAK | Win32.DT_NOPREFIX | Win32.DT_CALCRECT);
-        int textH = measureDesc.bottom;
-        var descRect = new Win32.RECT { left = textX, top = y, right = cw - margin, bottom = y + textH };
-        Win32.DrawTextW(hdc, description, -1, ref descRect, Win32.DT_LEFT | Win32.DT_WORDBREAK | Win32.DT_NOPREFIX);
-        y += textH + S(14);
-    }
-
-    private void DrawStepWithHighlight(IntPtr hdc, IntPtr gfx, int margin, int cw, ref int y)
-    {
-        int circleSize = S(28);
-        int textX = margin + circleSize + S(10);
-
-        DrawNumberedCircle(gfx, margin, y, circleSize, "2");
-
-        Win32.SelectObject(hdc, _hFontBold);
-        Win32.SetTextColor(hdc, CLR_STEP_TITLE);
-        var titleRect = new Win32.RECT { left = textX, top = y + S(2), right = cw - margin, bottom = y + S(26) };
-        Win32.DrawTextW(hdc, "Activez / désactivez à tout moment", -1, ref titleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
-        y += S(28);
-
-        Win32.SelectObject(hdc, _hFontText);
-        Win32.SetTextColor(hdc, CLR_TEXT);
-        string prefix = "Raccourci : ";
-        var prefixRect = new Win32.RECT { left = textX, top = y, right = cw - margin, bottom = y + S(22) };
-        Win32.DrawTextW(hdc, prefix, -1, ref prefixRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
-
-        var measureRect = new Win32.RECT { left = 0, top = 0, right = 9999, bottom = 9999 };
-        Win32.DrawTextW(hdc, prefix, -1, ref measureRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX | Win32.DT_CALCRECT);
-
-        Win32.SelectObject(hdc, _hFontBold);
-        Win32.SetTextColor(hdc, CLR_HIGHLIGHT);
-        var shortcutRect = new Win32.RECT { left = textX + measureRect.right, top = y, right = cw - margin, bottom = y + S(22) };
-        Win32.DrawTextW(hdc, "Ctrl + Maj + Verr. Maj.", -1, ref shortcutRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
-        y += S(24);
-
-        Win32.SelectObject(hdc, _hFontText);
-        Win32.SetTextColor(hdc, CLR_TEXT);
-        var line2Rect = new Win32.RECT { left = textX, top = y, right = cw - margin, bottom = y + S(22) };
-        Win32.DrawTextW(hdc, "Ou clic droit sur l'icône AG \u2192 Désactiver", -1, ref line2Rect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
-        y += S(14); // Marge identique à DrawStep
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1289,9 +1244,8 @@ sealed class OnboardingWindow : IDisposable
     private void PaintStep3(IntPtr hdc, IntPtr gfx, int cw, int ch, int y)
     {
         int margin = S(BASE_MARGIN);
-        GetStep3Layout(y, cw, out var resourcesPanel, out var noteRect, out var prefsPanel,
+        GetStep3Layout(y, cw, out var resourcesPanel, out var prefsPanel,
             out int linksX, out int linksWidth, out int linkStartY, out int linkRowH, out _,
-            out int noteX, out int noteWidth, out int noteY, out int noteHeight,
             out int checkboxX, out int checkboxWidth, out int checkboxY, out int checkboxSpacing, out _);
 
         Win32.SelectObject(hdc, _hFontPageTitle);
@@ -1302,7 +1256,7 @@ sealed class OnboardingWindow : IDisposable
         var prefsTitleRect = new Win32.RECT
         {
             left = margin,
-            top = noteRect.bottom + S(14),
+            top = resourcesPanel.bottom + S(14),
             right = cw - margin,
             bottom = prefsPanel.top - S(8)
         };
@@ -1310,9 +1264,9 @@ sealed class OnboardingWindow : IDisposable
 
         GdiHelpers.DrawPanel(hdc, resourcesPanel, CLR_PANEL_BG, CLR_PANEL_BORDER, CLR_BADGE_BG, S(4));
         GdiHelpers.DrawPanel(hdc, prefsPanel, CLR_PANEL_BG, CLR_PANEL_BORDER, CLR_BADGE_BG, S(4));
-        GdiHelpers.DrawPanel(hdc, noteRect, CLR_NOTE_BG, CLR_NOTE_BORDER, CLR_NOTE_ACCENT, S(4));
 
-        for (int row = 1; row < 4; row++)
+        // Séparateurs entre les 3 liens (Guide, Bêta, Discord)
+        for (int row = 1; row < 3; row++)
         {
             var rowSep = new Win32.RECT
             {
@@ -1330,9 +1284,11 @@ sealed class OnboardingWindow : IDisposable
     // ═══════════════════════════════════════════════════════════════
     public void Dispose()
     {
+        _learningModule?.Dispose();
+        _learningModule = null;
+
         if (_hWndLinkBetaBanner != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkBetaBanner, _linkSubclassProc, (UIntPtr)10);
         if (_hWndLinkGuide != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkGuide, _linkSubclassProc, (UIntPtr)1);
-        if (_hWndLinkLessons != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkLessons, _linkSubclassProc, (UIntPtr)2);
         if (_hWndLinkBeta != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkBeta, _linkSubclassProc, (UIntPtr)3);
         if (_hWndLinkDiscord != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkDiscord, _linkSubclassProc, (UIntPtr)5);
 
@@ -1345,6 +1301,5 @@ sealed class OnboardingWindow : IDisposable
         Win32.DeleteObject(_hBgBrush);
         Win32.DeleteObject(_hBannerBgBrush);
         Win32.DeleteObject(_hPanelBrush);
-        Win32.DeleteObject(_hNoteBrush);
     }
 }
