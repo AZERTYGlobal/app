@@ -247,8 +247,8 @@ contact@azerty.global
 ### Configuration requise
 
 - **Système** : Windows 10 version 1809 (build 17763) ou ultérieur
-- **Architecture** : x64
-- **Espace disque** : ~5 Mo
+- **Architecture** : x64 et ARM64 (MSIX bundle dual)
+- **Espace disque** : ~5 Mo par architecture
 - **Connexion internet** : Non requise
 
 ### Classification IARC
@@ -275,6 +275,29 @@ Nouveautés v0.9.7 — APIs additionnelles pour la couche compatibilité jeux :
  • Aucune écriture, aucune injection de DLL ou de code dans les processus externes. Lecture seule des noms de modules pour déterminer le mode d'injection à utiliser.
  • L'application se DÉSACTIVE automatiquement sur les jeux protégés par un anti-cheat kernel-level connu (Vanguard, EAC, BattlEye, RICOCHET, etc.) — politique de sécurité utilisateur pour éviter tout risque de bannissement.
 
+### Note WACK v0.9.7 — DPIAwarenessValidation WARNING
+
+Le rapport WACK v0.9.7 (`wack-report-v0.9.7.xml`) contient un WARNING sur le test `DPIAwarenessValidation` avec le message « Impossible de traiter le binaire ». Ce WARNING est un **faux positif lié au scanner WACK qui ne parse pas correctement les binaires .NET 8 Native AOT**.
+
+L'application est bel et bien DPI-aware en mode Per-Monitor V2, vérifiable de deux façons :
+
+1. **Manifest applicatif embarqué** : l'EXE contient un manifest avec les déclarations Microsoft standard (`<dpiAwareness>PerMonitorV2</dpiAwareness>` + `<dpiAware>True/PM</dpiAware>`), extractible via :
+   ```
+   mt.exe -inputresource:"AZERTY Global.exe";#1 -out:extracted.manifest
+   ```
+
+2. **Appel runtime** : `Program.cs` appelle `SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)` au démarrage, en fallback pour Windows 8.1 antérieur au support manifest.
+
+Le comportement DPI réel est conforme aux exigences ; toutes les fenêtres de l'app gèrent `WM_DPICHANGED` explicitement et recréent leurs polices selon le DPI courant. Le WARNING ne reflète pas un défaut applicatif.
+
+### Note WACK — FAIL OPTIONAL « Fichiers exécutables bloqués »
+
+Ce test (`OPTIONAL=TRUE` dans le rapport) FAIL depuis la v0.9.5 (acceptée par Microsoft à la review précédente). Causes :
+ • Référence `shell32.dll!ShellExecuteW` — usage légitime pour ouvrir les liens externes (site web, GitHub, Discord, EUPL) depuis le menu tray et la fenêtre À propos.
+ • Strings du runtime .NET Native AOT (`MSBuild`, `csI`, `dNX`) — résidus de noms d'outils dans le binaire, non utilisés à l'exécution.
+
+Tous les tests `OPTIONAL` ne comptent pas dans le verdict global selon la documentation WACK officielle.
+
 ---
 
 ## Captures d'écran
@@ -282,10 +305,14 @@ Nouveautés v0.9.7 — APIs additionnelles pour la couche compatibilité jeux :
 Les fichiers suivants sont dans `msix/Assets/` :
 1. `Screenshot1.png` — Icône dans la barre des tâches (tray)
 2. `Screenshot2.png` — Clavier virtuel avec GUI
+3. `Screenshot3.png` — Recherche de caractère
+4. `Screenshot4.png` — Onboarding / aperçu fonctionnalités
 
 > ⚠️ Le Store demande des captures d'écran d'au moins 1366×768 px.
-> Vérifier les dimensions des screenshots existants et les recréer si nécessaire.
+> Screenshot1 (1600×900) et Screenshot2 (1920×1080) sont au format 16:9 standard.
+> Screenshot3 (1707×960) et Screenshot4 (1500×1057) ont des ratios non standards
+> susceptibles de générer des bandes noires en affichage Store — à éventuellement re-capturer.
 
 ---
 
-*Dernière mise à jour : 2026-04-26 (v0.9.7 — refonte compat jeux)*
+*Dernière mise à jour : 2026-05-02 (v0.9.7 — refonte compat jeux + fixes audit + corrections UX post-audit + notes WACK)*

@@ -5,8 +5,8 @@ namespace AZERTYGlobal;
 
 /// <summary>
 /// Gère le lancement automatique au démarrage de Windows.
-/// Mode portable (unpackaged) : raccourci .lnk dans le dossier Startup.
-/// Mode MSIX (packaged) : API WinRT StartupTask déclarée dans le manifeste.
+/// Mode unpackaged (EXE standalone) : raccourci .lnk dans le dossier Startup.
+/// Mode packaged (MSIX) : API WinRT StartupTask déclarée dans le manifeste.
 /// </summary>
 static class AutoStart
 {
@@ -87,8 +87,8 @@ static class AutoStart
 
     /// <summary>
     /// Active ou désactive le lancement automatique et met à jour la config.
-    /// Mode portable : raccourci .lnk dans le dossier Startup.
-    /// Mode MSIX : API WinRT StartupTask.
+    /// Mode unpackaged : raccourci .lnk dans le dossier Startup.
+    /// Mode packaged (MSIX) : API WinRT StartupTask.
     /// Retourne false si l'opération a échoué.
     /// </summary>
     public static bool Set(bool enabled)
@@ -130,8 +130,8 @@ static class AutoStart
 
     public static string GetFailureMessage() =>
         ConfigManager.IsPackaged
-            ? "Impossible d'enregistrer le lancement automatique.\nVérifiez l'autorisation dans Paramètres > Applications > Démarrage."
-            : "Impossible d'enregistrer le lancement automatique.\nVérifiez les permissions du dossier Démarrage.";
+            ? "Impossible d'enregistrer le lancement automatique.\nVérifie l'autorisation dans Paramètres > Applications > Démarrage."
+            : "Impossible d'enregistrer le lancement automatique.\nVérifie les permissions du dossier Démarrage.";
 
     private static bool Enable()
     {

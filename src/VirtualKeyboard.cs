@@ -1,4 +1,4 @@
-// Clavier virtuel — affiche la disposition AZERTY Global en temps réel
+﻿// Clavier virtuel — affiche la disposition AZERTY Global en temps réel
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
@@ -88,10 +88,11 @@ sealed class VirtualKeyboard : IDisposable
     internal const float KEY_GAP = 0.1f;
     internal const float ROW_GAP = 0.1f;
 
-    // Noms français des touches mortes
+    // Noms français des touches mortes — source de vérité : tester/deadkeys.js DEAD_KEY_NAMES_FR
+    // (testeur web AZERTY Global). Doit rester aligné pour cohérence cross-canal.
     internal static readonly Dictionary<string, string> _deadKeyNamesFr = new()
     {
-        ["dk_circumflex"] = "Accent circonflexe",
+        ["dk_circumflex"] = "Circonflexe",
         ["dk_diaeresis"] = "Tréma",
         ["dk_acute"] = "Accent aigu",
         ["dk_grave"] = "Accent grave",
@@ -100,9 +101,9 @@ sealed class VirtualKeyboard : IDisposable
         ["dk_dot_below"] = "Point souscrit",
         ["dk_double_acute"] = "Double accent aigu",
         ["dk_double_grave"] = "Double accent grave",
-        ["dk_horn"] = "Cornet",
-        ["dk_hook"] = "Crochet en chef",
-        ["dk_caron"] = "Háček",
+        ["dk_horn"] = "Corne",
+        ["dk_hook"] = "Crochet",
+        ["dk_caron"] = "Caron",
         ["dk_ogonek"] = "Ogonek",
         ["dk_breve"] = "Brève",
         ["dk_inverted_breve"] = "Brève inversée",
@@ -112,14 +113,14 @@ sealed class VirtualKeyboard : IDisposable
         ["dk_extended_latin"] = "Latin étendu",
         ["dk_cedilla"] = "Cédille",
         ["dk_comma"] = "Virgule souscrite",
-        ["dk_phonetic"] = "Phonétique",
+        ["dk_phonetic"] = "Alphabet phonétique",
         ["dk_ring_above"] = "Rond en chef",
-        ["dk_greek"] = "Grec",
-        ["dk_cyrillic"] = "Cyrillique",
+        ["dk_greek"] = "Alphabet grec",
+        ["dk_cyrillic"] = "Alphabet cyrillique",
         ["dk_misc_symbols"] = "Symboles divers",
-        ["dk_scientific"] = "Scientifique",
-        ["dk_currencies"] = "Monnaies",
-        ["dk_punctuation"] = "Ponctuation",
+        ["dk_scientific"] = "Symboles scientifiques",
+        ["dk_currencies"] = "Symboles monétaires",
+        ["dk_punctuation"] = "Symboles de ponctuation",
     };
 
     /// <summary>Retourne le nom français d'une touche morte.</summary>
@@ -171,7 +172,7 @@ sealed class VirtualKeyboard : IDisposable
 
         // ── Rangée 3 : QSDF (Verr.Maj + 12 touches) ──
         x = 0;
-        keys.Add(new VisualKey(x, y, 1.75f, KEY_H, 0x3A, "Verr.Maj", true));
+        keys.Add(new VisualKey(x, y, 1.75f, KEY_H, 0x3A, "Verr. Maj.", true));
         x = 1.75f + KEY_GAP;
         string[] row3Labels = { "Q", "S", "D", "F", "G", "H", "J", "K", "L", "M", "ù", "*" };
         uint[] row3Scans = { 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2B };
@@ -578,10 +579,10 @@ sealed class VirtualKeyboard : IDisposable
                 _highlightedLabels.Add("Maj ⇧");
                 break;
             case "Caps":
-                _highlightedLabels.Add("Verr.Maj");
+                _highlightedLabels.Add("Verr. Maj.");
                 break;
             case "Caps+Shift":
-                _highlightedLabels.Add("Verr.Maj");
+                _highlightedLabels.Add("Verr. Maj.");
                 _highlightedLabels.Add("Maj ⇧");
                 break;
             case "AltGr":
@@ -593,12 +594,12 @@ sealed class VirtualKeyboard : IDisposable
                 _highlightedLabels.Add("Maj ⇧");
                 break;
             case "Caps+AltGr":
-                _highlightedLabels.Add("Verr.Maj");
+                _highlightedLabels.Add("Verr. Maj.");
                 _highlightedLabels.Add("AltGr");
                 break;
             case "Caps+Shift+AltGr":
             case "Caps+AltGr+Shift":
-                _highlightedLabels.Add("Verr.Maj");
+                _highlightedLabels.Add("Verr. Maj.");
                 _highlightedLabels.Add("AltGr");
                 _highlightedLabels.Add("Maj ⇧");
                 break;
@@ -665,6 +666,24 @@ sealed class VirtualKeyboard : IDisposable
                 UpdateTooltipRect();
                 Invalidate();
                 return IntPtr.Zero;
+
+            case Win32.WM_DPICHANGED:
+            {
+                // Windows envoie ce message quand la fenetre est deplacee vers un moniteur
+                // de DPI different. lParam pointe vers une RECT* contenant la taille suggeree
+                // pour s'adapter au nouveau DPI. Sans handler explicite, la fenetre garderait
+                // sa taille → rendu flou ou disproportionne sur l'autre moniteur jusqu'au resize
+                // manuel. La logique EnsureFonts() detectera automatiquement la nouvelle taille
+                // au prochain WM_PAINT et recreera les polices a la bonne echelle.
+                if (lParam != IntPtr.Zero)
+                {
+                    var suggested = Marshal.PtrToStructure<Win32.RECT>(lParam);
+                    Win32.MoveWindow(_hWnd, suggested.left, suggested.top,
+                        suggested.right - suggested.left, suggested.bottom - suggested.top, true);
+                }
+                Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
+                return IntPtr.Zero;
+            }
 
             case Win32.WM_MOUSEMOVE:
                 OnMouseMove(lParam);
@@ -886,7 +905,7 @@ sealed class VirtualKeyboard : IDisposable
             bool isHighlighted = hasHighlight && IsKeyHighlighted(vk);
             IntPtr hKeyBrush;
             IntPtr hKeyPen;
-            if (vk.Label == "Verr.Maj" && _capsLockActive && !isHighlighted)
+            if (vk.Label == "Verr. Maj." && _capsLockActive && !isHighlighted)
                 hKeyBrush = hBrushCapsBar;
             else if (isPressed)
                 hKeyBrush = hBrushKeyPressed;
@@ -938,7 +957,7 @@ sealed class VirtualKeyboard : IDisposable
             {
                 // Touche contextuelle : label centré
                 // Texte blanc sur fond coloré (CapsLock, pressé, ou highlight), sinon couleur normale
-                uint ctxTextColor = (vk.Label == "Verr.Maj" && _capsLockActive) || isPressed || isHighlighted ? CLR_CHAR : CLR_CTX_TEXT;
+                uint ctxTextColor = (vk.Label == "Verr. Maj." && _capsLockActive) || isPressed || isHighlighted ? CLR_CHAR : CLR_CTX_TEXT;
                 // Pour Entrée ISO, centrer le label dans la colonne droite (partie commune du L)
                 int ctxLeft = isIsoEnter ? offsetX + (int)((vk.X + (vk.W - 1.25f)) * scale) : kx;
                 var ctxRect = new Win32.RECT { left = ctxLeft, top = ky, right = kx + kw, bottom = ky + kh };
@@ -1069,7 +1088,7 @@ sealed class VirtualKeyboard : IDisposable
                 "AltGr" => _altGrDown,
                 "Ctrl" => _ctrlDown && !_altGrDown, // Ignorer le phantom LCtrl de AltGr
                 "Alt" => _altDown && !_altGrDown,   // Ignorer si AltGr actif
-                "Verr.Maj" => _capsLockActive,
+                "Verr. Maj." => _capsLockActive,
                 _ => false
             };
         }

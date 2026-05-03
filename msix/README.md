@@ -43,17 +43,27 @@ Les fichiers PNG du dossier `Assets/` doivent etre coherents avec la version sou
 
 ### 3. Assembler le package
 
+Prerequis : avoir publie les 2 architectures via :
+
+```powershell
+$env:PATH += ";C:\Program Files (x86)\Microsoft Visual Studio\Installer"
+dotnet publish -c Release -r win-x64
+dotnet publish -c Release -r win-arm64
+```
+
+Puis lancer le pack :
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File "..\scripts\Pack-MSIX.ps1"
 ```
 
 `Pack-MSIX.ps1` :
 
-- publie l'exe courant si besoin vous avez deja lance `dotnet publish`
-- recopie l'exe publie dans `msix\AZERTY Global.exe`
-- cree un dossier de staging temporaire pour eviter d'embarquer un ancien `.msix`
-- produit un package versionne dans `Microsoft Store/`
-- rafraichit aussi `msix\AZERTYGlobal.msix`
+- copie chaque exe publie (x64 + arm64) dans un dossier de staging temporaire
+- ajuste `ProcessorArchitecture` dans `AppxManifest.xml` selon l'arch
+- produit un `.msix` par architecture, puis les groupe dans un `.msixbundle`
+- ecrit le bundle versionne `AZERTYGlobal-<version>.msixbundle` a la racine du dossier `Microsoft Store/`
+- rafraichit aussi `msix\AZERTYGlobal.msixbundle` (bundle stable, archive l'ancien dans `Archives/`)
 
 `MakeAppx.exe` se trouve en general dans :
 
@@ -61,10 +71,18 @@ powershell -ExecutionPolicy Bypass -File "..\scripts\Pack-MSIX.ps1"
 C:\Program Files (x86)\Windows Kits\10\bin\<version>\x64\MakeAppx.exe
 ```
 
-### 4. Tester localement avant soumission
+### 4. Verifier la coherence release
 
 ```powershell
-Add-AppxPackage -Path ".\AZERTYGlobal.msix"
+powershell -ExecutionPolicy Bypass -File "..\scripts\Verify-Release.ps1"
+```
+
+Verifie que la version est alignee dans : `Program.cs`, `.csproj`, `AssemblyInfo.cs`, `AppxManifest.xml`, `Fiche Store.md` (FR + EN), `Publication Microsoft Store.md`, `TO-DO.md`, `Changelog.md`, `.agent/CONTEXT_APP_MICROSOFT_STORE.md`, `.agent/CONTEXT_AZERTY_GLOBAL.md`. Verifie aussi que le SHA-256 de l'exe publish correspond au SHA-256 dans le bundle pour chaque architecture.
+
+### 5. Tester localement avant soumission
+
+```powershell
+Add-AppxPackage -Path ".\AZERTYGlobal.msixbundle"
 ```
 
 Verifier :
@@ -73,29 +91,24 @@ Verifier :
 - l'icone tray apparait
 - les hooks clavier fonctionnent
 - la recherche de caracteres fonctionne
+- la couche compatibilite jeux : auto-disable sur process anti-cheat (cf. `GameRegistry.AntiCheatTerms`), combo native sur process avec framework gaming (cf. `GameRegistry.GameFrameworkDlls`), Alt+code en RDP/VPN
 - l'app fonctionne dans les applications non admin
 - pas de blocage Smart App Control
 
-Avant de poursuivre, exécuter aussi :
+### 6. Validation WACK
 
 ```powershell
-..\scripts\Verify-Release.ps1
+appcert.exe test -appxpackagepath "AZERTYGlobal-<version>.msixbundle" -reportoutputpath "wack-report-v<version>.xml"
 ```
 
-### 5. Validation WACK
+Corriger les problemes signales avant soumission. Les nouvelles APIs v0.9.7 (`PSAPI`, `SetWinEventHook`) sont declaratees dans `Fiche Store.md` (notes de certification).
 
-```powershell
-appcert.exe test -appxpackagepath "AZERTYGlobal.msix" -reportoutputpath "wack-report.xml"
-```
-
-Corriger les problemes signales avant soumission.
-
-### 6. Soumettre au Store
+### 7. Soumettre au Store
 
 1. Ouvrir la soumission dans Partner Center
-2. Uploader le `.msix` ou `.msixupload`
+2. Uploader le `.msixbundle`
 3. Completer la fiche Store, les captures, la privacy policy et la classification
-4. Ajouter une note de certification expliquant l'usage de `WH_KEYBOARD_LL`
+4. Ajouter une note de certification expliquant l'usage de `WH_KEYBOARD_LL` + APIs v0.9.7 (`PSAPI`, `SetWinEventHook`) — voir section "Notes pour l'equipe de certification Microsoft" de `Fiche Store.md`
 5. Soumettre
 
 ## Notes importantes
@@ -107,4 +120,4 @@ Corriger les problemes signales avant soumission.
 
 ---
 
-*Derniere mise a jour : 2026-04-04*
+*Derniere mise a jour : 2026-05-02 (v0.9.7 — bundle dual x64+arm64 + Verify-Release + WACK)*

@@ -20,6 +20,8 @@ public class GameRegistryTests
     [InlineData("RobloxPlayerBeta.exe")]
     [InlineData("GenshinImpact.exe")]
     [InlineData("EscapeFromTarkov.exe")]
+    [InlineData("cs2.exe")]
+    [InlineData("CS2.EXE")]
     public void IsAntiCheatProcess_Level1_Substring_Returns_True(string processName)
     {
         Assert.True(GameRegistry.IsAntiCheatProcess(processName, null));
@@ -67,6 +69,27 @@ public class GameRegistryTests
     {
         // Sans chemin, on ne peut pas confirmer que c'est Tencent ACE
         Assert.False(GameRegistry.IsAntiCheatProcess("ace.exe", null));
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // IsAntiCheatProcess — The Finals (Discovery-d.exe / Discovery-e.exe / Discovery.exe + \Embark\)
+    // ────────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("Discovery-d.exe", null)]      // post-patch 8.0.0 DAC, match exact
+    [InlineData("Discovery-e.exe", null)]      // post-patch 8.0.0 EAC, match exact
+    [InlineData("Discovery.exe", @"C:\Program Files\Embark\TheFinals\Discovery.exe")] // pre-patch 8.0.0 + path Embark
+    public void IsAntiCheatProcess_TheFinals_KnownExe_Returns_True(string proc, string? path)
+    {
+        Assert.True(GameRegistry.IsAntiCheatProcess(proc, path));
+    }
+
+    [Fact]
+    public void IsAntiCheatProcess_DiscoveryExe_OtherPath_Returns_False()
+    {
+        // Discovery.exe sans path Embark → faux positif evite
+        Assert.False(GameRegistry.IsAntiCheatProcess(
+            "Discovery.exe", @"C:\Tools\Discovery\Discovery.exe"));
     }
 
     // ────────────────────────────────────────────────────────────────

@@ -40,17 +40,25 @@ internal static class GameRegistry
         "deltaforce",       // Delta Force — Tencent ACE (kernel)
         "marvel-win64",     // Marvel Rivals — NetEase AC
         "helldivers2",      // Helldivers 2 — nProtect GameGuard
+        "cs2",              // Counter-Strike 2 — VAC + VACnet (Valve laisse passer la plupart des
+                            // outils de remapping mais inclus en precaution sur jeu compe esport)
     };
 
     /// <summary>
     /// Match exact + chemin contenant un fragment (pour les noms ambigus).
     /// `cod.exe` = Call of Duty officiel ; `ace.exe` est ambigu donc on exige
     /// que le chemin contienne `\Tencent\` (ACE = Tencent Anti-Cheat Expert).
+    /// `Discovery-d.exe` / `Discovery-e.exe` = The Finals (Embark Studios) post-patch 8.0.0.
+    /// `Discovery.exe` = The Finals avant patch 8.0.0 OU n'importe quel autre exe ; on exige
+    /// donc le path contient `\Embark\` ou `\TheFinals\`.
     /// </summary>
     public static readonly (string Exact, string? PathContains)[] AntiCheatExactWithPath =
     {
         ("cod.exe", null),
         ("ace.exe", @"\Tencent\"),
+        ("Discovery-d.exe", null),
+        ("Discovery-e.exe", null),
+        ("Discovery.exe", @"\Embark\"),
     };
 
     /// <summary>

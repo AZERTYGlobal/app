@@ -28,10 +28,11 @@ sealed class OnboardingWindow : IDisposable
     private const int IDC_LINK_BETA_BANNER = 2007;
     private const int IDC_LINK_BETA = 2008;
     private const int IDC_LINK_DISCORD = 2010;
+    private const int IDC_BTN_TRY = 2011;       // « Essayer maintenant » — etape 1 uniquement
 
     // Dimensions de base (96 DPI)
     private const int BASE_WIN_W = 560;
-    private const int BASE_WIN_H = 810;
+    private const int BASE_WIN_H = 770;
     private const float ONBOARDING_UI_SCALE = 0.75f;
     private const int BASE_MARGIN = 28;
     private const int BASE_BOTTOM_MARGIN = 52;
@@ -83,6 +84,10 @@ sealed class OnboardingWindow : IDisposable
     private IntPtr _hWnd;
     private int _currentStep;
     private bool _learningModuleDone;
+    // Vrai des qu'on lance le LM une premiere fois. Distincte de _learningModuleDone (qui
+    // n'est mis a true qu'a la complete reussite des 6 exercices). Etat B (essaye non complete)
+    // sert a afficher « Suivant » a cote de « Essayer maintenant » sur l'etape 1.
+    private bool _learningModuleAttempted;
     private LearningModule? _learningModule;
 
     // Références passées par TrayApplication pour le LearningModule
@@ -96,6 +101,7 @@ sealed class OnboardingWindow : IDisposable
     // Contrôles — Navigation
     private IntPtr _hWndBtnNext;
     private IntPtr _hWndBtnPrev;
+    private IntPtr _hWndBtnTry; // visible uniquement etape 1 + !_learningModuleDone
 
     // Contrôles — Étape 1
     private IntPtr _hWndLinkBetaBanner;
@@ -110,6 +116,7 @@ sealed class OnboardingWindow : IDisposable
     // Delegates (prevent GC)
     private readonly Win32.WNDPROC _wndProcDelegate;
     private readonly Win32.SUBCLASSPROC _linkSubclassProc;
+    private readonly Win32.SUBCLASSPROC _buttonArrowSubclassProc;
     private IntPtr _hoveredLink;
 
     // GDI resources
@@ -137,6 +144,7 @@ sealed class OnboardingWindow : IDisposable
     private IntPtr _hFontBold;
     private IntPtr _hFontLink;
     private IntPtr _hFontSmall;
+    private IntPtr _hFontReassure; // mention vie privée étape 1 — plus petite que _hFontSmall pour tenir sur une ligne en 175% DPI
     private IntPtr _hFontButton;
     private IntPtr _hFontBannerBold;
     private IntPtr _hFontStepSummary;
@@ -150,6 +158,7 @@ sealed class OnboardingWindow : IDisposable
     {
         _wndProcDelegate = WndProc;
         _linkSubclassProc = LinkSubclassProc;
+        _buttonArrowSubclassProc = ButtonArrowSubclassProc;
         _hBgBrush = Win32.CreateSolidBrush(CLR_BG);
         _hBannerBgBrush = Win32.CreateSolidBrush(CLR_BANNER_BG);
         _hPanelBrush = Win32.CreateSolidBrush(CLR_PANEL_BG);
@@ -197,6 +206,9 @@ sealed class OnboardingWindow : IDisposable
         _hFontBold = Win32.CreateFontW(-S(17), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontLink = Win32.CreateFontW(-S(16), 0, 0, 0, 400, 0, 1, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontSmall = Win32.CreateFontW(-S(14), 0, 0, 0, 400, 1, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        // Scaling proportionnel calibre sur 17 a 175% (taille validee visuellement).
+        // 17 / 1.75 = 9.71 logique → 10 a 100%, 12 a 125%, 15 a 150%, 17 a 175%, 19 a 200%.
+        _hFontReassure = Win32.CreateFontW(-(int)Math.Round(17.0 * _dpiScale / 1.75), 0, 0, 0, 400, 1, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontButton = Win32.CreateFontW(-S(17), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontBannerBold = Win32.CreateFontW(-S(21), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontStepSummary = Win32.CreateFontW(-S(20), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
@@ -214,6 +226,7 @@ sealed class OnboardingWindow : IDisposable
         Win32.DeleteObject(_hFontBold);
         Win32.DeleteObject(_hFontLink);
         Win32.DeleteObject(_hFontSmall);
+        Win32.DeleteObject(_hFontReassure);
         Win32.DeleteObject(_hFontButton);
         Win32.DeleteObject(_hFontBannerBold);
         Win32.DeleteObject(_hFontStepSummary);
@@ -270,11 +283,9 @@ sealed class OnboardingWindow : IDisposable
             out int linksX, out int linksWidth, out int linkStartY, out int linkRowH, out int linkControlHeight,
             out int checkboxX, out int checkboxWidth, out int checkboxY, out int checkboxSpacing, out int checkboxHeight);
 
-        // Navigation — bouton « Suivant » dimensionné dynamiquement selon son texte courant
-        var nextText = new System.Text.StringBuilder(64);
-        Win32.GetWindowTextW(_hWndBtnNext, nextText, nextText.Capacity);
-        var nextGeom = ComputeNextButtonGeometry(nextText.ToString(), winW, margin);
-        Win32.MoveWindow(_hWndBtnNext, nextGeom.x, bottomY, nextGeom.width, S(BASE_BTN_H), true);
+        // Navigation : btnPrev seulement ici (position fixe a gauche).
+        // btnNext et btnTry sont positionnes dans UpdateStepVisibility selon les 3 etats
+        // possibles a l'etape 1 (jamais essaye / essaye non complete / complete).
         Win32.MoveWindow(_hWndBtnPrev, margin, bottomY, S(BASE_BTN_W_PREV), S(BASE_BTN_H), true);
 
         // Étape 3 — 3 liens (Guide, Bêta, Discord) dans une grille fixe
@@ -380,9 +391,25 @@ sealed class OnboardingWindow : IDisposable
             _hWnd, (IntPtr)IDC_BTN_PREV, hInstance, IntPtr.Zero);
         Win32.SendMessageW(_hWndBtnPrev, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
 
+        // Bouton « Essayer maintenant » — visible uniquement etape 1 tant que les exercices
+        // n'ont pas ete completes une fois. Positionne dans UpdateStepVisibility a gauche du
+        // bouton « Suivant », pour que l'utilisateur puisse choisir : essayer maintenant OU
+        // passer directement a l'etape 2.
+        _hWndBtnTry = Win32.CreateWindowExW(0, "BUTTON", "Essayer maintenant",
+            Win32.WS_CHILD | Win32.WS_TABSTOP,
+            0, bottomY, S(BASE_BTN_W_NEXT_MIN), S(BASE_BTN_H),
+            _hWnd, (IntPtr)IDC_BTN_TRY, hInstance, IntPtr.Zero);
+        Win32.SendMessageW(_hWndBtnTry, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
+
+        // Sous-classer les boutons pour relayer les flèches au WndProc parent (sinon Windows
+        // les intercepte pour la navigation entre boutons et le WM_KEYDOWN principal n'arrive jamais).
+        Win32.SetWindowSubclass(_hWndBtnNext, _buttonArrowSubclassProc, (UIntPtr)20, IntPtr.Zero);
+        Win32.SetWindowSubclass(_hWndBtnPrev, _buttonArrowSubclassProc, (UIntPtr)21, IntPtr.Zero);
+        Win32.SetWindowSubclass(_hWndBtnTry, _buttonArrowSubclassProc, (UIntPtr)22, IntPtr.Zero);
+
         // ══ Étape 1 — Lien bandeau bêta ══
         // Position initiale temporaire — repositionné dynamiquement dans UpdateStepVisibility
-        _hWndLinkBetaBanner = Win32.CreateWindowExW(0, "STATIC", "donnez votre avis",
+        _hWndLinkBetaBanner = Win32.CreateWindowExW(0, "STATIC", "donnez votre avis.",
             Win32.WS_CHILD | Win32.WS_VISIBLE | SS_NOTIFY | Win32.WS_TABSTOP,
             margin, 0, S(160), S(26),
             _hWnd, (IntPtr)IDC_LINK_BETA_BANNER, hInstance, IntPtr.Zero);
@@ -398,7 +425,7 @@ sealed class OnboardingWindow : IDisposable
         Win32.SendMessageW(_hWndLinkGuide, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
         Win32.SetWindowSubclass(_hWndLinkGuide, _linkSubclassProc, (UIntPtr)1, IntPtr.Zero);
 
-        _hWndLinkBeta = Win32.CreateWindowExW(0, "STATIC", "Donner son avis sur la bêta",
+        _hWndLinkBeta = Win32.CreateWindowExW(0, "STATIC", "Donner son avis sur AZERTY Global",
             Win32.WS_CHILD | SS_NOTIFY | Win32.WS_TABSTOP, margin, y, S(280), linkH,
             _hWnd, (IntPtr)IDC_LINK_BETA, hInstance, IntPtr.Zero);
         Win32.SendMessageW(_hWndLinkBeta, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
@@ -410,7 +437,7 @@ sealed class OnboardingWindow : IDisposable
         Win32.SendMessageW(_hWndLinkDiscord, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
         Win32.SetWindowSubclass(_hWndLinkDiscord, _linkSubclassProc, (UIntPtr)5, IntPtr.Zero);
 
-        _hWndChkAutoStart = Win32.CreateWindowExW(0, "BUTTON", "Lancer au démarrage de Windows",
+        _hWndChkAutoStart = Win32.CreateWindowExW(0, "BUTTON", "Lancer au démarrage de Windows (recommandé)",
             Win32.WS_CHILD | BS_AUTOCHECKBOX | Win32.WS_TABSTOP,
             margin, y, S(320), S(26),
             _hWnd, (IntPtr)IDC_CHK_AUTOSTART, hInstance, IntPtr.Zero);
@@ -429,6 +456,13 @@ sealed class OnboardingWindow : IDisposable
     // ═══════════════════════════════════════════════════════════════
     private void UpdateStepVisibility()
     {
+        // Topmost uniquement sur l'etape 1 (presentation des features). Etapes 2 et 3 :
+        // laisser l'utilisateur consulter les ressources mentionnees (guide, Discord, beta)
+        // sans que le wizard ne masque le navigateur. Cf. plan UX 2026-05-02 Q3.
+        IntPtr insertAfter = _currentStep == 0 ? Win32.HWND_TOPMOST : Win32.HWND_NOTOPMOST;
+        Win32.SetWindowPos(_hWnd, insertAfter, 0, 0, 0, 0,
+            Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+
         Win32.ShowWindow(_hWndLinkBetaBanner, _currentStep == 0 ? 1 : 0);
 
         int step3Vis = _currentStep == 2 ? 1 : 0;
@@ -439,16 +473,62 @@ sealed class OnboardingWindow : IDisposable
         Win32.ShowWindow(_hWndChkDontShow, step3Vis);
 
         Win32.ShowWindow(_hWndBtnPrev, _currentStep > 0 ? 1 : 0);
-        string nextText = _currentStep == 2 ? "C'est parti !"
-            : (_currentStep == 0 && !_learningModuleDone ? "Essayer maintenant" : "Suivant");
+
+        // 3 etats sur l'etape 1 :
+        //   A — jamais essaye        : seul « Essayer maintenant » a la position de droite habituelle
+        //   B — essaye, non complete : « Essayer maintenant » (gauche) + « Suivant » (droite)
+        //   C — complete             : seul « Suivant » a la position de droite habituelle
+        // Etapes 2/3 : seul « Suivant » / « C'est parti ! » a la position habituelle.
+        bool isStep1NotAttempted = _currentStep == 0 && !_learningModuleAttempted && !_learningModuleDone; // etat A
+        bool isStep1Attempted    = _currentStep == 0 &&  _learningModuleAttempted && !_learningModuleDone; // etat B
+        // etat C = _currentStep == 0 && _learningModuleDone (ou etapes 2/3) → comportement standard
+
+        string nextText = _currentStep == 2 ? "C'est parti !" : "Suivant";
         Win32.SetWindowTextW(_hWndBtnNext, nextText);
 
-        // Redimensionner le bouton selon le nouveau texte
         int btnWinW = S(BASE_WIN_W);
         int btnMargin = S(BASE_MARGIN);
         int btnBottomY = S(BASE_WIN_H) - S(BASE_BOTTOM_MARGIN);
-        var nextGeom = ComputeNextButtonGeometry(nextText, btnWinW, btnMargin);
-        Win32.MoveWindow(_hWndBtnNext, nextGeom.x, btnBottomY, nextGeom.width, S(BASE_BTN_H), true);
+
+        if (isStep1NotAttempted)
+        {
+            // Etat A : seul « Essayer maintenant », position droite. « Suivant » cache.
+            Win32.ShowWindow(_hWndBtnNext, 0);
+            Win32.ShowWindow(_hWndBtnTry, 1);
+            const string tryText = "Essayer maintenant";
+            IntPtr hdc = Win32.GetDC(_hWnd);
+            int tryTextW;
+            try { tryTextW = MeasureSingleLineWidth(hdc, _hFontButton, tryText); }
+            finally { Win32.ReleaseDC(_hWnd, hdc); }
+            int tryWidth = Math.Max(S(BASE_BTN_W_NEXT_MIN), tryTextW + S(BASE_BTN_TEXT_PAD * 2));
+            int tryX = btnWinW - btnMargin - tryWidth;
+            Win32.MoveWindow(_hWndBtnTry, tryX, btnBottomY, tryWidth, S(BASE_BTN_H), true);
+        }
+        else if (isStep1Attempted)
+        {
+            // Etat B : « Essayer maintenant » a gauche, « Suivant » a droite (gap 12px).
+            Win32.ShowWindow(_hWndBtnNext, 1);
+            Win32.ShowWindow(_hWndBtnTry, 1);
+            var nextGeomB = ComputeNextButtonGeometry(nextText, btnWinW, btnMargin);
+            Win32.MoveWindow(_hWndBtnNext, nextGeomB.x, btnBottomY, nextGeomB.width, S(BASE_BTN_H), true);
+
+            const string tryText = "Essayer maintenant";
+            IntPtr hdc = Win32.GetDC(_hWnd);
+            int tryTextW;
+            try { tryTextW = MeasureSingleLineWidth(hdc, _hFontButton, tryText); }
+            finally { Win32.ReleaseDC(_hWnd, hdc); }
+            int tryWidth = Math.Max(S(BASE_BTN_W_NEXT_MIN), tryTextW + S(BASE_BTN_TEXT_PAD * 2));
+            int tryX = nextGeomB.x - S(12) - tryWidth;
+            Win32.MoveWindow(_hWndBtnTry, tryX, btnBottomY, tryWidth, S(BASE_BTN_H), true);
+        }
+        else
+        {
+            // Etat C ou etapes 2/3 : seul « Suivant »/« C'est parti ! » visible, position droite.
+            Win32.ShowWindow(_hWndBtnTry, 0);
+            Win32.ShowWindow(_hWndBtnNext, 1);
+            var nextGeomC = ComputeNextButtonGeometry(nextText, btnWinW, btnMargin);
+            Win32.MoveWindow(_hWndBtnNext, nextGeomC.x, btnBottomY, nextGeomC.width, S(BASE_BTN_H), true);
+        }
 
         // Repositionner le lien bandeau bêta (étape 1)
         // Le positionnement précis est fait dans PaintStep1 après mesure du texte,
@@ -470,9 +550,11 @@ sealed class OnboardingWindow : IDisposable
     public void Show()
     {
         _currentStep = 0;
-        RefreshAutoStartCheckbox();
-        Win32.SendMessageW(_hWndChkDontShow, BM_SETCHECK,
-            ConfigManager.ShowOnboardingAtStartup ? IntPtr.Zero : (IntPtr)BST_CHECKED, IntPtr.Zero);
+        // Etape 3 : on coche par defaut les 2 checkboxes (autostart + ne plus afficher) —
+        // recommandation par defaut. L'utilisateur peut decocher avant de cliquer Suivant.
+        // L'etat des cases sera persiste dans Close() via ConfigManager + AutoStart.Set.
+        Win32.SendMessageW(_hWndChkAutoStart, BM_SETCHECK, (IntPtr)BST_CHECKED, IntPtr.Zero);
+        Win32.SendMessageW(_hWndChkDontShow, BM_SETCHECK, (IntPtr)BST_CHECKED, IntPtr.Zero);
         UpdateStepVisibility();
         Win32.ShowWindow(_hWnd, 1);
         Win32.SetForegroundWindow(_hWnd);
@@ -482,9 +564,18 @@ sealed class OnboardingWindow : IDisposable
     /// <summary>Remet l'onboarding à zéro (étape 1, exercice non fait) et réautorise son affichage automatique.</summary>
     public void ResetState()
     {
+        // Reset les flags AVANT Close() : le callback OnClosed declenche UpdateStepVisibility,
+        // qui dessinerait sinon brievement l'etat B (essaye non complete, 2 boutons) avant
+        // que le Show suivant repositionne en etat A (1 bouton). Avec les flags reset d'abord,
+        // UpdateStepVisibility passe directement en etat A.
         _currentStep = 0;
         _learningModuleDone = false;
+        _learningModuleAttempted = false;
         ConfigManager.SetShowOnboardingAtStartup(true);
+
+        // Si la fenetre des exercices est ouverte, la fermer proprement.
+        // Close() declenche le callback OnClosed qui Dispose et met _learningModule = null.
+        _learningModule?.Close();
     }
 
     public void Close()
@@ -528,6 +619,7 @@ sealed class OnboardingWindow : IDisposable
                 Win32.MoveWindow(_hWnd, suggested.left, suggested.top,
                     suggested.right - suggested.left, suggested.bottom - suggested.top, true);
                 RepositionControls();
+                UpdateStepVisibility(); // repositionne btnNext + btnTry selon l'etat (3 etats sur etape 1)
                 Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
                 return IntPtr.Zero;
             }
@@ -538,15 +630,16 @@ sealed class OnboardingWindow : IDisposable
                 switch (id)
                 {
                     case IDC_BTN_NEXT:
-                        if (_currentStep == 0 && !_learningModuleDone)
-                        {
-                            // Étape 1 → lancer le mini-module d'apprentissage
-                            // L'utilisateur reste sur l'étape 1 ; le bouton se transformera en
-                            // « Suivant » une fois le module fermé (cf. callback OnClosed dans LaunchLearningModule).
-                            LaunchLearningModule();
-                        }
-                        else if (_currentStep < 2) { _currentStep++; UpdateStepVisibility(); }
+                        // Etape 1 ou 2 : passer a la suivante. Etape 3 : fermer l'onboarding.
+                        // (Le bouton « Essayer maintenant » est un controle distinct IDC_BTN_TRY.)
+                        if (_currentStep < 2) { _currentStep++; UpdateStepVisibility(); }
                         else Close();
+                        break;
+                    case IDC_BTN_TRY:
+                        // Etape 1 uniquement (visible seulement si !_learningModuleDone).
+                        // L'utilisateur reste sur l'etape 1 a la fermeture du module ; les deux
+                        // boutons restent presents tant qu'il n'a pas vraiment complete les exercices.
+                        LaunchLearningModule();
                         break;
                     case IDC_BTN_PREV:
                         if (_currentStep > 0) { _currentStep--; UpdateStepVisibility(); }
@@ -601,12 +694,38 @@ sealed class OnboardingWindow : IDisposable
                 break;
 
             case Win32.WM_KEYDOWN:
-                if (wParam == (IntPtr)0x1B) // VK_ESCAPE
+            {
+                int vk = wParam.ToInt32();
+                if (vk == 0x1B) // VK_ESCAPE
                 {
                     Close();
                     return IntPtr.Zero;
                 }
+                // Navigation par flèches : ↓/→ = bouton principal, ↑/← = bouton Précédent.
+                if (vk == 0x27 || vk == 0x28) // VK_RIGHT, VK_DOWN
+                {
+                    if (_currentStep == 0 && !_learningModuleDone)
+                        LaunchLearningModule();
+                    else if (_currentStep < 2)
+                    {
+                        _currentStep++;
+                        UpdateStepVisibility();
+                    }
+                    else
+                        Close();
+                    return IntPtr.Zero;
+                }
+                if (vk == 0x25 || vk == 0x26) // VK_LEFT, VK_UP
+                {
+                    if (_currentStep > 0)
+                    {
+                        _currentStep--;
+                        UpdateStepVisibility();
+                    }
+                    return IntPtr.Zero;
+                }
                 break;
+            }
 
             case Win32.WM_CLOSE:
                 Close();
@@ -637,25 +756,40 @@ sealed class OnboardingWindow : IDisposable
     private void OpenLink(string url)
     {
         Win32.ShellExecuteW(IntPtr.Zero, "open", url, null, null, 1);
-        Win32.SetWindowPos(_hWnd, (IntPtr)(-2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040);
+        Win32.SetWindowPos(_hWnd, Win32.HWND_NOTOPMOST, 0, 0, 0, 0,
+            Win32.SWP_NOSIZE | Win32.SWP_NOMOVE | Win32.SWP_SHOWWINDOW);
     }
 
     private void LaunchLearningModule()
     {
-        if (Mapper == null || Hook == null || AppLayout == null) return;
+        ConfigManager.LogCrashTraceDebug($"LaunchLearningModule: enter (Mapper={Mapper != null}, Hook={Hook != null}, AppLayout={AppLayout != null}, _learningModule existing={_learningModule != null})");
+        if (Mapper == null || Hook == null || AppLayout == null)
+        {
+            ConfigManager.LogCrashTraceDebug("LaunchLearningModule: early return — null deps");
+            return;
+        }
 
         _learningModule?.Dispose();
+        ConfigManager.LogCrashTraceDebug("LaunchLearningModule: about to create new LearningModule");
         _learningModule = new LearningModule(_hWnd, Mapper, Hook, AppLayout);
-        _learningModule.OnClosed = () =>
+        _learningModuleAttempted = true; // declenche l'apparition du bouton « Suivant » sur l'etape 1
+        UpdateStepVisibility();          // rafraichit la disposition des boutons AVANT le Show du LM
+        Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
+        ConfigManager.LogCrashTraceDebug("LaunchLearningModule: ctor returned, attaching OnClosed");
+        _learningModule.OnClosed = (completed) =>
         {
-            _learningModuleDone = true;
+            // Ne marquer comme "done" que si l'utilisateur a vraiment terminé les 6 exercices
+            // (page « Bravo ! » + bouton « Terminer »). Une fermeture précoce (croix X, bouton
+            // « Quitter les exercices », Esc) laisse le bouton à « Essayer maintenant ».
+            if (completed) _learningModuleDone = true;
             _learningModule?.Dispose();
             _learningModule = null;
-            // Mettre à jour le bouton (« Essayer maintenant » → « Suivant ») et redessiner
             UpdateStepVisibility();
             Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
         };
+        ConfigManager.LogCrashTraceDebug("LaunchLearningModule: about to call Show");
         _learningModule.Show();
+        ConfigManager.LogCrashTraceDebug("LaunchLearningModule: Show returned, exiting");
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -700,6 +834,23 @@ sealed class OnboardingWindow : IDisposable
             case Win32.WM_KILLFOCUS:
                 Win32.InvalidateRect(hWnd, IntPtr.Zero, true);
                 break;
+        }
+        return Win32.DefSubclassProc(hWnd, msg, wParam, lParam);
+    }
+
+    // Sous-classe pour les boutons Next/Prev/Try : relaie les flèches et Esc au WndProc parent.
+    // Sans ce subclass, Windows intercepte les flèches pour la navigation entre boutons
+    // tabulables et le WM_KEYDOWN principal n'est jamais appelé.
+    private IntPtr ButtonArrowSubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, IntPtr dwRefData)
+    {
+        if (msg == Win32.WM_KEYDOWN)
+        {
+            int vk = wParam.ToInt32();
+            if (vk == 0x25 || vk == 0x26 || vk == 0x27 || vk == 0x28 || vk == 0x1B)
+            {
+                Win32.SendMessageW(_hWnd, Win32.WM_KEYDOWN, wParam, lParam);
+                return IntPtr.Zero;
+            }
         }
         return Win32.DefSubclassProc(hWnd, msg, wParam, lParam);
     }
@@ -838,10 +989,10 @@ sealed class OnboardingWindow : IDisposable
         y = headerBottom;
 
         var sepBrush = Win32.CreateSolidBrush(0x00D0D0D0);
-        var sepRect = new Win32.RECT { left = margin, top = y + S(24), right = cw - margin, bottom = y + S(25) };
+        var sepRect = new Win32.RECT { left = margin, top = y + S(12), right = cw - margin, bottom = y + S(13) };
         Win32.FillRect(hdc, ref sepRect, sepBrush);
         Win32.DeleteObject(sepBrush);
-        y += S(26);
+        y += S(14);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -955,7 +1106,7 @@ sealed class OnboardingWindow : IDisposable
         Win32.SetTextColor(hdc, CLR_BANNER_TITLE);
         int line1Y = y + S(9);
         var bannerLine1 = new Win32.RECT { left = bannerTextX, top = line1Y, right = cw - margin - S(8), bottom = line1Y + S(28) };
-        Win32.DrawTextW(hdc, "Version bêta", -1, ref bannerLine1, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+        Win32.DrawTextW(hdc, "Phase de tests", -1, ref bannerLine1, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
 
         // Ligne 2 : "Après quelques jours d'utilisation, " (GDI) + "donnez votre avis" (lien STATIC)
         int line2Y = line1Y + S(28);
@@ -970,7 +1121,7 @@ sealed class OnboardingWindow : IDisposable
         Win32.DrawTextW(hdc, prefix, -1, ref measurePrefix, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX | Win32.DT_CALCRECT);
         Win32.SetWindowPos(_hWndLinkBetaBanner, IntPtr.Zero,
             bannerTextX + measurePrefix.right, line2Y, S(160), S(26),
-            0x0004 | 0x0010); // SWP_NOZORDER | SWP_NOACTIVATE
+            Win32.SWP_NOZORDER | Win32.SWP_NOACTIVATE);
 
         y += bannerH + S(18);
 
@@ -1000,12 +1151,12 @@ sealed class OnboardingWindow : IDisposable
 
         // ── Mention rassurante (vie privée) ──
         y += S(8);
-        Win32.SelectObject(hdc, _hFontSmall);
+        Win32.SelectObject(hdc, _hFontReassure);
         Win32.SetTextColor(hdc, CLR_REASSURE);
         const string reassure = "Cette application améliore votre clavier. Aucune frappe n'est enregistrée ni transmise.";
-        var reassureRect = new Win32.RECT { left = margin, top = y, right = cw - margin, bottom = y + S(40) };
+        var reassureRect = new Win32.RECT { left = margin, top = y, right = cw - margin, bottom = y + S(18) };
         Win32.DrawTextW(hdc, reassure, -1, ref reassureRect,
-            Win32.DT_LEFT | Win32.DT_WORDBREAK | Win32.DT_NOPREFIX);
+            Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
     }
 
     private void DrawFeature(IntPtr hdc, int margin, int cw, ref int y, string number, string title, string description)
@@ -1291,6 +1442,9 @@ sealed class OnboardingWindow : IDisposable
         if (_hWndLinkGuide != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkGuide, _linkSubclassProc, (UIntPtr)1);
         if (_hWndLinkBeta != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkBeta, _linkSubclassProc, (UIntPtr)3);
         if (_hWndLinkDiscord != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkDiscord, _linkSubclassProc, (UIntPtr)5);
+        if (_hWndBtnNext != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndBtnNext, _buttonArrowSubclassProc, (UIntPtr)20);
+        if (_hWndBtnPrev != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndBtnPrev, _buttonArrowSubclassProc, (UIntPtr)21);
+        if (_hWndBtnTry != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndBtnTry, _buttonArrowSubclassProc, (UIntPtr)22);
 
         if (_hWnd != IntPtr.Zero) { Win32.DestroyWindow(_hWnd); _hWnd = IntPtr.Zero; }
         if (_hIcon != IntPtr.Zero) { Win32.DestroyIcon(_hIcon); _hIcon = IntPtr.Zero; }

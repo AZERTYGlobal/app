@@ -211,6 +211,37 @@ static class Win32
     public const uint WM_SYSCOMMAND = 0x0112;
     public const uint WM_GETTEXT = 0x000D;
     public const uint WM_GETTEXTLENGTH = 0x000E;
+    public const uint WM_DRAWITEM = 0x002B;
+    public const uint BS_OWNERDRAW = 0x000B;
+    public const int NULL_BRUSH = 5;  // GetStockObject index
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct BLENDFUNCTION
+    {
+        public byte BlendOp;
+        public byte BlendFlags;
+        public byte SourceConstantAlpha;
+        public byte AlphaFormat;
+    }
+    public const byte AC_SRC_OVER = 0x00;
+
+    [DllImport("msimg32.dll")]
+    public static extern bool AlphaBlend(IntPtr hdcDest, int xDest, int yDest, int wDest, int hDest,
+        IntPtr hdcSrc, int xSrc, int ySrc, int wSrc, int hSrc, BLENDFUNCTION blend);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct DRAWITEMSTRUCT
+    {
+        public uint CtlType;
+        public uint CtlID;
+        public uint itemID;
+        public uint itemAction;
+        public uint itemState;
+        public IntPtr hwndItem;
+        public IntPtr hDC;
+        public RECT rcItem;
+        public IntPtr itemData;
+    }
 
     // ═══════════════════════════════════════════════════════════════
     // Constantes — Styles
@@ -229,6 +260,10 @@ static class Win32
     public const uint WS_EX_TOPMOST = 0x00000008;
     public const uint WS_EX_TOOLWINDOW = 0x00000080;
     public const uint WS_EX_NOACTIVATE = 0x08000000;
+    public const uint WS_EX_LAYERED = 0x00080000;
+    public const uint LWA_ALPHA = 0x00000002;
+    public const int SW_SHOWNOACTIVATE = 4;
+    public const int SM_CXSCREEN = 0;
     public const uint WS_VSCROLL = 0x00200000;
 
     // ═══════════════════════════════════════════════════════════════
@@ -258,6 +293,10 @@ static class Win32
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern ushort RegisterClassExW(ref WNDCLASSEXW lpwcx);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool UnregisterClassW(string lpClassName, IntPtr hInstance);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr CreateWindowExW(uint dwExStyle, string lpClassName, string lpWindowName,
@@ -409,6 +448,9 @@ static class Win32
     [DllImport("user32.dll")]
     public static extern int GetSystemMetrics(int nIndex);
 
+    [DllImport("user32.dll")]
+    public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr LoadCursorW(IntPtr hInstance, IntPtr lpCursorName);
 
@@ -418,6 +460,17 @@ static class Win32
     [DllImport("user32.dll")]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+    // Constantes pour SetWindowPos — hWndInsertAfter
+    public static readonly IntPtr HWND_TOPMOST = (IntPtr)(-1);
+    public static readonly IntPtr HWND_NOTOPMOST = (IntPtr)(-2);
+
+    // Constantes pour SetWindowPos — uFlags
+    public const uint SWP_NOSIZE = 0x0001;
+    public const uint SWP_NOMOVE = 0x0002;
+    public const uint SWP_NOZORDER = 0x0004;
+    public const uint SWP_NOACTIVATE = 0x0010;
+    public const uint SWP_SHOWWINDOW = 0x0040;
+
     [DllImport("user32.dll")]
     public static extern bool TrackMouseEvent(ref TRACKMOUSEEVENT lpEventTrack);
 
@@ -426,6 +479,9 @@ static class Win32
 
     [DllImport("gdi32.dll")]
     public static extern bool Rectangle(IntPtr hdc, int left, int top, int right, int bottom);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool Ellipse(IntPtr hdc, int left, int top, int right, int bottom);
 
     // ═══════════════════════════════════════════════════════════════
     // P/Invoke — Message loop

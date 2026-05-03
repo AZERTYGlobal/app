@@ -29,7 +29,17 @@ static class GdiImageLoader
             Marshal.Copy(bytes, 0, pGlobal, bytes.Length);
             Win32.GlobalUnlock(hGlobal);
 
-            Win32.CreateStreamOnHGlobal(hGlobal, true, out IntPtr pStream);
+            // CreateStreamOnHGlobal avec fDeleteOnRelease=true : si la creation reussit,
+            // hGlobal sera GlobalFree quand pStream est release (Marshal.Release ci-dessous).
+            // Si la creation echoue (rare, OOM extreme), pStream reste a IntPtr.Zero, le
+            // fDeleteOnRelease ne s'applique pas → on doit liberer hGlobal manuellement
+            // pour eviter un leak qui survit jusqu'a la fin du process.
+            int hr = Win32.CreateStreamOnHGlobal(hGlobal, true, out IntPtr pStream);
+            if (hr != 0 || pStream == IntPtr.Zero)
+            {
+                Win32.GlobalFree(hGlobal);
+                return IntPtr.Zero;
+            }
             try
             {
                 return Win32.GdipCreateBitmapFromStream(pStream, out IntPtr image) == 0

@@ -20,16 +20,17 @@ sealed class SettingsWindow : IDisposable
     private const int VK_TAB = 0x09;
     private const int VK_ESCAPE = 0x1B;
     private const uint CLR_KEY_BORDER_FOCUS = 0x000078D4;
-    private const string ShortcutCaptureHint = "Appuyez sur une touche autorisée";
+    private const string ShortcutCaptureHint = "Appuie sur une touche autorisée";
 
     private const int IDC_EDIT_KEYBOARD = 3101;
     private const int IDC_EDIT_SEARCH = 3102;
     private const int IDC_CHK_AUTOSTART = 3103;
     private const int IDC_CHK_NOTIFICATIONS = 3104;
+    private const int IDC_CHK_ONBOARDING = 3105;
     private const int IDC_LINK_RESET = 3107;
 
     private const int BASE_WIN_W = 240;
-    private const int BASE_WIN_H = 272;
+    private const int BASE_WIN_H = 304;
 
     private const uint CLR_BG = 0x00DDDDDD;
     private const uint CLR_TITLE = 0x00201C18;
@@ -73,6 +74,7 @@ sealed class SettingsWindow : IDisposable
         public Win32.RECT PreferencesPanel;
         public Win32.RECT AutoStartRect;
         public Win32.RECT NotificationsRect;
+        public Win32.RECT OnboardingRect;
         // GuideRect et CloseButtonRect retirés — la croix système suffit
     }
 
@@ -81,6 +83,7 @@ sealed class SettingsWindow : IDisposable
     private IntPtr _hWndEditSearch;
     private IntPtr _hWndChkAutoStart;
     private IntPtr _hWndChkNotifications;
+    private IntPtr _hWndChkOnboarding;
     private IntPtr _hWndLinkReset;
     private IntPtr _hWndValidation;
 
@@ -207,6 +210,7 @@ sealed class SettingsWindow : IDisposable
         Win32.SendMessageW(_hWndEditSearch, Win32.WM_SETFONT, _hFontEdit, (IntPtr)1);
         Win32.SendMessageW(_hWndChkAutoStart, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
         Win32.SendMessageW(_hWndChkNotifications, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
+        Win32.SendMessageW(_hWndChkOnboarding, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
         Win32.SendMessageW(_hWndLinkReset, Win32.WM_SETFONT, _hFontLink, (IntPtr)1);
         Win32.SendMessageW(_hWndValidation, Win32.WM_SETFONT, _hFontSmall, (IntPtr)1);
     }
@@ -286,13 +290,19 @@ sealed class SettingsWindow : IDisposable
             _hWnd, (IntPtr)IDC_CHK_AUTOSTART, hInstance, IntPtr.Zero);
         RefreshAutoStartCheckbox();
 
-        _hWndChkNotifications = Win32.CreateWindowExW(0, "BUTTON", "Notifications (activé / désactivé)",
+        _hWndChkNotifications = Win32.CreateWindowExW(0, "BUTTON", "Notifications",
             Win32.WS_CHILD | Win32.WS_VISIBLE | BS_AUTOCHECKBOX | Win32.WS_TABSTOP,
             0, 0, 0, 0,
             _hWnd, (IntPtr)IDC_CHK_NOTIFICATIONS, hInstance, IntPtr.Zero);
         if (ConfigManager.NotificationsEnabled)
             Win32.SendMessageW(_hWndChkNotifications, BM_SETCHECK, (IntPtr)BST_CHECKED, IntPtr.Zero);
 
+        _hWndChkOnboarding = Win32.CreateWindowExW(0, "BUTTON", "Fenêtre de bienvenue au démarrage",
+            Win32.WS_CHILD | Win32.WS_VISIBLE | BS_AUTOCHECKBOX | Win32.WS_TABSTOP,
+            0, 0, 0, 0,
+            _hWnd, (IntPtr)IDC_CHK_ONBOARDING, hInstance, IntPtr.Zero);
+        if (ConfigManager.ShowOnboardingAtStartup)
+            Win32.SendMessageW(_hWndChkOnboarding, BM_SETCHECK, (IntPtr)BST_CHECKED, IntPtr.Zero);
     }
 
     private void ResizeWindow()
@@ -342,7 +352,10 @@ sealed class SettingsWindow : IDisposable
             layout.NotificationsRect.left, layout.NotificationsRect.top,
             layout.NotificationsRect.right - layout.NotificationsRect.left,
             layout.NotificationsRect.bottom - layout.NotificationsRect.top, true);
-
+        Win32.MoveWindow(_hWndChkOnboarding,
+            layout.OnboardingRect.left, layout.OnboardingRect.top,
+            layout.OnboardingRect.right - layout.OnboardingRect.left,
+            layout.OnboardingRect.bottom - layout.OnboardingRect.top, true);
     }
 
     private LayoutInfo GetLayout(int winW, int winH)
@@ -400,8 +413,10 @@ sealed class SettingsWindow : IDisposable
                 contentWidth - panelPadX * 2, checkboxHeight);
             var notificationsRect = Rect(labelX, autoStartRect.bottom + checkboxGap,
                 contentWidth - panelPadX * 2, checkboxHeight);
+            var onboardingRect = Rect(labelX, notificationsRect.bottom + checkboxGap,
+                contentWidth - panelPadX * 2, checkboxHeight);
 
-            int panelBottom = notificationsRect.bottom + S(12);
+            int panelBottom = onboardingRect.bottom + S(12);
             var shortcutsPanel = Rect(margin, shortcutsPanelTop, contentWidth, panelBottom - shortcutsPanelTop);
             var preferencesPanel = Rect(margin, prefsTitleTop, contentWidth, panelBottom - prefsTitleTop);
 
@@ -428,6 +443,7 @@ sealed class SettingsWindow : IDisposable
                 PreferencesPanel = preferencesPanel,
                 AutoStartRect = autoStartRect,
                 NotificationsRect = notificationsRect,
+                OnboardingRect = onboardingRect,
             };
         }
         finally
@@ -454,6 +470,11 @@ sealed class SettingsWindow : IDisposable
         RefreshAutoStartCheckbox();
         Win32.SendMessageW(_hWndChkNotifications, BM_SETCHECK,
             ConfigManager.NotificationsEnabled ? (IntPtr)BST_CHECKED : IntPtr.Zero, IntPtr.Zero);
+        // Re-synchroniser la checkbox onboarding a chaque ouverture : l'utilisateur a pu
+        // modifier l'etat via la case « Ne plus afficher » du wizard depuis la derniere
+        // fermeture des Settings.
+        Win32.SendMessageW(_hWndChkOnboarding, BM_SETCHECK,
+            ConfigManager.ShowOnboardingAtStartup ? (IntPtr)BST_CHECKED : IntPtr.Zero, IntPtr.Zero);
         SetValidationMessage(string.Empty);
         _keyboardValid = true;
         _searchValid = true;
@@ -476,6 +497,9 @@ sealed class SettingsWindow : IDisposable
 
         bool notifications = Win32.SendMessageW(_hWndChkNotifications, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero) == (IntPtr)BST_CHECKED;
         ConfigManager.SetNotifications(notifications);
+
+        bool showOnboarding = Win32.SendMessageW(_hWndChkOnboarding, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero) == (IntPtr)BST_CHECKED;
+        ConfigManager.SetShowOnboardingAtStartup(showOnboarding);
 
         Win32.ShowWindow(_hWnd, 0);
         _visible = false;
@@ -517,6 +541,12 @@ sealed class SettingsWindow : IDisposable
                     case IDC_LINK_RESET:
                         if (code == 0)
                         {
+                            int confirmResult = Win32.MessageBoxW(_hWnd,
+                                "Réinitialiser les raccourcis aux valeurs par défaut\n"
+                                + "(Ctrl+Maj+Q et Ctrl+Maj+W) ?",
+                                "AZERTY Global — Paramètres",
+                                0x4 | 0x20); // MB_YESNO | MB_ICONQUESTION
+                            if (confirmResult != 6) break; // IDYES = 6
                             _keyboardVk = 0x51;
                             _searchVk = 0x57;
                             ConfigManager.ShortcutVirtualKeyboardVk = _keyboardVk;
@@ -557,7 +587,7 @@ sealed class SettingsWindow : IDisposable
             {
                 IntPtr hdcButton = wParam;
                 IntPtr hCtrl = lParam;
-                if (hCtrl == _hWndChkAutoStart || hCtrl == _hWndChkNotifications)
+                if (hCtrl == _hWndChkAutoStart || hCtrl == _hWndChkNotifications || hCtrl == _hWndChkOnboarding)
                 {
                     Win32.SetBkMode(hdcButton, 1);
                     Win32.SetTextColor(hdcButton, CLR_TEXT);

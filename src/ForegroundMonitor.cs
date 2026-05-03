@@ -119,6 +119,25 @@ internal sealed class ForegroundMonitor : IDisposable
             uint pid = 0;
             bool hasFg = _api.TryGetForegroundProcess(out processName, out fullPath, out hkl, out pid);
 
+            // Ignorer les transitions vers les process shell Windows : effets de bord du clic
+            // sur l'icône tray ou de la touche Win (zone de notification = explorer.exe,
+            // recherche Windows = SearchHost.exe, menu Démarrer = StartMenuExperienceHost.exe,
+            // etc.). Sans ça, le sous-menu « Compatibilité » afficherait ces process au lieu
+            // du jeu/app qui était au foreground avant le clic. On conserve l'ancien snapshot
+            // tant qu'on a déjà une valeur précédente. Note : on N'ignore PAS notre propre PID
+            // — quand notre app (LearningModule, Settings, etc.) prend le focus, on veut le
+            // mode Default pour nos propres frappes, sinon un mode NativeCombo hérité d'un jeu
+            // antérieur ferait passer la saisie par combo native (avec dead keys natives qui
+            // consommeraient '~' '^' etc.).
+            bool isTransientShell = hasFg && processName != null && (
+                string.Equals(processName, "explorer.exe", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(processName, "SearchHost.exe", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(processName, "StartMenuExperienceHost.exe", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(processName, "ShellExperienceHost.exe", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(processName, "TextInputHost.exe", StringComparison.OrdinalIgnoreCase));
+            if (isTransientShell && !string.IsNullOrEmpty(_currentProcessName))
+                return;
+
             CompatibilityMode mode = ResolveMode(processName, fullPath, pid, hasFg);
 
             // Snapshot atomique : on met à jour les champs volatiles dans un ordre stable

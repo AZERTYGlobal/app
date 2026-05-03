@@ -28,6 +28,10 @@
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
     <OptimizationPreference>Size</OptimizationPreference>
 
+    <!-- Manifest applicatif embarqué : déclare DPI awareness PerMonitorV2 + supportedOS Win10/11.
+         Fixe le WARNING « DPIAwarenessValidation » du WACK v0.9.7 (test de compatibilité DPI). -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
   </PropertyGroup>
 
   <ItemGroup>

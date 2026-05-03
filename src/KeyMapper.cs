@@ -90,6 +90,52 @@ sealed class KeyMapper
     public void SetForegroundMonitor(ForegroundMonitor? monitor) => _foregroundMonitor = monitor;
 
     /// <summary>
+    /// Force la desactivation du Verr.Maj. si actuellement actif. Utilise par LearningModule
+    /// entre exercices (Recommencer / Suivant) pour reinciter l'utilisateur a appuyer sur
+    /// Verr.Maj. quand le prochain exercice le requiert. No-op si Verr.Maj. deja off.
+    ///
+    /// Implementation : injection VK_CAPITAL down + up avec INJECTED_FLAG → le hook clavier
+    /// IGNORE l'event (sinon, si l'utilisateur tient Ctrl+Shift au moment de l'injection,
+    /// IsToggleShortcut() retournerait true et ToggleRequested desactiverait le remapping
+    /// AZERTY Global complet). Windows met quand meme a jour son etat Caps Lock interne ;
+    /// on synchronise _capsLockState manuellement et on declenche StateChanged pour l'UI.
+    /// </summary>
+    public void RequestCapsLockOff()
+    {
+        // Verifier l'etat reel Windows : si _capsLockState et Caps Lock systeme sont deja
+        // tous deux a OFF, no-op. Sinon, toggler Windows si encore ON et forcer
+        // _capsLockState a false. Resout les desynchros (inject manque, focus change, etc.).
+        bool actualCaps = (_api.GetKeyState(0x14) & 0x0001) != 0;
+        if (!_capsLockState && !actualCaps) return;
+
+        if (actualCaps)
+        {
+            var inputs = new[]
+            {
+                new Win32.INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new Win32.INPUTUNION
+                    {
+                        ki = new Win32.KEYBDINPUT { wVk = (ushort)VK_CAPITAL, dwFlags = 0, dwExtraInfo = KeyboardHook.INJECTED_FLAG }
+                    }
+                },
+                new Win32.INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new Win32.INPUTUNION
+                    {
+                        ki = new Win32.KEYBDINPUT { wVk = (ushort)VK_CAPITAL, dwFlags = KEYEVENTF_KEYUP, dwExtraInfo = KeyboardHook.INJECTED_FLAG }
+                    }
+                }
+            };
+            _api.SendInput(inputs);
+        }
+        _capsLockState = false;
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>
     /// Resynchronise l'état interne avec l'état réel du système.
     /// À appeler quand le remapping est réactivé (l'utilisateur a pu
     /// changer le CapsLock pendant que le hook était désactivé).
@@ -106,6 +152,13 @@ sealed class KeyMapper
             _activeDeadKey = null;
             changed = true;
         }
+
+        // Resynchroniser les modificateurs (Shift, Ctrl, Alt). Cas reproduit en lançant
+        // l'app pendant qu'un jeu tourne en arriere-plan : si Shift/Alt etait tenu au moment
+        // de l'install du hook (genre ZQSD + Maj pour sprinter), le keydown a ete manque
+        // et l'etat interne reste a true alors que la touche est physiquement relachee.
+        // Bug visible : virgule remplacee par un autre caractere dans l'exo 2.
+        CleanupStaleModifiers();
 
         // Vider le buffer de touche morte du layout Windows sous-jacent
         // (l'utilisateur a pu activer une DK système pendant que le remapping était désactivé)
@@ -305,6 +358,20 @@ sealed class KeyMapper
             case VK_LMENU: case VK_RMENU: case VK_MENU:
             case VK_LWIN: case VK_RWIN:
                 return false;
+        }
+
+        // Resynchroniser _capsLockState avec l'etat Caps Lock systeme avant traitement.
+        // Sans cela, une desynchro (RequestCapsLockOff inject ignore par le hook mais
+        // executed par Windows, focus change pendant un toggle, app externe modifiant
+        // Caps Lock) peut faire passer une frappe en majuscule via le pass-through
+        // alors que GetOutput utilise un _capsLockState=false desynchros. Bug observe
+        // en transition entre exos du LearningModule (Verr.Maj. Windows reste ON apres
+        // ex2 mais _capsLockState interne passe a OFF -> J en majuscule au debut ex3).
+        bool actualCaps = (_api.GetKeyState(0x14) & 0x0001) != 0;
+        if (_capsLockState != actualCaps && vkCode != VK_CAPITAL)
+        {
+            _capsLockState = actualCaps;
+            StateChanged?.Invoke();
         }
 
         // Resynchroniser les modificateurs uniquement pour les touches non-modificateur.
@@ -642,12 +709,41 @@ sealed class KeyMapper
         bool needsAlt   = (mods & 4) != 0;
         bool needsAltGr = needsCtrl && needsAlt; // convention Win32 : Ctrl|Alt = AltGr
 
+        // Si la touche native est elle-meme une dead key sur ce layout (cas `^` `¨` `~` ` `
+        // en AZERTY trad), envoyer la combo native ferait entrer Windows en mode DK et le
+        // caractere ne s'afficherait pas immediatement. Fallback Alt+code qui bypass DK.
+        if (IsDeadKeyOnLayout(vk, mods, hkl))
+            return false;
+
         uint scanCode = _api.MapVirtualKeyExW(vk, 0 /*MAPVK_VK_TO_VSC*/, hkl);
         if (scanCode == 0) return false;
 
         BuildVkComboInputs(vk, (ushort)scanCode, needsShift, needsAltGr,
             needsCtrl && !needsAltGr, needsAlt && !needsAltGr, inputs);
         return true;
+    }
+
+    /// <summary>
+    /// Détermine si VK + mods produit une dead key sur le layout natif. ToUnicodeEx renvoie
+    /// -1 pour les dead keys. Cache par (vk, mods, hkl). Utilise flags=1 (no consume) pour
+    /// ne pas perturber le dead-key state du système.
+    /// </summary>
+    private readonly Dictionary<(byte, int, IntPtr), bool> _isDkCache = new();
+    private bool IsDeadKeyOnLayout(byte vk, int mods, IntPtr hkl)
+    {
+        if (hkl == IntPtr.Zero) return false;
+        var key = (vk, mods, hkl);
+        if (_isDkCache.TryGetValue(key, out bool cached)) return cached;
+
+        var state = new byte[256];
+        if ((mods & 1) != 0) state[0x10] = 0x80; // Shift
+        if ((mods & 2) != 0) state[0x11] = 0x80; // Ctrl
+        if ((mods & 4) != 0) state[0x12] = 0x80; // Alt
+        var buf = new System.Text.StringBuilder(8);
+        int r = Win32.ToUnicodeEx(vk, 0, state, buf, buf.Capacity, 0x01, hkl);
+        bool isDk = r < 0;
+        _isDkCache[key] = isDk;
+        return isDk;
     }
 
     /// <summary>
@@ -701,20 +797,20 @@ sealed class KeyMapper
         bool hasAltAlone = _leftAltDown && !hasAltGr;
         bool capsActive = _capsLockState;
 
-        // Toggle CapsLock conditionnel : seulement si la combo en serait affectée
-        // (Shift sur lettre ou rangée numérique). Pour AltGr+chiffre : pas d'effet.
-        bool capsToggleNeeded = capsActive && needsShift && !needsAltGr;
+        // Neutralisation de Caps Lock sans toggle physique. Caps Lock affecte certaines
+        // touches (lettres A-Z, rangée numérique, certaines OEM en AZERTY) mais pas d'autres
+        // (VK_OEM_102 `<>` notamment). On le détecte dynamiquement via ToUnicodeEx pour
+        // chaque (vk, hkl). Si affecté, on inverse needsShift : Caps Lock + Shift s'annulent
+        // pour ces touches — sans toggle physique qui spammerait la notification "Verr.Maj.".
+        // Bugs résolus 2026-05-03 : `,` `.` `:` `!` (lettres en VK), `<` `>` (OEM_102 non affecté).
+        bool capsAffectsThisVk = capsActive && !needsAltGr && DoesCapsLockAffectVk(vk, _foregroundMonitor?.CurrentHkl ?? IntPtr.Zero);
+        bool effectiveNeedsShift = capsAffectsThisVk ? !needsShift : needsShift;
 
         // Préparation : aligner les modifs physiques sur celles requises.
         // MakeVkInput(vk, scan, keyUp) — keyUp=true envoie KEYEVENTF_KEYUP.
         // Si hasX (déjà tenu) et !needsX → on doit RELEASE (keyUp=true).
         // Si !hasX et needsX → on doit PRESS (keyUp=false).
-        if (capsToggleNeeded)
-        {
-            inputs.Add(MakeVkInput(VK_CAPITAL, 0, false));
-            inputs.Add(MakeVkInput(VK_CAPITAL, 0, true));
-        }
-        if (hasShift != needsShift)  inputs.Add(MakeVkInput(VK_LSHIFT, 0, hasShift));
+        if (hasShift != effectiveNeedsShift) inputs.Add(MakeVkInput(VK_LSHIFT, 0, hasShift));
         if (needsAltGr != hasAltGr)  inputs.Add(MakeVkInput(VK_RMENU, 0, hasAltGr));
         if (!needsAltGr)
         {
@@ -733,12 +829,7 @@ sealed class KeyMapper
             if (needsCtrl != hasCtrlAlone) inputs.Add(MakeVkInput(VK_LCONTROL, 0, !hasCtrlAlone));
         }
         if (needsAltGr != hasAltGr)  inputs.Add(MakeVkInput(VK_RMENU, 0, !hasAltGr));
-        if (hasShift != needsShift)  inputs.Add(MakeVkInput(VK_LSHIFT, 0, !hasShift));
-        if (capsToggleNeeded)
-        {
-            inputs.Add(MakeVkInput(VK_CAPITAL, 0, false));
-            inputs.Add(MakeVkInput(VK_CAPITAL, 0, true));
-        }
+        if (hasShift != effectiveNeedsShift) inputs.Add(MakeVkInput(VK_LSHIFT, 0, !hasShift));
     }
 
     /// <summary>
@@ -746,18 +837,25 @@ sealed class KeyMapper
     /// (Alt down + Numpad 0/X/X/X + Alt up → Windows produit le WM_CHAR au release Alt).
     /// Toggle NumLock si OFF, release des modifs physiques tenus, restore symétrique.
     /// Le caractère doit être ≤ 0xFF (Win-1252) pour que Alt+code décimal fonctionne.
+    ///
+    /// Note AltGr simulé (RCtrl+LAlt, courant en RDP/VPN) : les modifs physiques RCtrl
+    /// et LAlt doivent être relâchés malgré IsAltGrDown=true. Sans cela, l'app foreground
+    /// reçoit Ctrl+Alt+0XXX au lieu de Alt+0XXX et interprète comme un raccourci.
+    /// LCtrl est phantom uniquement quand RAlt (AltGr réel) est tenu — ne pas le manipuler
+    /// dans ce cas, le driver le gère.
     /// </summary>
     internal void BuildAltCodeInputs(char c, List<Win32.INPUT> inputs)
     {
         int code = c; // codepoint décimal Win-1252
         bool numLockOn = (_api.GetKeyState((int)Win32.VK_NUMLOCK) & 0x0001) != 0;
 
-        // Snapshot modifs physiques tenus à release temporairement
+        // Snapshot modifs physiques tenus à release temporairement.
+        // hasLCtrl exclut le phantom LCtrl émis par le driver quand RAlt (AltGr réel) est tenu.
         bool hasShift = IsShiftDown;
-        bool hasAltGr = IsAltGrDown;
-        bool hasLCtrl = _leftCtrlDown && !hasAltGr;
-        bool hasRCtrl = _rightCtrlDown && !hasAltGr;
-        bool hasLAlt = _leftAltDown && !hasAltGr;
+        bool hasRAlt  = _rightAltDown;
+        bool hasRCtrl = _rightCtrlDown;
+        bool hasLAlt  = _leftAltDown;
+        bool hasLCtrl = _leftCtrlDown && !_rightAltDown;
 
         // Préparation : NumLock ON, release des modifs en trop
         if (!numLockOn)
@@ -766,10 +864,10 @@ sealed class KeyMapper
             inputs.Add(MakeVkInput(Win32.VK_NUMLOCK, 0, true));
         }
         if (hasShift) inputs.Add(MakeVkInput(VK_LSHIFT, 0, true));
-        if (hasAltGr) inputs.Add(MakeVkInput(VK_RMENU, 0, true));
-        if (hasLCtrl) inputs.Add(MakeVkInput(VK_LCONTROL, 0, true));
+        if (hasRAlt)  inputs.Add(MakeVkInput(VK_RMENU, 0, true));
         if (hasRCtrl) inputs.Add(MakeVkInput(VK_RCONTROL, 0, true));
         if (hasLAlt)  inputs.Add(MakeVkInput(VK_LMENU, 0, true));
+        if (hasLCtrl) inputs.Add(MakeVkInput(VK_LCONTROL, 0, true));
 
         // LAlt down + Numpad 0XXX + LAlt up
         inputs.Add(MakeVkInput(VK_LMENU, 0x38 /*SC_LMENU*/, false));
@@ -780,11 +878,11 @@ sealed class KeyMapper
         AppendNumpadDigit(code % 10, inputs);
         inputs.Add(MakeVkInput(VK_LMENU, 0x38, true));
 
-        // Restauration symétrique des modifs
+        // Restauration symétrique (ordre inverse)
+        if (hasLCtrl) inputs.Add(MakeVkInput(VK_LCONTROL, 0, false));
         if (hasLAlt)  inputs.Add(MakeVkInput(VK_LMENU, 0, false));
         if (hasRCtrl) inputs.Add(MakeVkInput(VK_RCONTROL, 0, false));
-        if (hasLCtrl) inputs.Add(MakeVkInput(VK_LCONTROL, 0, false));
-        if (hasAltGr) inputs.Add(MakeVkInput(VK_RMENU, 0, false));
+        if (hasRAlt)  inputs.Add(MakeVkInput(VK_RMENU, 0, false));
         if (hasShift) inputs.Add(MakeVkInput(VK_LSHIFT, 0, false));
         if (!numLockOn)
         {
@@ -806,6 +904,46 @@ sealed class KeyMapper
         byte vk = (byte)(0x60 + digit); // VK_NUMPAD0 = 0x60
         inputs.Add(MakeVkInput(vk, scan, false));
         inputs.Add(MakeVkInput(vk, scan, true));
+    }
+
+    // Cache de la détection « Caps Lock affecte ce VK ? » par (vk, hkl). Évite des appels
+    // répétés à ToUnicodeEx pour chaque frappe. Invalidé si jamais on switche de HKL.
+    private readonly Dictionary<(byte, IntPtr), bool> _capsAffectsCache = new();
+
+    /// <summary>
+    /// Détermine si Caps Lock change le caractère produit par ce VK sur le layout natif (hkl).
+    /// Pour les lettres A-Z et la rangée numérique en AZERTY → oui. Pour VK_OEM_102 (`<>`),
+    /// VK_OEM_PLUS, etc. → généralement non. Détection dynamique via ToUnicodeEx avec et
+    /// sans Caps Lock simulé (flags=1 pour ne pas consommer le dead-key state).
+    /// </summary>
+    private bool DoesCapsLockAffectVk(byte vk, IntPtr hkl)
+    {
+        if (hkl == IntPtr.Zero) return false;
+        var key = ((byte)vk, hkl);
+        if (_capsAffectsCache.TryGetValue(key, out bool cached)) return cached;
+
+        var stateNoCaps = new byte[256];
+        var stateWithCaps = new byte[256];
+        stateWithCaps[0x14] = 0x01; // VK_CAPITAL toggled
+        var bufN = new System.Text.StringBuilder(8);
+        var bufC = new System.Text.StringBuilder(8);
+
+        int rN = Win32.ToUnicodeEx(vk, 0, stateNoCaps, bufN, bufN.Capacity, 0x01, hkl);
+        int rC = Win32.ToUnicodeEx(vk, 0, stateWithCaps, bufC, bufC.Capacity, 0x01, hkl);
+
+        bool affects;
+        if (rN <= 0 || rC <= 0)
+        {
+            // Dead key (-1), pas de caractère (0) ou invalide : par défaut on considère
+            // « non affecté » (pas d'inversion needsShift) — comportement neutre safe.
+            affects = false;
+        }
+        else
+        {
+            affects = bufN.ToString() != bufC.ToString();
+        }
+        _capsAffectsCache[key] = affects;
+        return affects;
     }
 
     private static Win32.INPUT MakeVkInput(uint vk, ushort scanCode, bool keyUp) => new()

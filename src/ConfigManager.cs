@@ -6,8 +6,8 @@ namespace AZERTYGlobal;
 
 /// <summary>
 /// Lit et écrit les préférences utilisateur dans config.json.
-/// Mode portable (unpackaged) : à côté de l'exécutable.
-/// Mode MSIX (packaged) : dans %LocalAppData%\AZERTY Global\.
+/// Mode unpackaged (EXE standalone) : à côté de l'exécutable.
+/// Mode packaged (MSIX) : dans %LocalAppData%\AZERTY Global\.
 /// </summary>
 static class ConfigManager
 {
@@ -59,6 +59,8 @@ static class ConfigManager
             Directory.CreateDirectory(appDataDir);
 
             // Migration : copier les fichiers depuis l'ancien dossier "AZERTY Global Portable"
+            // (nom historique de la version ZIP autonome, supprimee — on conserve le code de
+            // migration pour les utilisateurs ayant l'ancien dossier sur disque).
             var oldDir = Path.Combine(localAppData, "AZERTY Global Portable");
             if (Directory.Exists(oldDir))
             {
@@ -78,7 +80,7 @@ static class ConfigManager
             return Path.Combine(appDataDir, "config.json");
         }
 
-        // Mode portable (unpackaged) : à côté de l'exe
+        // Mode unpackaged (EXE standalone) : à côté de l'exe
         return Path.Combine(AppContext.BaseDirectory, "config.json");
     }
 
@@ -115,6 +117,24 @@ static class ConfigManager
 
     /// <summary>Marque l'onboarding comme terminé.</summary>
     public static void SetShowOnboardingAtStartup(bool show) => SetBool("showOnboardingAtStartup", show);
+
+    /// <summary>
+    /// Compteur monotone du nombre d'exercices d'apprentissage complétés (0..6).
+    /// Utilisé pour conditionner l'affichage du wizard d'accueil au démarrage : tant que
+    /// les 3 premiers exercices ne sont pas tous complétés, le wizard s'affiche
+    /// (sauf si l'utilisateur a explicitement désactivé l'option dans les Settings).
+    /// </summary>
+    public static int LearningMaxStepCompleted => (int)GetUInt("learningMaxStepCompleted");
+
+    /// <summary>
+    /// Met à jour le compteur de progression. Monotone : ne décroît jamais.
+    /// Pas d'écriture sur disque si pas de progrès.
+    /// </summary>
+    public static void SetLearningMaxStepCompleted(int step)
+    {
+        if (step <= LearningMaxStepCompleted) return;
+        SetUInt("learningMaxStepCompleted", (uint)step);
+    }
 
     /// <summary>Cache de compatibilité du lancement automatique. L'UI doit utiliser AutoStart.IsRegistered.</summary>
     public static bool AutoStartEnabled => GetBool("autoStartEnabled");
@@ -344,6 +364,15 @@ static class ConfigManager
             try { Directory.CreateDirectory(logDir); File.AppendAllText(logFile, logEntry); } catch { }
         }
     }
+
+    /// <summary>
+    /// Trace de debug pour le crash post-Reset (cf. project_crash_lm_post_reset_hypothesis).
+    /// Compilee en no-op en Release via [Conditional("DEBUG")] : aucun appel n'est emis dans
+    /// le binaire AOT distribue. Utilise pour tracer les etapes du ctor de LearningModule
+    /// et de LaunchLearningModule afin de pouvoir diagnostiquer un crash a partir d'error.log.
+    /// </summary>
+    [System.Diagnostics.Conditional("DEBUG")]
+    public static void LogCrashTraceDebug(string detail) => LogCompatCriticalEvent("CrashTrace", detail);
 
     private const long LogRotationSizeBytes = 5 * 1024 * 1024; // 5 Mo
 

@@ -89,6 +89,71 @@ public class KeyMapperBuildInputsTests
         Assert.Equal(0x90, list[13].u.ki.wVk); // restore NumLock up
     }
 
+    [Fact]
+    public void BuildAltCodeInputs_AltGrSimulated_ReleasesRCtrlAndLAlt()
+    {
+        // Scénario : RDP/VPN où AltGr est émulé par RCtrl+LAlt physiquement tenus.
+        // Sans le fix v0.9.7, l'app foreground voyait Ctrl+Alt+0XXX au lieu de Alt+0XXX
+        // (les modifs RCtrl/LAlt étaient masqués par hasAltGr=true dans le snapshot).
+        var mock = new MockWin32Api();
+        mock.KeyStateScript[(int)Win32.VK_NUMLOCK] = 0x0001; // NumLock ON
+        var km = NewMapper(mock);
+        // Simuler RCtrl + LAlt physiques (= AltGr simulé)
+        km.TrackModifiers(0xA3 /*VK_RCONTROL*/, 0, 0, true);
+        km.TrackModifiers(0xA4 /*VK_LMENU*/, 0, 0, true);
+        var list = new List<Win32.INPUT>();
+
+        km.BuildAltCodeInputs('É', list); // codepoint 201
+
+        // Index du premier event Numpad (= début de la séquence Alt+code injectée)
+        int firstNumpadIdx = list.FindIndex(ev => ev.u.ki.wVk >= 0x60 && ev.u.ki.wVk <= 0x69);
+        Assert.True(firstNumpadIdx > 0, "Numpad sequence missing");
+
+        // RCtrl release physique : wVk=0xA3, wScan=0, KEYEVENTF_KEYUP=2, doit être AVANT la séquence Numpad.
+        int rcReleaseIdx = list.FindIndex(ev =>
+            ev.u.ki.wVk == 0xA3 && ev.u.ki.wScan == 0 && (ev.u.ki.dwFlags & 0x0002) != 0);
+        Assert.True(rcReleaseIdx >= 0, "RCtrl release missing in AltGr simulé");
+        Assert.True(rcReleaseIdx < firstNumpadIdx, "RCtrl release must precede Numpad sequence");
+
+        // LAlt release physique : wVk=0xA4 ET wScan=0 (≠ scancode 0x38 du LAlt synthétique d'Alt+code).
+        int laReleaseIdx = list.FindIndex(ev =>
+            ev.u.ki.wVk == 0xA4 && ev.u.ki.wScan == 0 && (ev.u.ki.dwFlags & 0x0002) != 0);
+        Assert.True(laReleaseIdx >= 0, "LAlt release missing in AltGr simulé");
+        Assert.True(laReleaseIdx < firstNumpadIdx, "LAlt release must precede Numpad sequence");
+
+        // Restauration symétrique en fin : RCtrl re-press et LAlt re-press (KEYEVENTF_KEYUP=0, scancode=0)
+        int rcRestoreIdx = list.FindLastIndex(ev =>
+            ev.u.ki.wVk == 0xA3 && ev.u.ki.wScan == 0 && (ev.u.ki.dwFlags & 0x0002) == 0);
+        int laRestoreIdx = list.FindLastIndex(ev =>
+            ev.u.ki.wVk == 0xA4 && ev.u.ki.wScan == 0 && (ev.u.ki.dwFlags & 0x0002) == 0);
+        Assert.True(rcRestoreIdx > firstNumpadIdx, "RCtrl restore must follow Numpad sequence");
+        Assert.True(laRestoreIdx > firstNumpadIdx, "LAlt restore must follow Numpad sequence");
+    }
+
+    [Fact]
+    public void BuildAltCodeInputs_AltGrReal_DoesNotTouchPhantomLCtrl()
+    {
+        // En AltGr réel (RAlt tenu), Windows émet aussi un phantom LCtrl côté driver.
+        // BuildAltCodeInputs doit relâcher RAlt mais NE PAS toucher au LCtrl phantom :
+        // si on l'inclut, la restauration finale émet un LCtrl down qui n'a pas son release.
+        var mock = new MockWin32Api();
+        mock.KeyStateScript[(int)Win32.VK_NUMLOCK] = 0x0001;
+        var km = NewMapper(mock);
+        // Simuler AltGr réel : RAlt physique tenu + phantom LCtrl
+        km.TrackModifiers(0xA5 /*VK_RMENU*/, 0, 0, true);
+        km.TrackModifiers(0xA2 /*VK_LCONTROL*/, 0, 0, true); // phantom
+        var list = new List<Win32.INPUT>();
+
+        km.BuildAltCodeInputs('É', list);
+
+        // RAlt doit être relâché puis restauré
+        Assert.Contains(list, ev => ev.u.ki.wVk == 0xA5 && (ev.u.ki.dwFlags & 0x0002) != 0);
+        Assert.Contains(list, ev => ev.u.ki.wVk == 0xA5 && (ev.u.ki.dwFlags & 0x0002) == 0);
+
+        // LCtrl phantom : aucun event doit toucher VK_LCONTROL (0xA2) avec scancode=0
+        Assert.DoesNotContain(list, ev => ev.u.ki.wVk == 0xA2 && ev.u.ki.wScan == 0);
+    }
+
     // ────────────────────────────────────────────────────────────────
     // BuildVkComboInputs — matrice 4x4 modifs (niveau 2)
     // ────────────────────────────────────────────────────────────────
@@ -156,7 +221,7 @@ public class KeyMapperBuildInputsTests
     }
 
     [Fact]
-    public void BuildVkComboInputs_CapsLockActive_AndShiftCombo_TogglesCapsAround()
+    public void BuildVkComboInputs_CapsLockActive_NoPhysicalToggle()
     {
         var mock = new MockWin32Api();
         // KeyState pour Caps Lock initial dans le ctor
@@ -164,14 +229,13 @@ public class KeyMapperBuildInputsTests
         var km = NewMapper(mock);
         var list = new List<Win32.INPUT>();
 
-        // Combo Shift+lettre avec Caps actif → toggle Caps autour (conditionnel)
+        // Combo Shift+lettre avec Caps actif. Depuis le refactor 2026-05-03, on ne toggle
+        // plus Caps Lock physiquement (qui spammait la notification Windows). On neutralise
+        // l'effet de Caps Lock en inversant needsShift via DoesCapsLockAffectVk.
         km.BuildVkComboInputs(0x41, 0x1E, true, false, false, false, list);
 
-        // Au minimum : Caps off + Shift down + VK + Shift up + Caps on (toggle = 2 events chacun)
-        // Caps off (down+up) + Shift down + VK down + VK up + Shift up + Caps on (down+up)
-        Assert.True(list.Count >= 8, $"Expected at least 8 inputs, got {list.Count}");
-        Assert.Equal(0x14, list[0].u.ki.wVk); // VK_CAPITAL down
-        Assert.Equal(0x14, list[1].u.ki.wVk); // VK_CAPITAL up
+        // Aucun event VK_CAPITAL ne doit être injecté (anti-spam notification "Verr.Maj.")
+        Assert.DoesNotContain(list, ev => ev.u.ki.wVk == 0x14);
     }
 
     [Fact]

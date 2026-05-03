@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <!--
+    Application manifest embarqué dans l'EXE AOT.
+    Objectif : déclarer la DPI awareness en mode déclaratif pour que le WACK la détecte
+    (sinon WARNING « DPIAwarenessValidation » au scanner — cf. wack-report-v0.9.7.xml).
+
+    L'appel runtime SetProcessDpiAwarenessContext((IntPtr)(-4)) dans Program.cs:16 reste
+    en place en fallback Windows 8.1- (ce manifest est ignoré sur OS antérieurs à Win 10).
+  -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <!-- Per-Monitor V2 (Windows 10 1607+) — recommandé Microsoft -->
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+      <!-- Fallback déclaratif pour les versions Windows 10 antérieures à 1607 -->
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">True/PM</dpiAware>
+    </windowsSettings>
+  </application>
+
+  <!--
+    Compatibilité OS déclarée : Windows 10 + Windows 11.
+    Évite que Windows applique un mode de compatibilité automatique qui pourrait
+    désactiver la DPI awareness ou modifier le comportement du hook clavier.
+  -->
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10 -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+      <!-- Windows 11 (mêmes GUIDs supportedOS, Windows 10/11 partagent l'identifiant) -->
+    </application>
+  </compatibility>
+</assembly>

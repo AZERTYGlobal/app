@@ -1,4 +1,4 @@
-// Application system tray — interface utilisateur via Win32 API natif (pas de WinForms)
+﻿// Application system tray — interface utilisateur via Win32 API natif (pas de WinForms)
 using System.Runtime.InteropServices;
 
 namespace AZERTYGlobal;
@@ -26,6 +26,7 @@ sealed class TrayApplication : IDisposable
     private const int IDM_SETTINGS = 1012;
     private const int IDM_SUPPORT = 1013;
     private const int IDM_FEEDBACK = 1014;
+    private const int IDM_ABOUT = 1016;
     private const int IDM_QUIT = 1005;
     // Sous-menu compatibilité jeu (v0.9.7)
     private const int IDM_COMPAT_AUTO = 1020;
@@ -74,6 +75,13 @@ sealed class TrayApplication : IDisposable
     private CharacterSearch? _characterSearch;
     private OnboardingWindow? _onboarding;
     private SettingsWindow? _settings;
+    private AboutWindow? _about;
+    private ToggleNotification? _toggleNotification;
+
+    // Si conflit layout systeme detecte au demarrage, l'onboarding est differe et n'est
+    // affiche qu'apres que l'utilisateur a clique « Garder l'app » dans LayoutConflictWindow.
+    // Sinon, ce flag reste a false et l'onboarding s'affiche normalement.
+    private bool _pendingOnboardingShow;
     private bool _enabled = true;
 
     // Compatibilité jeux (v0.9.7) : couche de détection foreground + désactivation auto anti-cheat
@@ -124,22 +132,33 @@ sealed class TrayApplication : IDisposable
         try
         {
             LoadAndStart();
-            CheckSystemLayout();
+            CheckSystemLayout(); // peut declencher LayoutConflictWindow et set _layoutPopupOpen
 
             // Premier lancement : onboarding. Lancements suivants : notification balloon.
 #if DEBUG
             // En debug, toujours afficher l'onboarding pour faciliter les tests
             bool shouldShowOnboarding = true;
 #else
-            bool shouldShowOnboarding = ConfigManager.ShowOnboardingAtStartup;
+            // Afficher le wizard tant que ex1+ex2+ex3 ne sont pas tous complétés,
+            // SAUF si l'utilisateur a explicitement désactivé l'option dans les Settings
+            // (priorité au choix manuel — cf. Q2 du plan UX 2026-05-02).
+            bool shouldShowOnboarding = ConfigManager.ShowOnboardingAtStartup
+                                     && ConfigManager.LearningMaxStepCompleted < 3;
 #endif
             if (shouldShowOnboarding)
             {
-                _onboarding = new OnboardingWindow();
-                _onboarding.Mapper = _mapper;
-                _onboarding.Hook = _hook;
-                _onboarding.AppLayout = _layout;
-                _onboarding.Show();
+                if (_layoutPopupOpen)
+                {
+                    // Conflit layout systeme detecte : la mini-fenetre LayoutConflictWindow
+                    // doit prendre le dessus. On differe l'affichage de l'onboarding au callback
+                    // « Garder l'app ». Si l'utilisateur choisit « Quitter », l'onboarding ne
+                    // s'affiche jamais (pas de flash visuel inutile).
+                    _pendingOnboardingShow = true;
+                }
+                else
+                {
+                    ShowOnboardingNow();
+                }
             }
             else
             {
@@ -169,6 +188,12 @@ sealed class TrayApplication : IDisposable
         _hook.VirtualKeyboardRequested += () => Win32.PostMessageW(_hWnd, WM_APP_VKBD, IntPtr.Zero, IntPtr.Zero);
         _hook.LayoutMayHaveChanged += OnLayoutMayHaveChanged;
         _hook.Install();
+
+        // Synchroniser l'etat interne (CapsLock + modificateurs Shift/Ctrl/Alt) avec l'etat
+        // reel du systeme. Cas critique : si l'utilisateur lance l'app pendant qu'un jeu
+        // tient des touches (ex. Maj pour sprinter), le keydown initial a ete manque par
+        // le hook. Sans ce sync, les frappes suivantes utilisent un etat modifs faux.
+        _mapper.SyncState();
 
         try
         {
@@ -336,13 +361,18 @@ sealed class TrayApplication : IDisposable
                             _settings.Show();
                             break;
                         case IDM_SITE: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global", null, null, 1); break;
-                        case IDM_FEEDBACK: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/feedback", null, null, 1); break;
+                        case IDM_FEEDBACK: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/beta", null, null, 1); break;
                         case IDM_BUG: OnReportBug(); break;
                         case IDM_SUPPORT: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/soutien", null, null, 1); break;
                         case IDM_ONBOARDING:
                             if (_onboarding == null)
                                 _onboarding = new OnboardingWindow();
                             _onboarding.Show();
+                            break;
+                        case IDM_ABOUT:
+                            if (_about == null)
+                                _about = new AboutWindow();
+                            _about.Show();
                             break;
                         case IDM_COMPAT_AUTO:
                             ApplyCompatibilityOverride(null);
@@ -355,10 +385,17 @@ sealed class TrayApplication : IDisposable
                             break;
 #if DEBUG
                         case IDM_RESET_ONBOARDING:
+                            ConfigManager.LogCrashTraceDebug("IDM_RESET_ONBOARDING: enter");
                             if (_onboarding == null)
+                            {
+                                ConfigManager.LogCrashTraceDebug("IDM_RESET_ONBOARDING: creating new OnboardingWindow (Mapper/Hook/AppLayout NOT injected)");
                                 _onboarding = new OnboardingWindow();
+                            }
+                            ConfigManager.LogCrashTraceDebug($"IDM_RESET_ONBOARDING: Mapper={(_onboarding.Mapper != null)}, Hook={(_onboarding.Hook != null)}, AppLayout={(_onboarding.AppLayout != null)}");
                             _onboarding.ResetState();
+                            ConfigManager.LogCrashTraceDebug("IDM_RESET_ONBOARDING: ResetState done, calling Show");
                             _onboarding.Show();
+                            ConfigManager.LogCrashTraceDebug("IDM_RESET_ONBOARDING: Show returned");
                             break;
 #endif
                         case IDM_QUIT: OnExit(); break;
@@ -442,8 +479,20 @@ sealed class TrayApplication : IDisposable
         }
 
         // Activer la fenêtre pour que le thread soit associé au système d'input
-        // Sans cet appel, le hook LL est installé mais ne reçoit pas d'événements
-        Win32.SetForegroundWindow(_hWnd);
+        // Sans cet appel, le hook LL est installé mais ne reçoit pas d'événements.
+        // ATTENTION : ne PAS voler le focus si une autre fenetre de NOTRE process l'a deja
+        // (OnboardingWindow ou LearningModule en cours d'utilisation par l'utilisateur).
+        // Sinon, les TIMER_REHOOK_2 (3s) et TIMER_REHOOK_3 (8s) volent le focus de la fenetre
+        // Exercices apres 2-3s puis 5s plus tard, declenchant l'overlay « Cliquez pour reprendre ».
+        IntPtr fg = Win32.GetForegroundWindow();
+        bool ourProcessHasFocus = false;
+        if (fg != IntPtr.Zero)
+        {
+            Win32.GetWindowThreadProcessIdOut(fg, out uint fgPid);
+            ourProcessHasFocus = fgPid == (uint)Environment.ProcessId;
+        }
+        if (!ourProcessHasFocus)
+            Win32.SetForegroundWindow(_hWnd);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -494,17 +543,7 @@ sealed class TrayApplication : IDisposable
     {
         IntPtr hkl = Win32.GetKeyboardLayout(0);
         if (!IsLayoutAZERTYGlobal(hkl)) return;
-
-        int result = Win32.MessageBoxW(_hWnd,
-            "La disposition système AZERTY Global est déjà active " +
-            "sur cet ordinateur.\n\n" +
-            "L'application n'est pas nécessaire dans ce cas et pourrait " +
-            "créer des conflits.\n\n" +
-            "Voulez-vous quitter ?",
-            "AZERTY Global", 0x24); // MB_YESNO | MB_ICONQUESTION
-
-        if (result == 6) // IDYES
-            OnExit();
+        ShowLayoutConflictPopup(isAtStartup: true);
     }
 
     /// <summary>
@@ -526,16 +565,57 @@ sealed class TrayApplication : IDisposable
         IntPtr hkl = Win32.GetKeyboardLayout(threadId);
 
         if (!IsLayoutAZERTYGlobal(hkl)) return;
+        ShowLayoutConflictPopup(isAtStartup: false);
+    }
 
-        int result = Win32.MessageBoxW(_hWnd,
-            "La disposition système AZERTY Global vient d'être activée.\n\n" +
-            "L'application n'est pas nécessaire dans ce cas et pourrait " +
-            "créer des conflits.\n\n" +
-            "Voulez-vous quitter ?",
-            "AZERTY Global", 0x24); // MB_YESNO | MB_ICONQUESTION
+    /// <summary>
+    /// Affiche la fenetre custom de conflit avec le layout systeme. Garde-fou pour
+    /// eviter l'empilement de popups si l'utilisateur fait Ctrl+Shift plusieurs fois.
+    /// La fenetre est topmost (WS_EX_TOPMOST) et propose un choix eclaire :
+    /// quitter l'app (cas mot de passe Windows) ou la garder (cas confort post-login).
+    /// </summary>
+    private bool _layoutPopupOpen;
+    private LayoutConflictWindow? _layoutConflictWindow;
+    private void ShowLayoutConflictPopup(bool isAtStartup)
+    {
+        if (_layoutPopupOpen) return; // popup deja affichee — pas de spam
+        _layoutPopupOpen = true;
+        Win32.SetForegroundWindow(_hWnd);
+        _layoutConflictWindow?.Dispose();
+        _layoutConflictWindow = new LayoutConflictWindow(
+            isAtStartup,
+            onQuit: () =>
+            {
+                _layoutPopupOpen = false;
+                OnExit();
+            },
+            onKeep: () =>
+            {
+                _layoutPopupOpen = false;
+                _layoutConflictWindow?.Dispose();
+                _layoutConflictWindow = null;
+                // Si l'onboarding etait differe (conflit detecte au demarrage), l'afficher
+                // maintenant que l'utilisateur a confirme vouloir garder l'app.
+                if (_pendingOnboardingShow)
+                {
+                    _pendingOnboardingShow = false;
+                    ShowOnboardingNow();
+                }
+            });
+        _layoutConflictWindow.Show();
+    }
 
-        if (result == 6) // IDYES
-            OnExit();
+    /// <summary>
+    /// Cree et affiche l'OnboardingWindow avec les references injectees. Factorise pour
+    /// permettre l'affichage immediat (cas standard) ou differe (apres LayoutConflictWindow).
+    /// </summary>
+    private void ShowOnboardingNow()
+    {
+        _onboarding = new OnboardingWindow();
+        _onboarding.Mapper = _mapper;
+        _onboarding.Hook = _hook;
+        _onboarding.AppLayout = _layout;
+        _onboarding.Show();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -556,17 +636,26 @@ sealed class TrayApplication : IDisposable
         Win32.AppendMenuW(hMenu, searchFlags, IDM_SEARCH, $"Rechercher un caractère\tCtrl+Maj+{searchKey}");
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
 
-        // Liens et info
+        // Liens et infos
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_ONBOARDING, "Fenêtre de bienvenue");
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_SITE, "Visiter le site web");
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_FEEDBACK, "Donner son avis sur AZERTY Global");
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_BUG, "Signaler un bug");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_BUG, "Signaler un bug (version + OS)");
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_SUPPORT, "❤️ Soutenir le projet");
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
 
-        // Sous-menu compatibilité du process foreground (si détectable)
+        // Configuration
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_SETTINGS, "⚙️ Paramètres");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_ABOUT, "À propos");
+
+        // Sous-menu compatibilite du process foreground (conditionnel — n'apparait que si fg detecte).
+        // Le separateur qui suit est aussi conditionnel pour eviter un separateur orphelin.
+        // On filtre aussi notre propre process (cas où l'utilisateur clique sur le tray
+        // depuis notre app : le sous-menu "Compatibilité — AZERTY Global.exe" n'a pas de sens).
         var fgProc = _foregroundMonitor?.CurrentProcessName;
-        if (!string.IsNullOrEmpty(fgProc))
+        bool fgIsOwnApp = !string.IsNullOrEmpty(fgProc) &&
+            string.Equals(fgProc, "AZERTY Global.exe", StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(fgProc) && !fgIsOwnApp)
         {
             var hSubMenu = Win32.CreatePopupMenu();
             Win32.AppendMenuW(hSubMenu, MF_STRING, IDM_COMPAT_AUTO, "Auto (détection automatique)");
@@ -584,13 +673,10 @@ sealed class TrayApplication : IDisposable
             Win32.CheckMenuRadioItem(hSubMenu, IDM_COMPAT_AUTO, IDM_COMPAT_FORCE_OFF, activeId, Win32.MF_BYCOMMAND);
 
             Win32.AppendMenuW(hMenu, MF_STRING | MF_POPUP, (nuint)hSubMenu, $"Compatibilité « {fgProc} »");
-            Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
         }
-
-        // Paramètres et fin
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_SETTINGS, "⚙️ Paramètres");
-#if DEBUG
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
+
+#if DEBUG
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_RESET_ONBOARDING, "🛠 [DEBUG] Réinitialiser onboarding");
 #endif
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_QUIT, "Quitter");
@@ -605,11 +691,34 @@ sealed class TrayApplication : IDisposable
     private void OnToggle()
     {
         if (_hook == null) return;
+
+        // Sécurité utilisateur : refuser la réactivation pendant qu'un jeu anti-cheat
+        // est au premier plan. Sans ce garde-fou, OnToggle remettait `_hook.Enabled = true`
+        // dans le process anti-cheat — risque de bannissement de compte de jeu.
+        if (!_enabled && _autoDisabledForAntiCheat)
+        {
+            var procName = _foregroundMonitor?.CurrentProcessName ?? "ce jeu";
+            ShowSecurityBalloon("AZERTY Global",
+                $"AZERTY Global ne peut pas être activé pendant que {procName} tourne : son anti-cheat " +
+                "pourrait considérer cela comme de la triche et bannir ton compte.");
+            ConfigManager.LogCompatCriticalEvent("AntiCheatToggleRefused",
+                $"process={procName}, attempted=enable");
+            return;
+        }
+
         _enabled = !_enabled;
-        _hook.Enabled = _enabled;
+
+        // Hook effectivement actif uniquement si volonté utilisateur ET pas de désactivation
+        // auto anti-cheat en cours. La désactivation auto surclasse toujours le toggle manuel.
+        _hook.Enabled = _enabled && !_autoDisabledForAntiCheat;
+
+        // Si l'utilisateur désactive manuellement pendant qu'on est en désactivation auto,
+        // annuler le « rétablir auto à la sortie du jeu » : il a explicitement choisi off.
+        if (!_enabled && _autoDisabledForAntiCheat)
+            _wasEnabledBeforeAutoDisable = false;
 
         // Resynchroniser l'état quand on réactive (CapsLock a pu changer pendant la désactivation)
-        if (_enabled)
+        if (_enabled && !_autoDisabledForAntiCheat)
             _mapper?.SyncState();
 
         // Fermer le clavier virtuel et la recherche quand on désactive
@@ -623,6 +732,20 @@ sealed class TrayApplication : IDisposable
         UpdateTooltip();
 
         ShowBalloon("AZERTY Global", _enabled ? "est actif." : "est désactivé.");
+
+        // Mini-fenetre TOPMOST en haut a droite (visible en borderless windowed quand
+        // l'icone tray est cachee par le jeu — angle mort accepte en exclusive fullscreen).
+        // Garde anti-cheat : pas d'overlay tiers quand un jeu anti-cheat kernel-level est
+        // au foreground — risque de detection comme cheat / trainer (fausse alerte).
+        bool fgIsAntiCheat = _autoDisabledForAntiCheat ||
+            GameRegistry.IsAntiCheatProcess(
+                _foregroundMonitor?.CurrentProcessName,
+                _foregroundMonitor?.CurrentFullPath);
+        if (!fgIsAntiCheat)
+        {
+            if (_toggleNotification == null) _toggleNotification = new ToggleNotification();
+            _toggleNotification.Show(_enabled);
+        }
     }
 
     private bool _lastCapsState;
@@ -688,6 +811,9 @@ sealed class TrayApplication : IDisposable
         _characterSearch?.Dispose(); _characterSearch = null;
         _onboarding?.Dispose(); _onboarding = null;
         _settings?.Dispose(); _settings = null;
+        _about?.Dispose(); _about = null;
+        _toggleNotification?.Dispose(); _toggleNotification = null;
+        _layoutConflictWindow?.Dispose(); _layoutConflictWindow = null;
         Win32.Shell_NotifyIconW(NIM_DELETE, ref _nid);
         if (_hIcon != IntPtr.Zero)
         {
@@ -726,7 +852,7 @@ sealed class TrayApplication : IDisposable
         {
             parts.Add("Actif");
             if (_mapper?.CapsLockActive == true)
-                parts.Add("Verr.Maj");
+                parts.Add("Verr. Maj.");
             if (_mapper?.ActiveDeadKey != null)
                 parts.Add($"Touche morte : {GetDeadKeySymbol(_mapper.ActiveDeadKey)}");
         }
@@ -758,18 +884,18 @@ sealed class TrayApplication : IDisposable
             "dk_stroke"           => "/",
             "dk_horizontal_stroke"=> "−",
             "dk_macron"           => "¯",
-            "dk_extended_latin"   => "Ł",
+            "dk_extended_latin"   => "ə",
             "dk_cedilla"          => "¸",
             "dk_comma"            => ",",
-            "dk_phonetic"         => "ə",
+            "dk_phonetic"         => "ʁ",
             "dk_ring_above"       => "˚",
-            "dk_greek"            => "α",
-            "dk_cyrillic"         => "Я",
-            "dk_misc_symbols"     => "§",
-            "dk_scientific"       => "∑",
-            "dk_currencies"       => "€",
-            "dk_punctuation"      => "…",
-            _ => "◆"
+            "dk_greek"            => "µ",   // U+00B5 MICRO SIGN (cohérent layout AZ Global)
+            "dk_cyrillic"         => "я",   // minuscule (cohérent web)
+            "dk_misc_symbols"     => "→",
+            "dk_scientific"       => "±",
+            "dk_currencies"       => "¤",
+            "dk_punctuation"      => "§",
+            _ => "◌"  // DOTTED CIRCLE — fallback identique au web
         };
     }
 
@@ -853,7 +979,7 @@ sealed class TrayApplication : IDisposable
         {
             ShowSecurityBalloon("AZERTY Global",
                 $"AZERTY Global ne peut pas être activé sur {proc} : son anti-cheat " +
-                "pourrait considérer cela comme de la triche et bannir votre compte.");
+                "pourrait considérer cela comme de la triche et bannir ton compte.");
             return;
         }
 
