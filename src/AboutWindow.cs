@@ -170,6 +170,7 @@ sealed class AboutWindow : IDisposable
         _hWnd = Win32.CreateWindowExW(0, className, "AZERTY Global — À propos",
             dwStyle, screenX + (screenW - windowW) / 2, screenY + (screenH - windowH) / 2, windowW, windowH,
             IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
+        Win32.EnableDarkTitleBar(_hWnd);
     }
 
     private void SetWindowIcon()
@@ -568,5 +569,8 @@ sealed class AboutWindow : IDisposable
             Win32.GdiplusShutdown(_gdipToken);
             _gdipToken = IntPtr.Zero;
         }
+
+        // UnregisterClassW pour permettre une 2e instance avec un delegate WndProc frais.
+        Win32.UnregisterClassW("AZERTYGlobal_About", Win32.GetModuleHandleW(null));
     }
 }

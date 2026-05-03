@@ -163,6 +163,7 @@ sealed class LayoutConflictWindow : IDisposable
             "AZERTY Global — Disposition système détectée",
             dwStyle, screenX + (screenW - windowW) / 2, screenY + (screenH - windowH) / 2, windowW, windowH,
             IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
+        Win32.EnableDarkTitleBar(_hWnd);
     }
 
     private void CreateControls()

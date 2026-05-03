@@ -582,6 +582,7 @@ sealed class CharacterSearch : IDisposable
             Win32.WS_POPUP | Win32.WS_BORDER | Win32.WS_CLIPCHILDREN,
             x, y, BASE_WIN_W, BASE_WIN_H_MIN,
             IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
+        Win32.EnableDarkTitleBar(_hWnd);
 
         // Récupérer le DPI
         try { _dpiScale = Win32.GetDpiForWindow(_hWnd) / 96.0f; } catch { }
@@ -1341,5 +1342,8 @@ sealed class CharacterSearch : IDisposable
             Win32.DestroyWindow(_hWnd);
             _hWnd = IntPtr.Zero;
         }
+
+        // UnregisterClassW pour permettre une 2e instance avec un delegate WndProc frais.
+        Win32.UnregisterClassW("AZERTYGlobal_CharSearch", Win32.GetModuleHandleW(null));
     }
 }

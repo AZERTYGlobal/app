@@ -806,6 +806,7 @@ sealed class LearningModule : IDisposable
             screenX + (screenW - windowW) / 2, screenY + (screenH - windowH) / 2,
             windowW, windowH,
             IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
+        Win32.EnableDarkTitleBar(_hWnd);
     }
 
     private void ResizeWindow()

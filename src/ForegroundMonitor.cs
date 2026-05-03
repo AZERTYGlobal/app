@@ -38,24 +38,24 @@ internal sealed class ForegroundMonitor : IDisposable
     private Win32.WinEventDelegate? _winEventDelegate;
     private IntPtr _winEventHook = IntPtr.Zero;
 
-    // Champs partagés entre threads — volatile pour les lectures depuis le keyboard hook thread.
-    // Note : les écritures se font depuis le thread tray (callback WinEventHook ou Recompute manuel).
-    private string? _currentProcessName;
-    private string? _currentFullPath;
-    private IntPtr _currentHkl;
-    private volatile int _currentModeRaw; // CompatibilityMode encodé en int pour atomicité
+    // Snapshot immuable atomique pour cohérence cross-thread. Les 4 champs (processName,
+    // fullPath, hkl, mode) sont mis à jour en une seule écriture de référence (atomique CLR
+    // pour les types ref). Évite que le hook thread lise des combinaisons mixtes (ex. nouveau
+    // processName / ancien hkl) pendant que le tray thread écrit séquentiellement.
+    private sealed record class Snapshot(string? ProcessName, string? FullPath, IntPtr Hkl, CompatibilityMode Mode);
+    private Snapshot? _snapshot;
 
     /// <summary>Nom court du process foreground (ex: "Minecraft.Windows.exe"). Null si pas de fenêtre foreground.</summary>
-    public string? CurrentProcessName => _currentProcessName;
+    public string? CurrentProcessName => _snapshot?.ProcessName;
 
     /// <summary>Chemin complet du process foreground.</summary>
-    public string? CurrentFullPath => _currentFullPath;
+    public string? CurrentFullPath => _snapshot?.FullPath;
 
     /// <summary>HKL du layout natif du thread foreground.</summary>
-    public IntPtr CurrentHkl => _currentHkl;
+    public IntPtr CurrentHkl => _snapshot?.Hkl ?? IntPtr.Zero;
 
     /// <summary>Mode de compatibilité résolu pour le process foreground actuel.</summary>
-    public CompatibilityMode CurrentMode => (CompatibilityMode)_currentModeRaw;
+    public CompatibilityMode CurrentMode => _snapshot?.Mode ?? CompatibilityMode.Default;
 
     /// <summary>Indique si le hook WinEvent a pu être installé. Si false, mode dégradé permanent (Default).</summary>
     public bool IsHookInstalled => _winEventHook != IntPtr.Zero;
@@ -135,26 +135,23 @@ internal sealed class ForegroundMonitor : IDisposable
                 string.Equals(processName, "StartMenuExperienceHost.exe", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(processName, "ShellExperienceHost.exe", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(processName, "TextInputHost.exe", StringComparison.OrdinalIgnoreCase));
-            if (isTransientShell && !string.IsNullOrEmpty(_currentProcessName))
+            if (isTransientShell && _snapshot != null && !string.IsNullOrEmpty(_snapshot.ProcessName))
                 return;
 
             CompatibilityMode mode = ResolveMode(processName, fullPath, pid, hasFg);
 
-            // Snapshot atomique : on met à jour les champs volatiles dans un ordre stable
-            _currentProcessName = processName;
-            _currentFullPath = fullPath;
-            _currentHkl = hkl;
-            int oldMode = _currentModeRaw;
-            int newMode = (int)mode;
-            _currentModeRaw = newMode;
+            // Snapshot atomique : une seule écriture de référence (atomique CLR sur ref types).
+            var oldSnapshot = _snapshot;
+            CompatibilityMode oldMode = oldSnapshot?.Mode ?? CompatibilityMode.Default;
+            _snapshot = new Snapshot(processName, fullPath, hkl, mode);
 
-            if (oldMode != newMode && ConfigManager.CompatibilityDebugLog)
+            if (oldMode != mode && ConfigManager.CompatibilityDebugLog)
             {
                 ConfigManager.LogCompatEvent("CompatMode",
-                    $"{(CompatibilityMode)oldMode} → {mode} (process={processName ?? "<none>"})");
+                    $"{oldMode} → {mode} (process={processName ?? "<none>"})");
             }
 
-            if (oldMode != newMode || (oldMode == newMode && processName != null))
+            if (oldMode != mode || (oldMode == mode && processName != null))
             {
                 // Toujours notifier sur changement effectif de process pour permettre à
                 // TrayApplication de mettre à jour l'état UI (override changes, etc.)

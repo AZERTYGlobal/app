@@ -335,6 +335,7 @@ sealed class OnboardingWindow : IDisposable
         _hWnd = Win32.CreateWindowExW(dwExStyle, className, "AZERTY Global",
             dwStyle, screenX + (screenW - windowW) / 2, screenY + (screenH - windowH) / 2, windowW, windowH,
             IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
+        Win32.EnableDarkTitleBar(_hWnd);
 
         CreateControls();
         SetWindowIcon();
@@ -1455,5 +1456,8 @@ sealed class OnboardingWindow : IDisposable
         Win32.DeleteObject(_hBgBrush);
         Win32.DeleteObject(_hBannerBgBrush);
         Win32.DeleteObject(_hPanelBrush);
+
+        // UnregisterClassW pour permettre une 2e instance avec un delegate WndProc frais.
+        Win32.UnregisterClassW("AZERTYGlobal_Onboarding", Win32.GetModuleHandleW(null));
     }
 }

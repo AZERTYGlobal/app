@@ -451,6 +451,32 @@ static class Win32
     [DllImport("user32.dll")]
     public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
 
+    // Multi-monitor support — ToggleNotification utilise MonitorFromWindow pour s'afficher
+    // sur le moniteur du jeu en foreground, pas seulement sur le primary.
+    [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    public const uint MONITOR_DEFAULTTOPRIMARY = 1;
+    public const uint MONITOR_DEFAULTTONEAREST = 2;
+
+    // DwmSetWindowAttribute — utilisé pour activer le dark mode des barres de titre sur Win11.
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, uint dwAttribute, ref int pvAttribute, uint cbAttribute);
+
+    public const uint DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+    /// <summary>
+    /// Active la barre de titre sombre sur Windows 11 (no-op sur Win10 1809-, fail-safe).
+    /// À appeler juste après CreateWindowExW pour chaque fenêtre custom.
+    /// </summary>
+    public static void EnableDarkTitleBar(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        int useDarkMode = 1;
+        try { DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDarkMode, sizeof(int)); }
+        catch { /* Win10 1809- ou DWMWA non supporté — silent fallback */ }
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr LoadCursorW(IntPtr hInstance, IntPtr lpCursorName);
 

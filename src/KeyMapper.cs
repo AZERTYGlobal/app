@@ -131,8 +131,11 @@ sealed class KeyMapper
             };
             _api.SendInput(inputs);
         }
+        bool wasOn = _capsLockState;
         _capsLockState = false;
-        StateChanged?.Invoke();
+        // Notifier seulement si l'etat logique interne a effectivement change. Evite un repaint
+        // UI inutile dans le cas de desync (Windows ON / interne deja OFF).
+        if (wasOn) StateChanged?.Invoke();
     }
 
     /// <summary>
@@ -719,7 +722,7 @@ sealed class KeyMapper
         if (scanCode == 0) return false;
 
         BuildVkComboInputs(vk, (ushort)scanCode, needsShift, needsAltGr,
-            needsCtrl && !needsAltGr, needsAlt && !needsAltGr, inputs);
+            needsCtrl && !needsAltGr, needsAlt && !needsAltGr, hkl, inputs);
         return true;
     }
 
@@ -728,6 +731,9 @@ sealed class KeyMapper
     /// -1 pour les dead keys. Cache par (vk, mods, hkl). Utilise flags=1 (no consume) pour
     /// ne pas perturber le dead-key state du système.
     /// </summary>
+    // Thread affinity: UI thread uniquement (LL hook callback exécute sur le thread qui a
+    // appelé SetWindowsHookEx, soit notre main thread). Ne pas accéder depuis un timer worker
+    // ou une async task — Dictionary<> n'est pas thread-safe.
     private readonly Dictionary<(byte, int, IntPtr), bool> _isDkCache = new();
     private bool IsDeadKeyOnLayout(byte vk, int mods, IntPtr hkl)
     {
@@ -789,7 +795,7 @@ sealed class KeyMapper
     /// uniquement si l'état physique diffère), toggle CapsLock conditionnellement.
     /// </summary>
     internal void BuildVkComboInputs(byte vk, ushort scanCode, bool needsShift, bool needsAltGr,
-        bool needsCtrl, bool needsAlt, List<Win32.INPUT> inputs)
+        bool needsCtrl, bool needsAlt, IntPtr hkl, List<Win32.INPUT> inputs)
     {
         bool hasShift = IsShiftDown;
         bool hasAltGr = IsAltGrDown;
@@ -803,7 +809,9 @@ sealed class KeyMapper
         // chaque (vk, hkl). Si affecté, on inverse needsShift : Caps Lock + Shift s'annulent
         // pour ces touches — sans toggle physique qui spammerait la notification "Verr.Maj.".
         // Bugs résolus 2026-05-03 : `,` `.` `:` `!` (lettres en VK), `<` `>` (OEM_102 non affecté).
-        bool capsAffectsThisVk = capsActive && !needsAltGr && DoesCapsLockAffectVk(vk, _foregroundMonitor?.CurrentHkl ?? IntPtr.Zero);
+        // Le hkl est passe en parametre depuis BuildNativeComboInputs (snapshot atomique fait
+        // dans EmitText) pour garantir la coherence avec le VK/scancode resolus en amont.
+        bool capsAffectsThisVk = capsActive && !needsAltGr && DoesCapsLockAffectVk(vk, hkl);
         bool effectiveNeedsShift = capsAffectsThisVk ? !needsShift : needsShift;
 
         // Préparation : aligner les modifs physiques sur celles requises.
@@ -908,6 +916,9 @@ sealed class KeyMapper
 
     // Cache de la détection « Caps Lock affecte ce VK ? » par (vk, hkl). Évite des appels
     // répétés à ToUnicodeEx pour chaque frappe. Invalidé si jamais on switche de HKL.
+    // Thread affinity: UI thread uniquement (LL hook callback exécute sur le thread qui a
+    // appelé SetWindowsHookEx, soit notre main thread). Ne pas accéder depuis un timer worker
+    // ou une async task — Dictionary<> n'est pas thread-safe.
     private readonly Dictionary<(byte, IntPtr), bool> _capsAffectsCache = new();
 
     /// <summary>

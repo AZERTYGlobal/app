@@ -1,4 +1,4 @@
-using AZERTYGlobal;
+﻿using AZERTYGlobal;
 using Xunit;
 
 namespace AZERTYGlobal.Tests;
@@ -166,7 +166,7 @@ public class KeyMapperBuildInputsTests
         var list = new List<Win32.INPUT>();
 
         // Combo simple : VK = 0x41 (A), aucun modif requis, aucun modif tenu
-        km.BuildVkComboInputs(0x41, 0x1E, false, false, false, false, list);
+        km.BuildVkComboInputs(0x41, 0x1E, false, false, false, false, IntPtr.Zero, list);
 
         Assert.Equal(2, list.Count); // VK down + up
         Assert.Equal(0x41, list[0].u.ki.wVk);
@@ -180,7 +180,7 @@ public class KeyMapperBuildInputsTests
         var list = new List<Win32.INPUT>();
 
         // Combo AltGr+0 → @ : on n'a pas AltGr tenu, on doit l'ajouter en synthétique
-        km.BuildVkComboInputs(0x30, 0x0B, false, true /*needsAltGr*/, false, false, list);
+        km.BuildVkComboInputs(0x30, 0x0B, false, true /*needsAltGr*/, false, false, IntPtr.Zero, list);
 
         Assert.Equal(4, list.Count); // RMenu down + VK down + VK up + RMenu up
         Assert.Equal(0xA5, list[0].u.ki.wVk); // VK_RMENU down
@@ -197,7 +197,7 @@ public class KeyMapperBuildInputsTests
         km.TrackModifiers(0xA0 /*VK_LSHIFT*/, 0x2A, 0, true);
         var list = new List<Win32.INPUT>();
 
-        km.BuildVkComboInputs(0x41, 0x1E, true /*needsShift*/, false, false, false, list);
+        km.BuildVkComboInputs(0x41, 0x1E, true /*needsShift*/, false, false, false, IntPtr.Zero, list);
 
         // Shift déjà tenu physiquement → pas de keydown synthétique additionnel
         Assert.Equal(2, list.Count); // juste VK down + up
@@ -211,7 +211,7 @@ public class KeyMapperBuildInputsTests
         km.TrackModifiers(0xA0, 0x2A, 0, true); // Shift physique tenu
         var list = new List<Win32.INPUT>();
 
-        km.BuildVkComboInputs(0x30, 0x0B, false /*needsNoShift*/, false, false, false, list);
+        km.BuildVkComboInputs(0x30, 0x0B, false /*needsNoShift*/, false, false, false, IntPtr.Zero, list);
 
         // 4 events : Shift up + VK down + VK up + Shift down (restore)
         Assert.Equal(4, list.Count);
@@ -232,7 +232,7 @@ public class KeyMapperBuildInputsTests
         // Combo Shift+lettre avec Caps actif. Depuis le refactor 2026-05-03, on ne toggle
         // plus Caps Lock physiquement (qui spammait la notification Windows). On neutralise
         // l'effet de Caps Lock en inversant needsShift via DoesCapsLockAffectVk.
-        km.BuildVkComboInputs(0x41, 0x1E, true, false, false, false, list);
+        km.BuildVkComboInputs(0x41, 0x1E, true, false, false, false, IntPtr.Zero, list);
 
         // Aucun event VK_CAPITAL ne doit être injecté (anti-spam notification "Verr.Maj.")
         Assert.DoesNotContain(list, ev => ev.u.ki.wVk == 0x14);
@@ -247,7 +247,7 @@ public class KeyMapperBuildInputsTests
         var list = new List<Win32.INPUT>();
 
         // Combo AltGr+0 (pas affectée par Caps) → pas de toggle Caps
-        km.BuildVkComboInputs(0x30, 0x0B, false, true, false, false, list);
+        km.BuildVkComboInputs(0x30, 0x0B, false, true, false, false, IntPtr.Zero, list);
 
         // Aucune entrée ne doit toucher VK_CAPITAL (0x14)
         Assert.DoesNotContain(list, ev => ev.u.ki.wVk == 0x14);

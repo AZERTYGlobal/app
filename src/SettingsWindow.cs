@@ -251,6 +251,7 @@ sealed class SettingsWindow : IDisposable
         _hWnd = Win32.CreateWindowExW(0, className, "AZERTY Global — Paramètres",
             dwStyle, screenX + (screenW - windowW) / 2, screenY + (screenH - windowH) / 2, windowW, windowH,
             IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
+        Win32.EnableDarkTitleBar(_hWnd);
     }
 
     private void CreateControls()
@@ -1100,5 +1101,8 @@ sealed class SettingsWindow : IDisposable
             Win32.GdiplusShutdown(_gdipToken);
             _gdipToken = IntPtr.Zero;
         }
+
+        // UnregisterClassW pour permettre une 2e instance avec un delegate WndProc frais.
+        Win32.UnregisterClassW("AZERTYGlobal_Settings", Win32.GetModuleHandleW(null));
     }
 }

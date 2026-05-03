@@ -76,11 +76,28 @@ internal sealed class ToggleNotification : IDisposable
     {
         _currentActivated = activated;
 
-        // Position en haut a droite de l'ecran principal, 16px de marge
-        int screenW = Win32.GetSystemMetrics(Win32.SM_CXSCREEN);
+        // Position en haut a droite du moniteur du foreground (jeu) — pas seulement le primary.
+        // Sans ca, en multi-ecran avec un jeu sur le secondaire, la fenetre TopMost s'afficherait
+        // sur le primary et serait invisible.
+        IntPtr fgWnd = Win32.GetForegroundWindow();
+        IntPtr hMonitor = fgWnd != IntPtr.Zero
+            ? Win32.MonitorFromWindow(fgWnd, Win32.MONITOR_DEFAULTTONEAREST)
+            : Win32.MonitorFromWindow(_hWnd, Win32.MONITOR_DEFAULTTOPRIMARY);
+        var mi = new Win32.MONITORINFO { cbSize = Marshal.SizeOf<Win32.MONITORINFO>() };
+        int x, y;
         int margin = S(16);
-        int x = screenW - S(BASE_W) - margin;
-        int y = margin;
+        if (hMonitor != IntPtr.Zero && Win32.GetMonitorInfo(hMonitor, ref mi))
+        {
+            x = mi.rcWork.right - S(BASE_W) - margin;
+            y = mi.rcWork.top + margin;
+        }
+        else
+        {
+            // Fallback sur primary si MonitorFromWindow / GetMonitorInfo echoue
+            int screenW = Win32.GetSystemMetrics(Win32.SM_CXSCREEN);
+            x = screenW - S(BASE_W) - margin;
+            y = margin;
+        }
 
         Win32.MoveWindow(_hWnd, x, y, S(BASE_W), S(BASE_H), true);
         Win32.ShowWindow(_hWnd, Win32.SW_SHOWNOACTIVATE);
@@ -108,6 +125,23 @@ internal sealed class ToggleNotification : IDisposable
                         Win32.ShowWindow(hWnd, 0);
                     }
                     return IntPtr.Zero;
+
+                case Win32.WM_DPICHANGED:
+                {
+                    // Le DPI peut changer si le moniteur change (multi-écran avec scales
+                    // différents) ou si l'utilisateur modifie l'échelle système.
+                    int newDpi = (wParam.ToInt32() >> 16) & 0xFFFF;
+                    if (newDpi > 0)
+                    {
+                        _dpiScale = newDpi / 96f;
+                        if (_hFontText != IntPtr.Zero) Win32.DeleteObject(_hFontText);
+                        CreateFonts();
+                    }
+                    var suggested = Marshal.PtrToStructure<Win32.RECT>(lParam);
+                    Win32.MoveWindow(hWnd, suggested.left, suggested.top,
+                        suggested.right - suggested.left, suggested.bottom - suggested.top, true);
+                    return IntPtr.Zero;
+                }
 
                 case Win32.WM_ERASEBKGND:
                     return (IntPtr)1;
@@ -166,5 +200,7 @@ internal sealed class ToggleNotification : IDisposable
         {
             Win32.DeleteObject(_hBgBrush);
         }
+        // UnregisterClassW pour permettre une 2e instance avec un delegate WndProc frais.
+        Win32.UnregisterClassW("AZERTYGlobal_ToggleNotif", Win32.GetModuleHandleW(null));
     }
 }
