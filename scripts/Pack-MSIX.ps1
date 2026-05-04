@@ -53,7 +53,9 @@ if ([string]::IsNullOrWhiteSpace($version)) {
     throw "Version introuvable dans $csprojPath"
 }
 
-$storeVersion = "$version.0"
+# Le manifest MSIX exige exactement 4 segments (Major.Minor.Build.Revision).
+# Si le csproj declare 3 segments, on complete avec .0. Si 4 deja presents, on les utilise tels quels.
+$storeVersion = if (($version -split '\.').Count -eq 4) { $version } else { "$version.0" }
 $versionedBundlePath = Join-Path $projectRoot ("AZERTYGlobal-{0}.msixbundle" -f $storeVersion)
 
 # Vérifier que les exécutables publiés existent
@@ -121,7 +123,9 @@ if (Test-Path $versionedBundlePath) {
     Remove-Item -LiteralPath $versionedBundlePath -Force
 }
 
-& $makeAppx bundle /d $bundleStagingDir /p $versionedBundlePath
+# /bv force la version du bundle ; sans ce flag, MakeAppx genere YYYY.MMdd.HHmm.0
+# (timestamp du pack), ce qui ecrase la version manifest dans Partner Center.
+& $makeAppx bundle /d $bundleStagingDir /p $versionedBundlePath /bv $storeVersion
 if ($LASTEXITCODE -ne 0) { throw "MakeAppx bundle a échoué" }
 
 # Archiver l'ancien bundle stable

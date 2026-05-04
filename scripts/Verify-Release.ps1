@@ -109,7 +109,9 @@ if ([string]::IsNullOrWhiteSpace($version)) {
     throw "Version introuvable dans $csprojPath"
 }
 
-$storeVersion = "$version.0"
+# Le manifest MSIX exige exactement 4 segments (Major.Minor.Build.Revision).
+# Si le csproj declare 3 segments, on complete avec .0. Si 4 deja presents, on les utilise tels quels.
+$storeVersion = if (($version -split '\.').Count -eq 4) { $version } else { "$version.0" }
 $programText = Get-FileText $programPath
 $assemblyInfoText = Get-FileText $assemblyInfoPath
 [xml]$manifest = Get-FileText $manifestPath

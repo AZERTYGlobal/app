@@ -27,6 +27,7 @@ sealed class TrayApplication : IDisposable
     private const int IDM_SUPPORT = 1013;
     private const int IDM_FEEDBACK = 1014;
     private const int IDM_ABOUT = 1016;
+    private const int IDM_EXERCISES = 1023;
     private const int IDM_QUIT = 1005;
     // Sous-menu compatibilité jeu (v0.9.7)
     private const int IDM_COMPAT_AUTO = 1020;
@@ -77,6 +78,7 @@ sealed class TrayApplication : IDisposable
     private SettingsWindow? _settings;
     private AboutWindow? _about;
     private ToggleNotification? _toggleNotification;
+    private LearningModule? _learning; // instance lancee depuis le menu tray (« Exercices »)
 
     // Si conflit layout systeme detecte au demarrage, l'onboarding est differe et n'est
     // affiche qu'apres que l'utilisateur a clique « Garder l'app » dans LayoutConflictWindow.
@@ -374,6 +376,18 @@ sealed class TrayApplication : IDisposable
                                 _about = new AboutWindow();
                             _about.Show();
                             break;
+                        case IDM_EXERCISES:
+                            // No-op si onboarding ou learning deja ouverts (eviter doublons d'instance LM).
+                            if (_onboarding != null || _learning != null) break;
+                            if (_mapper == null || _hook == null || _layout == null) break;
+                            _learning = new LearningModule(IntPtr.Zero, _mapper, _hook, _layout, replayMode: true);
+                            _learning.OnClosed = _ =>
+                            {
+                                _learning?.Dispose();
+                                _learning = null;
+                            };
+                            _learning.Show();
+                            break;
                         case IDM_COMPAT_AUTO:
                             ApplyCompatibilityOverride(null);
                             break;
@@ -634,6 +648,7 @@ sealed class TrayApplication : IDisposable
             _virtualKeyboard?.IsVisible == true ? $"Masquer le clavier virtuel\tCtrl+Maj+{kbdKey}" : $"Clavier virtuel\tCtrl+Maj+{kbdKey}");
         uint searchFlags = _enabled || _characterSearch?.IsVisible == true ? MF_STRING : MF_STRING | MF_GRAYED;
         Win32.AppendMenuW(hMenu, searchFlags, IDM_SEARCH, $"Rechercher un caractère\tCtrl+Maj+{searchKey}");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_EXERCISES, "Exercices");
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
 
         // Liens et infos
@@ -731,7 +746,9 @@ sealed class TrayApplication : IDisposable
         UpdateIcon();
         UpdateTooltip();
 
-        ShowBalloon("AZERTY Global", _enabled ? "est actif." : "est désactivé.");
+        // La balloon Windows au toggle a ete supprimee en v0.9.7.1 : elle faisait doublon
+        // avec ToggleNotification (haut-droite). La balloon de demarrage de l'app, qui
+        // rappelle le raccourci, est conservee dans le constructeur.
 
         // Mini-fenetre TOPMOST en haut a droite (visible en borderless windowed quand
         // l'icone tray est cachee par le jeu — angle mort accepte en exclusive fullscreen).
@@ -813,6 +830,7 @@ sealed class TrayApplication : IDisposable
         _settings?.Dispose(); _settings = null;
         _about?.Dispose(); _about = null;
         _toggleNotification?.Dispose(); _toggleNotification = null;
+        _learning?.Dispose(); _learning = null;
         _layoutConflictWindow?.Dispose(); _layoutConflictWindow = null;
         Win32.Shell_NotifyIconW(NIM_DELETE, ref _nid);
         if (_hIcon != IntPtr.Zero)

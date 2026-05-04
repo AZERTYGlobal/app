@@ -349,15 +349,22 @@ sealed class LearningModule : IDisposable
     /// </summary>
     public Action<bool>? OnClosed;
 
-    public LearningModule(IntPtr hWndOnboarding, KeyMapper? mapper, KeyboardHook? hook, Layout? layout)
+    // replayMode = true : lancement depuis le menu tray (« Exercices »). On ne persiste
+    // pas la progression dans config (ConfigManager.SetLearningMaxStepCompleted), car
+    // la state sauvegardee doit refleter UNIQUEMENT le 1er passage onboarding. Replay
+    // depuis le tray = entrainement, pas de side-effect sur la progression officielle.
+    private readonly bool _replayMode;
+
+    public LearningModule(IntPtr hWndOnboarding, KeyMapper? mapper, KeyboardHook? hook, Layout? layout, bool replayMode = false)
     {
         ConfigManager.LogCrashTraceDebug("LM.ctor: enter");
-        ConfigManager.LogCrashTraceDebug($"LM.ctor: params hWndOnb={hWndOnboarding}, mapper={mapper != null}, hook={hook != null}, layout={layout != null}");
+        ConfigManager.LogCrashTraceDebug($"LM.ctor: params hWndOnb={hWndOnboarding}, mapper={mapper != null}, hook={hook != null}, layout={layout != null}, replay={replayMode}");
         // Validation explicite après le log diagnostic : si l'un est null, on aura logué
         // l'état exact des params avant de lever (utile pour le bug crash post-Reset).
         ArgumentNullException.ThrowIfNull(mapper);
         ArgumentNullException.ThrowIfNull(hook);
         ArgumentNullException.ThrowIfNull(layout);
+        _replayMode = replayMode;
         _tweaks = LearningTweaks.Load(); // re-lu a chaque ctor → bouton "Reinitialiser onboarding" applique les changements
         _hWndOnboarding = hWndOnboarding;
         ConfigManager.LogCrashTraceDebug("LM.ctor: A1 _hWndOnboarding assigned");
@@ -1318,7 +1325,10 @@ sealed class LearningModule : IDisposable
                 _currentStepSuccessCount++;
                 // Persister la progression : exercice (_currentStep + 1) valide. Setter monotone,
                 // donc safe meme en cas de Recommencer puis nouveau succes (no-op si deja persiste).
-                ConfigManager.SetLearningMaxStepCompleted(_currentStep + 1);
+                // En replayMode (lancement depuis menu tray « Exercices »), on ne persiste pas :
+                // la progression sauvegardee reflete uniquement le 1er passage onboarding.
+                if (!_replayMode)
+                    ConfigManager.SetLearningMaxStepCompleted(_currentStep + 1);
                 _mapper.RequestCapsLockOff(); // reinciter a appuyer sur Verr.Maj. au prochain exercice
                 ClearHighlight();
                 UpdateControlVisibility();

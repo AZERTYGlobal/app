@@ -1,5 +1,18 @@
 # Changelog — Application AZERTY Global
 
+## Version 0.9.7.1 — 4 mai 2026
+
+**Menu tray — entrée « Exercices »**
+
+- Nouvelle entrée `Exercices` dans le menu de la zone de notification (entre `Rechercher un caractère` et le séparateur). Ouvre le `LearningModule` en mode replay : démarre toujours à l'exercice 1, parcourt les 4 exercices normaux puis la page de choix avant les 2 exercices bonus, comme l'onboarding initial.
+- Mode replay sans side-effect sur la progression : la valeur `learningMaxStepCompleted` du fichier de configuration n'est jamais modifiée par cette voie. La progression sauvegardée reste celle du premier passage onboarding.
+- Garde-fou : si la fenêtre d'onboarding est en cours d'utilisation OU si une autre instance de `LearningModule` est déjà ouverte, le clic est ignoré (no-op) — pas de doublon d'instance.
+
+**Notification toggle — suppression du doublon**
+
+- Suppression de la balloon Windows (zone de notification, en bas à droite) lors des bascules `Ctrl+Maj+Verr.Maj` : elle faisait doublon avec la mini-fenêtre flottante en haut à droite (`ToggleNotification`, ajoutée en v0.9.7) qui était déjà plus visible et plus lisible. Reste désormais seule la fenêtre flottante.
+- La balloon de démarrage de l'app (rappel du raccourci `Ctrl+Maj+Verr.Maj` au lancement) est conservée — elle a un rôle pédagogique différent.
+
 ## Version 0.9.7 — Avril-Mai 2026
 
 **Caps Lock — refonte complète (smoke test in-game, mai 2026)**
