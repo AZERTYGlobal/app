@@ -368,7 +368,17 @@ sealed class TrayApplication : IDisposable
                         case IDM_SUPPORT: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/soutien", null, null, 1); break;
                         case IDM_ONBOARDING:
                             if (_onboarding == null)
+                            {
                                 _onboarding = new OnboardingWindow();
+                                // Injecter les deps : sans ça, LaunchLearningModule (« Essayer
+                                // maintenant ») retourne silencieusement sur Mapper == null.
+                                // Cas typique : l'onboarding n'a pas ete auto-declenche au
+                                // demarrage (LearningMaxStepCompleted >= 3) et l'utilisateur
+                                // ouvre la fenetre via le menu tray pour la 1ere fois.
+                                _onboarding.Mapper = _mapper;
+                                _onboarding.Hook = _hook;
+                                _onboarding.AppLayout = _layout;
+                            }
                             _onboarding.Show();
                             break;
                         case IDM_ABOUT:
@@ -377,8 +387,11 @@ sealed class TrayApplication : IDisposable
                             _about.Show();
                             break;
                         case IDM_EXERCISES:
-                            // No-op si onboarding ou learning deja ouverts (eviter doublons d'instance LM).
-                            if (_onboarding != null || _learning != null) break;
+                            // No-op si onboarding visible (LearningModule embed dedans) ou learning
+                            // standalone deja ouvert. Le champ _onboarding reste non-null apres
+                            // fermeture (Close() cache la fenetre, ne nullifie pas le champ),
+                            // donc on doit checker IsVisible et pas != null.
+                            if (_onboarding?.IsVisible == true || _learning != null) break;
                             if (_mapper == null || _hook == null || _layout == null) break;
                             _learning = new LearningModule(IntPtr.Zero, _mapper, _hook, _layout, replayMode: true);
                             _learning.OnClosed = _ =>

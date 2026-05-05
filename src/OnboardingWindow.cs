@@ -84,6 +84,13 @@ sealed class OnboardingWindow : IDisposable
     private IntPtr _hWnd;
     private int _currentStep;
     private bool _learningModuleDone;
+    // Vrai si l'utilisateur a vu l'etape 3 (la ou la checkbox « Ne plus afficher » est presente).
+    // Sans ce flag, fermer le wizard via la croix a l'etape 1 sans avoir vu l'etape 3 persisterait
+    // la valeur DEFAULT de la checkbox (case par defaut UNchecked en v0.9.7.1) -> cas reasonnable,
+    // mais on respecte explicitement le principe : ne persister un opt-out que si l'utilisateur
+    // a effectivement vu et touche a l'option. Avant v0.9.7.1, la default-checked + persist
+    // inconditionnel rendait l'opt-out implicite des l'ouverture de la fenetre.
+    private bool _step3Reached;
     // Vrai des qu'on lance le LM une premiere fois. Distincte de _learningModuleDone (qui
     // n'est mis a true qu'a la complete reussite des 6 exercices). Etat B (essaye non complete)
     // sert a afficher « Suivant » a cote de « Essayer maintenant » sur l'etape 1.
@@ -551,11 +558,21 @@ sealed class OnboardingWindow : IDisposable
     public void Show()
     {
         _currentStep = 0;
-        // Etape 3 : on coche par defaut les 2 checkboxes (autostart + ne plus afficher) —
-        // recommandation par defaut. L'utilisateur peut decocher avant de cliquer Suivant.
-        // L'etat des cases sera persiste dans Close() via ConfigManager + AutoStart.Set.
+        _step3Reached = false; // sera mis a true a la 1ere transition vers l'etape 3
+        // Etape 3 : « Lancer au demarrage » coche par defaut (recommandation), « Ne plus afficher »
+        // UNCHECKED par defaut (v0.9.7.1) -> l'opt-out doit etre explicite. Avant, la default-checked
+        // combinee a la persistance dans Close() faisait que tout fermeture (X, Esc, Quit, C'est parti!)
+        // declenchait un opt-out permanent, meme si l'utilisateur n'avait jamais atteint l'etape 3.
         Win32.SendMessageW(_hWndChkAutoStart, BM_SETCHECK, (IntPtr)BST_CHECKED, IntPtr.Zero);
-        Win32.SendMessageW(_hWndChkDontShow, BM_SETCHECK, (IntPtr)BST_CHECKED, IntPtr.Zero);
+        Win32.SendMessageW(_hWndChkDontShow, BM_SETCHECK, IntPtr.Zero, IntPtr.Zero);
+        // Sync bidirectionnel des flags avec la progression persistee. Seuils alignes avec
+        // la condition d'auto-show ([TrayApplication.cs] : LearningMaxStepCompleted < 3) :
+        //   - 0 exo               -> etat A (« Essayer maintenant » seul)
+        //   - 1-2 exos            -> etat B (« Essayer maintenant » + « Suivant »)
+        //   - 3+ exos             -> etat C (« Suivant » seul, l'utilisateur a fait l'essentiel)
+        int completed = ConfigManager.LearningMaxStepCompleted;
+        _learningModuleAttempted = completed >= 1;
+        _learningModuleDone = completed >= 3;
         UpdateStepVisibility();
         Win32.ShowWindow(_hWnd, 1);
         Win32.SetForegroundWindow(_hWnd);
@@ -572,6 +589,7 @@ sealed class OnboardingWindow : IDisposable
         _currentStep = 0;
         _learningModuleDone = false;
         _learningModuleAttempted = false;
+        _step3Reached = false;
         ConfigManager.SetShowOnboardingAtStartup(true);
 
         // Si la fenetre des exercices est ouverte, la fermer proprement.
@@ -581,8 +599,16 @@ sealed class OnboardingWindow : IDisposable
 
     public void Close()
     {
-        var checkState = Win32.SendMessageW(_hWndChkDontShow, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero);
-        ConfigManager.SetShowOnboardingAtStartup(checkState != (IntPtr)BST_CHECKED);
+        // Ne persister la preference « Ne plus afficher » QUE si l'utilisateur a vu l'etape 3
+        // (ou la checkbox est visible). Sinon, fermer le wizard a l'etape 1 ou 2 (croix, Esc,
+        // Quitter) ne touche pas a ShowOnboardingAtStartup. Avant v0.9.7.1, la persistance
+        // inconditionnelle + default-checked transformait toute fermeture precoce en opt-out
+        // permanent silencieux.
+        if (_step3Reached)
+        {
+            var checkState = Win32.SendMessageW(_hWndChkDontShow, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero);
+            ConfigManager.SetShowOnboardingAtStartup(checkState != (IntPtr)BST_CHECKED);
+        }
 
         var autoStartState = Win32.SendMessageW(_hWndChkAutoStart, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero);
         bool autoStartSaved = AutoStart.Set(autoStartState == (IntPtr)BST_CHECKED);
@@ -633,7 +659,7 @@ sealed class OnboardingWindow : IDisposable
                     case IDC_BTN_NEXT:
                         // Etape 1 ou 2 : passer a la suivante. Etape 3 : fermer l'onboarding.
                         // (Le bouton « Essayer maintenant » est un controle distinct IDC_BTN_TRY.)
-                        if (_currentStep < 2) { _currentStep++; UpdateStepVisibility(); }
+                        if (_currentStep < 2) { _currentStep++; if (_currentStep == 2) _step3Reached = true; UpdateStepVisibility(); }
                         else Close();
                         break;
                     case IDC_BTN_TRY:
@@ -710,6 +736,7 @@ sealed class OnboardingWindow : IDisposable
                     else if (_currentStep < 2)
                     {
                         _currentStep++;
+                        if (_currentStep == 2) _step3Reached = true;
                         UpdateStepVisibility();
                     }
                     else

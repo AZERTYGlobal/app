@@ -72,6 +72,7 @@ sealed class LearningModule : IDisposable
     private const uint TIMER_TRANSITION = 8002;
     private const uint TIMER_REFOCUS = 8003;
     private const uint TIMER_FOCUS_LOST_CONFIRM = 8004;
+    private const uint TIMER_CAPS_RESYNC = 8005;
     private const uint FOCUS_LOSS_DEBOUNCE_MS = 250;
     private const uint KEYPRESS_DURATION_MS = 120;
     private const uint TRANSITION_DURATION_MS = 800;
@@ -779,7 +780,11 @@ sealed class LearningModule : IDisposable
 
         int winW = S(BASE_WIN_W);
         int winH = S(BASE_WIN_H);
-        uint dwStyle = Win32.WS_OVERLAPPED | Win32.WS_CAPTION | Win32.WS_SYSMENU;
+        // WS_CLIPCHILDREN : empeche la fenetre parent de peindre dans les zones des
+        // boutons enfants (Quitter, Passer, Recommencer, etc.). Sans ce flag, OnPaint
+        // peut briévement peindre par-dessus les boutons lors d'un repaint frequent
+        // (ex. frappe rapide en exo), causant un flicker visible.
+        uint dwStyle = Win32.WS_OVERLAPPED | Win32.WS_CAPTION | Win32.WS_SYSMENU | Win32.WS_CLIPCHILDREN;
         uint dwExStyle = Win32.WS_EX_TOPMOST;
 
         // Adapter aux petits écrans
@@ -981,6 +986,12 @@ sealed class LearningModule : IDisposable
         Win32.EnableWindow(_hWndOnboarding, false);
         Win32.ShowWindow(_hWnd, 1);
         ConfigManager.LogCrashTraceDebug("LM.Show: ShowWindow done");
+        // Le synthetic VK_CAPITAL inject par RequestCapsLockOff() est traite par Windows
+        // de maniere asynchrone : entre ShowWindow et le 1er WM_PAINT, _mapper._capsLockState
+        // peut etre desaligne avec Windows reel. Sans cette resync timeree, la touche
+        // Verr. Maj. peut etre rendue comme « activee » jusqu'a la 1ere frappe utilisateur.
+        // 50ms suffisent largement pour que Windows ait traite le toggle.
+        Win32.SetTimer(_hWnd, (UIntPtr)TIMER_CAPS_RESYNC, 50, IntPtr.Zero);
         TakeFocus();
         // Windows bloque souvent SetForegroundWindow au 1er appel (anti-vol de focus).
         // On retry plusieurs fois via timer jusqu'à ce que GetForegroundWindow() == _hWnd.
@@ -1033,18 +1044,14 @@ sealed class LearningModule : IDisposable
         UpdateHighlight();
         Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
 
-        // Si l'utilisateur survole une touche, reconstruire le tooltip : la touche morte
-        // active (ou desactivee) change le contenu (resultats de combinaison vs layers bruts).
-        // Si le tooltip est vide (touche sans correspondance avec la dk active), on cache.
-        if (_hoveredKeyIndex >= 0 && _hoveredKeyIndex < _keyHitAreas.Count)
-        {
-            var hit = _keyHitAreas[_hoveredKeyIndex];
-            string text = BuildTooltipText(hit.Scancode, hit.ContextLabel);
-            if (string.IsNullOrEmpty(text))
-                SetTooltip("", new Win32.RECT());
-            else
-                SetTooltip(text, hit.Rect);
-        }
+        // Le rafraichissement du tooltip etait fait ici lors d'un changement d'etat
+        // (touche morte, Caps Lock). Probleme : entre deux exercices, RequestCapsLockOff
+        // fire StateChanged → si la souris est immobile sur une touche, le tooltip
+        // re-popait pour la meme touche, ce qui surprenait l'utilisateur. Le tooltip
+        // est desormais rafraichi uniquement sur mouvement souris (OnMouseMove). Le seul
+        // cas qui n'est plus couvert : l'utilisateur survole une touche immobile pendant
+        // une transition de touche morte → texte legerement obsolete jusqu'au prochain
+        // mouvement de souris. Acceptable.
     }
 
     private void OnRawKeyDown(uint scancode)
@@ -1256,6 +1263,16 @@ sealed class LearningModule : IDisposable
                             TakeFocus();
                             Win32.SetTimer(_hWnd, (UIntPtr)TIMER_REFOCUS, 80, IntPtr.Zero);
                         }
+                    }
+                    else if (timerId == TIMER_CAPS_RESYNC)
+                    {
+                        // Resync Caps Lock apres que Windows ait traite le synthetic VK_CAPITAL
+                        // inject par Show(). Sans ca, le 1er paint peut afficher Verr. Maj.
+                        // comme activee alors que Windows est OFF.
+                        Win32.KillTimer(hWnd, (UIntPtr)TIMER_CAPS_RESYNC);
+                        _mapper.SyncState();
+                        UpdateHighlight();
+                        Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
                     }
                     else if (timerId == TIMER_FOCUS_LOST_CONFIRM)
                     {
