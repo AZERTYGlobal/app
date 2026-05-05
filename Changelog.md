@@ -1,6 +1,6 @@
 # Changelog — Application AZERTY Global
 
-## Version 0.9.7.1 — 4 mai 2026
+## Version 0.9.8 — 5 mai 2026
 
 **Menu tray — entrée « Exercices »**
 

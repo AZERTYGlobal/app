@@ -79,7 +79,7 @@ Site web : https://azerty.global
 
 ### Nouveautés de cette version (notes de version)
 
-Version 0.9.7.1 :
+Version 0.9.8 :
  • Nouvelle entrée « Exercices » dans le menu de la zone de notification : permet de relancer les 6 exercices d'apprentissage à tout moment, en repartant du premier.
  • Suppression de la notification Windows redondante lors des bascules on/off : seule la fenêtre flottante en haut à droite reste affichée.
  • Compatibilité jeux entièrement repensée : les caractères AZERTY Global (@, É, «», accents, ligatures…) s'affichent désormais correctement dans les chats Minecraft, Trackmania et la plupart des jeux Unity, SDL ou GLFW, ainsi que dans les champs de recherche modés (JEI inclus).
@@ -198,7 +198,7 @@ Website: https://azerty.global
 
 ### What's new (release notes)
 
-Version 0.9.7.1:
+Version 0.9.8:
  • New "Exercises" entry in the system tray menu: lets you replay the 6 learning exercises any time, starting from the first one.
  • Removed redundant Windows notification on toggle on/off: only the floating top-right window remains.
  • Completely redesigned game compatibility: AZERTY Global characters (@, É, «», accents, ligatures…) now appear correctly in Minecraft chat, Trackmania and most Unity, SDL or GLFW games, including modded search fields (JEI included).

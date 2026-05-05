@@ -7,7 +7,7 @@ namespace AZERTYGlobal;
 static class Program
 {
     /// <summary>Version affichée partout (tooltip, À propos, etc.).</summary>
-    internal const string Version = "0.9.7.1";
+    internal const string Version = "0.9.8";
 
     [STAThread]
     static void Main()
