@@ -1,0 +1,70 @@
+name: CI build + audit sécu
+
+on:
+  push:
+    branches: [main, release/**]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write     # pour attestation SLSA / sigstore
+  attestations: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore + publish x64
+        run: dotnet publish src/AZERTYGlobal.csproj -c Release -r win-x64
+
+      - name: Publish ARM64
+        run: dotnet publish src/AZERTYGlobal.csproj -c Release -r win-arm64
+
+      - name: Test
+        run: dotnet test src/AZERTYGlobal.Tests/AZERTYGlobal.Tests.csproj -c Release
+
+      - name: Pack MSIX
+        run: pwsh ./scripts/Pack-MSIX.ps1
+
+      - name: Verify Release
+        run: pwsh ./scripts/Verify-Release.ps1
+
+      - name: BinSkim hardening check
+        run: |
+          dotnet tool install --global Microsoft.CodeAnalysis.BinSkim
+          binskim analyze "src/bin/Release/net8.0-windows10.0.17763.0/win-x64/publish/AZERTY Global.exe" --output binskim-x64.sarif --pretty-print
+          binskim analyze "src/bin/Release/net8.0-windows10.0.17763.0/win-arm64/publish/AZERTY Global.exe" --output binskim-arm64.sarif --pretty-print
+        continue-on-error: true   # NuGet BinSkim install est instable, ne pas bloquer
+
+      - name: SHA256 artefacts
+        run: |
+          Get-FileHash -Algorithm SHA256 "src/bin/Release/net8.0-windows10.0.17763.0/win-x64/publish/AZERTY Global.exe"
+          Get-FileHash -Algorithm SHA256 "src/bin/Release/net8.0-windows10.0.17763.0/win-arm64/publish/AZERTY Global.exe"
+          Get-ChildItem . -Filter "AZERTYGlobal-*.msixbundle" | ForEach-Object { Get-FileHash -Algorithm SHA256 $_.FullName }
+
+      - name: Upload msixbundle artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: msixbundle
+          path: AZERTYGlobal-*.msixbundle
+          retention-days: 90
+
+      - name: Attest provenance (SLSA L1)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'AZERTYGlobal-*.msixbundle'
+
+      - name: Upload BinSkim SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: binskim-x64.sarif
