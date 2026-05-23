@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  security-events: write
   id-token: write     # pour attestation SLSA / sigstore
   attestations: write
 
@@ -40,10 +41,24 @@ jobs:
 
       - name: BinSkim hardening check
         run: |
+          New-Item -ItemType Directory -Force -Path binskim-sarif | Out-Null
           dotnet tool install --global Microsoft.CodeAnalysis.BinSkim
-          binskim analyze "src/bin/Release/net8.0-windows10.0.17763.0/win-x64/publish/AZERTY Global.exe" --output binskim-x64.sarif --pretty-print
-          binskim analyze "src/bin/Release/net8.0-windows10.0.17763.0/win-arm64/publish/AZERTY Global.exe" --output binskim-arm64.sarif --pretty-print
+          binskim analyze "src/bin/Release/net8.0-windows10.0.17763.0/win-x64/publish/AZERTY Global.exe" --output binskim-sarif/binskim-x64.sarif --pretty-print
+          binskim analyze "src/bin/Release/net8.0-windows10.0.17763.0/win-arm64/publish/AZERTY Global.exe" --output binskim-sarif/binskim-arm64.sarif --pretty-print
         continue-on-error: true   # NuGet BinSkim install est instable, ne pas bloquer
+
+      - name: Detect BinSkim SARIF
+        id: binskim_sarif
+        if: always()
+        run: |
+          $files = @(Get-ChildItem -Path binskim-sarif -Filter *.sarif -ErrorAction SilentlyContinue)
+          if ($files.Count -gt 0) {
+            "found=true" >> $env:GITHUB_OUTPUT
+            $files | ForEach-Object { Write-Host "Found SARIF: $($_.FullName)" }
+          } else {
+            "found=false" >> $env:GITHUB_OUTPUT
+            Write-Warning "No BinSkim SARIF report was generated; skipping SARIF upload."
+          }
 
       - name: SHA256 artefacts
         run: |
@@ -64,7 +79,7 @@ jobs:
           subject-path: 'AZERTYGlobal-*.msixbundle'
 
       - name: Upload BinSkim SARIF
-        if: always()
+        if: always() && steps.binskim_sarif.outputs.found == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: binskim-x64.sarif
+          sarif_file: binskim-sarif
