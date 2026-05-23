@@ -13,6 +13,8 @@ internal sealed class RealWin32Api : IWin32Api
 
     public short GetKeyState(int vk) => Win32.GetKeyState(vk);
 
+    public short GetAsyncKeyState(int vk) => Win32.GetAsyncKeyState(vk);
+
     public IntPtr GetKeyboardLayout(uint threadId) => Win32.GetKeyboardLayout(threadId);
 
     public uint SendInput(Win32.INPUT[] inputs) =>

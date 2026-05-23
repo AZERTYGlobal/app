@@ -57,6 +57,19 @@ internal sealed class ForegroundMonitor : IDisposable
     /// <summary>Mode de compatibilité résolu pour le process foreground actuel.</summary>
     public CompatibilityMode CurrentMode => _snapshot?.Mode ?? CompatibilityMode.Default;
 
+    /// <summary>
+    /// Audit sécu 2026-05 SEV-A2-05 : lecture atomique des deux champs critiques
+    /// pour EmitText. Évite la race entre lecture séquentielle de Mode puis Hkl
+    /// (un OnWinEvent pouvait remplacer _snapshot entre les deux lectures, donnant
+    /// mode/hkl discordants → faux caractère pendant alt-tab rapide).
+    /// Un seul accès à _snapshot (déréf. atomique CLR sur ref types).
+    /// </summary>
+    public (CompatibilityMode Mode, IntPtr Hkl) GetEmitContext()
+    {
+        var snap = _snapshot;  // capture atomique
+        return (snap?.Mode ?? CompatibilityMode.Default, snap?.Hkl ?? IntPtr.Zero);
+    }
+
     /// <summary>Indique si le hook WinEvent a pu être installé. Si false, mode dégradé permanent (Default).</summary>
     public bool IsHookInstalled => _winEventHook != IntPtr.Zero;
 

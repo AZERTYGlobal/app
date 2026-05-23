@@ -1,6 +1,4 @@
 // Moteur de remapping — traduit les scancodes en caractères AZERTY Global
-using System.Runtime.InteropServices;
-
 namespace AZERTYGlobal;
 
 /// <summary>
@@ -50,6 +48,7 @@ sealed class KeyMapper
     // Lock obligatoire car ClearPassedThroughKeys peut être appelé depuis le thread
     // WinEventHook (OOC) tandis que ProcessKey accède au set depuis le thread keyboard hook.
     private readonly HashSet<uint> _passedThroughKeys = new();
+    private readonly Dictionary<uint, ushort> _syntheticVirtualKeyDowns = new();
     private readonly object _passedThroughKeysLock = new();
 
     public bool CapsLockActive => _capsLockState;
@@ -188,12 +187,11 @@ sealed class KeyMapper
         Win32.INPUT[]? inputs = null;
         lock (_passedThroughKeysLock)
         {
-            if (_passedThroughKeys.Count == 0) return;
-            inputs = new Win32.INPUT[_passedThroughKeys.Count];
-            int i = 0;
+            if (_passedThroughKeys.Count == 0 && _syntheticVirtualKeyDowns.Count == 0) return;
+            var list = new List<Win32.INPUT>(_passedThroughKeys.Count + _syntheticVirtualKeyDowns.Count);
             foreach (var scanCode in _passedThroughKeys)
             {
-                inputs[i++] = new Win32.INPUT
+                list.Add(new Win32.INPUT
                 {
                     type = INPUT_KEYBOARD,
                     u = new Win32.INPUTUNION
@@ -207,9 +205,15 @@ sealed class KeyMapper
                             dwExtraInfo = KeyboardHook.INJECTED_FLAG
                         }
                     }
-                };
+                });
+            }
+            foreach (var vk in _syntheticVirtualKeyDowns.Values)
+            {
+                list.Add(MakeVkInput(vk, 0, true));
             }
             _passedThroughKeys.Clear();
+            _syntheticVirtualKeyDowns.Clear();
+            inputs = list.ToArray();
         }
         // Émission hors lock pour ne pas bloquer le keyboard hook si SendInput est lent
         if (inputs.Length > 0)
@@ -327,17 +331,17 @@ sealed class KeyMapper
         bool changed = false;
 
         // GetAsyncKeyState : bit 15 = touche physiquement enfoncée maintenant
-        if (_leftShiftDown && (Win32.GetAsyncKeyState((int)VK_LSHIFT) & 0x8000) == 0)
+        if (_leftShiftDown && (_api.GetAsyncKeyState((int)VK_LSHIFT) & 0x8000) == 0)
         { _leftShiftDown = false; changed = true; }
-        if (_rightShiftDown && (Win32.GetAsyncKeyState((int)VK_RSHIFT) & 0x8000) == 0)
+        if (_rightShiftDown && (_api.GetAsyncKeyState((int)VK_RSHIFT) & 0x8000) == 0)
         { _rightShiftDown = false; changed = true; }
-        if (_leftCtrlDown && (Win32.GetAsyncKeyState((int)VK_LCONTROL) & 0x8000) == 0)
+        if (_leftCtrlDown && (_api.GetAsyncKeyState((int)VK_LCONTROL) & 0x8000) == 0)
         { _leftCtrlDown = false; changed = true; }
-        if (_rightCtrlDown && (Win32.GetAsyncKeyState((int)VK_RCONTROL) & 0x8000) == 0)
+        if (_rightCtrlDown && (_api.GetAsyncKeyState((int)VK_RCONTROL) & 0x8000) == 0)
         { _rightCtrlDown = false; changed = true; }
-        if (_leftAltDown && (Win32.GetAsyncKeyState((int)VK_LMENU) & 0x8000) == 0)
+        if (_leftAltDown && (_api.GetAsyncKeyState((int)VK_LMENU) & 0x8000) == 0)
         { _leftAltDown = false; changed = true; }
-        if (_rightAltDown && (Win32.GetAsyncKeyState((int)VK_RMENU) & 0x8000) == 0)
+        if (_rightAltDown && (_api.GetAsyncKeyState((int)VK_RMENU) & 0x8000) == 0)
         { _rightAltDown = false; changed = true; }
 
         if (changed)
@@ -387,7 +391,7 @@ sealed class KeyMapper
         // 20 touches simultanées est physiquement impossible — vider le set,
         // en émettant des keyup synthétiques pour éviter des stuck keys côté apps.
         bool overflow;
-        lock (_passedThroughKeysLock) overflow = _passedThroughKeys.Count > 20;
+        lock (_passedThroughKeysLock) overflow = _passedThroughKeys.Count + _syntheticVirtualKeyDowns.Count > 20;
         if (overflow)
             ClearPassedThroughKeys();
 
@@ -421,6 +425,9 @@ sealed class KeyMapper
         if (_leftAltDown && !_rightCtrlDown)
             return false;
 
+        if (!isKeyDown && TryReleaseSyntheticVirtualKey(scanCode))
+            return true;
+
         // Si Ctrl (gauche OU droit) est enfoncé SANS AltGr → remapper les raccourcis Ctrl+touche
         // Ex: Ctrl+A doit fonctionner selon la position AZERTY Global, pas le layout Windows
         // Exclut : AltGr réel (RAlt + phantom LCtrl) et AltGr simulé (RCtrl + LAlt)
@@ -441,16 +448,17 @@ sealed class KeyMapper
                 // Si la touche physique produit déjà ce VK sur le layout natif,
                 // pass-through pour préserver le scancode (apps qui bindent par
                 // position physique : GLFW, SDL, DirectInput — ex Ctrl+A drop dans Minecraft).
-                if (Win32.MapVirtualKeyW(scanCode, 1) == c)
+                var hkl = _api.GetKeyboardLayout(0);
+                if (_api.MapVirtualKeyExW(scanCode, 1, hkl) == c)
                     return false;
-                SendVirtualKey((ushort)c, isKeyDown);
+                SendVirtualKey(scanCode, (ushort)c, isKeyDown);
                 return true;
             }
 
             // Chiffre 0-9 → VK 0x30-0x39
             if (c >= '0' && c <= '9')
             {
-                SendVirtualKey((ushort)c, isKeyDown);
+                SendVirtualKey(scanCode, (ushort)c, isKeyDown);
                 return true;
             }
 
@@ -461,14 +469,14 @@ sealed class KeyMapper
                 char sc = shiftChar[0];
                 if (sc >= '0' && sc <= '9')
                 {
-                    SendVirtualKey((ushort)sc, isKeyDown);
+                    SendVirtualKey(scanCode, (ushort)sc, isKeyDown);
                     return true;
                 }
             }
 
-            // Autres caractères : utiliser VkKeyScanW pour trouver le VK
+            // Autres caractères : utiliser VkKeyScanExW pour trouver le VK
             // dans le layout Windows actif (fonctionne pour -, =, [, ], etc.)
-            short vkResult = Win32.VkKeyScanW(baseChar[0]);
+            short vkResult = _api.VkKeyScanExW(baseChar[0], _api.GetKeyboardLayout(0));
             if (vkResult != -1)
             {
                 byte vk = (byte)(vkResult & 0xFF);
@@ -477,7 +485,7 @@ sealed class KeyMapper
                 // (sinon le VK correspondrait à une autre touche sur le layout Windows)
                 if (vk != 0 && mods == 0)
                 {
-                    SendVirtualKey(vk, isKeyDown);
+                    SendVirtualKey(scanCode, vk, isKeyDown);
                     return true;
                 }
             }
@@ -595,11 +603,12 @@ sealed class KeyMapper
         if (output.Length != 1 || IsAltGrDown || _capsLockState) return false;
 
         // VK correspondant à ce scancode sur le layout Windows
-        uint vk = Win32.MapVirtualKeyW(scanCode, 1); // MAPVK_VSC_TO_VK
+        var hkl = _api.GetKeyboardLayout(0);
+        uint vk = _api.MapVirtualKeyExW(scanCode, 1, hkl); // MAPVK_VSC_TO_VK
         if (vk == 0) return false;
 
         // VK+mods qui produisent notre caractère sur le layout Windows
-        short vkForChar = Win32.VkKeyScanW(output[0]);
+        short vkForChar = _api.VkKeyScanExW(output[0], hkl);
         if (vkForChar == -1) return false;
 
         byte charVk = (byte)(vkForChar & 0xFF);
@@ -625,7 +634,34 @@ sealed class KeyMapper
     /// Envoie un virtual key (pour les raccourcis Ctrl+lettre).
     /// Le Ctrl est déjà enfoncé par l'utilisateur, on envoie juste la lettre remappée.
     /// </summary>
-    private void SendVirtualKey(ushort vk, bool keyDown)
+    private bool TryReleaseSyntheticVirtualKey(uint scanCode)
+    {
+        ushort vk;
+        lock (_passedThroughKeysLock)
+        {
+            if (!_syntheticVirtualKeyDowns.TryGetValue(scanCode, out vk))
+                return false;
+            _syntheticVirtualKeyDowns.Remove(scanCode);
+        }
+
+        SendVirtualKeyInput(vk, false);
+        return true;
+    }
+
+    private void SendVirtualKey(uint scanCode, ushort vk, bool keyDown)
+    {
+        lock (_passedThroughKeysLock)
+        {
+            if (keyDown)
+                _syntheticVirtualKeyDowns[scanCode] = vk;
+            else
+                _syntheticVirtualKeyDowns.Remove(scanCode);
+        }
+
+        SendVirtualKeyInput(vk, keyDown);
+    }
+
+    private void SendVirtualKeyInput(ushort vk, bool keyDown)
     {
         var input = new Win32.INPUT
         {
@@ -642,7 +678,7 @@ sealed class KeyMapper
                 }
             }
         };
-        Win32.SendInput(1, new[] { input }, Marshal.SizeOf<Win32.INPUT>());
+        _api.SendInput(new[] { input });
     }
 
     /// <summary>
@@ -656,9 +692,9 @@ sealed class KeyMapper
     /// </summary>
     internal void EmitText(string text)
     {
-        // Snapshot atomique du mode foreground et du HKL
-        var mode = _foregroundMonitor?.CurrentMode ?? CompatibilityMode.Default;
-        var hkl = _foregroundMonitor?.CurrentHkl ?? IntPtr.Zero;
+        // Audit sécu 2026-05 SEV-A2-05 : lecture atomique single-shot du snapshot
+        // ForegroundMonitor. Évite race mode/hkl discordants pendant alt-tab.
+        var (mode, hkl) = _foregroundMonitor?.GetEmitContext() ?? (CompatibilityMode.Default, IntPtr.Zero);
 
         var inputs = new List<Win32.INPUT>(text.Length * 16);
         for (int i = 0; i < text.Length; i++)

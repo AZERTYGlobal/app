@@ -266,7 +266,7 @@ contact@azerty.global
 
 ### Notes pour l'équipe de certification Microsoft
 
-**v0.11.0** : synchronisation des ressources embarquées avec la disposition actuelle d'AZERTY Global. Le bundle 0.11.0 reste à produire avant soumission.
+**v0.11.0** : synchronisation des ressources embarquées avec la disposition actuelle d'AZERTY Global. Bundle 0.11.0.0 produit et vérifié (`Verify-Release.ps1` PASS). Rapport WACK `wack-report-v0.11.0.xml` : `OVERALL_RESULT=PASS`.
 
 **v0.10.0** : audit sécurité indépendant 2026-05 appliqué (9 patches : Control Flow Guard activé sur AOT, gestion défensive du callback hook et des allocations natives, anonymisation HMAC-SHA256 des logs de compatibilité, marker d'injection randomisé au démarrage, mutex `Local\` anti-squat, lecture atomique du contexte foreground, build déterministe, NETAnalyzers actifs, CI GitHub Actions avec attestation SLSA L1). Voir `AUDIT-SECURITY-v0.10.0.md`.
 
@@ -285,9 +285,9 @@ APIs additionnelles introduites v0.9.7 pour la couche compatibilité jeux (toujo
  • Aucune écriture, aucune injection de DLL ou de code dans les processus externes. Lecture seule des noms de modules pour déterminer le mode d'injection à utiliser.
  • L'application se DÉSACTIVE automatiquement sur les jeux protégés par un anti-cheat kernel-level connu (Vanguard, EAC, BattlEye, RICOCHET, etc.) — politique de sécurité utilisateur pour éviter tout risque de bannissement.
 
-### Note WACK — DPIAwarenessValidation WARNING (persistant depuis v0.9.7, confirmé v0.9.8)
+### Note WACK — DPIAwarenessValidation
 
-Le rapport WACK courant (`wack-report-v0.9.8.xml`) contient un WARNING sur le test `DPIAwarenessValidation` avec le message « Impossible de traiter le binaire ». Ce WARNING est un **faux positif lié au scanner WACK qui ne parse pas correctement les binaires .NET 8 Native AOT** — persistant depuis v0.9.7.
+Le rapport WACK courant `wack-report-v0.11.0.xml` passe `DPIAwarenessValidation`. Les versions précédentes pouvaient produire un WARNING faux positif lié au scanner WACK sur les binaires .NET 8 Native AOT ; cette note est conservée uniquement si Microsoft le signale à nouveau pendant la certification.
 
 L'application est bel et bien DPI-aware en mode Per-Monitor V2, vérifiable de deux façons :
 
@@ -302,9 +302,10 @@ Le comportement DPI réel est conforme aux exigences ; toutes les fenêtres de l
 
 ### Note WACK — FAIL OPTIONAL « Fichiers exécutables bloqués »
 
-Ce test (`OPTIONAL=TRUE` dans le rapport) FAIL depuis la v0.9.5 (acceptée par Microsoft à la review précédente). Causes :
+Ce test (`OPTIONAL=TRUE` dans le rapport WACK v0.11.0) FAIL depuis la v0.9.5 (acceptée par Microsoft à la review précédente). Causes :
  • Référence `shell32.dll!ShellExecuteW` — usage légitime pour ouvrir les liens externes (site web, GitHub, Discord, EUPL) depuis le menu tray et la fenêtre À propos.
- • Strings du runtime .NET Native AOT (`MSBuild`, `csI`, `dNX`) — résidus de noms d'outils dans le binaire, non utilisés à l'exécution.
+ • Strings du runtime .NET Native AOT (`CsI`, `cdB`, `CMD`, `MSBuild`) — résidus de noms d'outils dans le binaire, non utilisés à l'exécution.
+ • Référence `powershell` dans le `README.md` distribué avec le package.
 
 Tous les tests `OPTIONAL` ne comptent pas dans le verdict global selon la documentation WACK officielle.
 

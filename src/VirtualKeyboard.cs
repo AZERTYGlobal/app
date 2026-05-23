@@ -253,6 +253,7 @@ sealed class VirtualKeyboard : IDisposable
     private static readonly UIntPtr TIMER_HIGHLIGHT_CLEAR = (UIntPtr)3;
     private readonly HashSet<uint> _highlightedScancodes = new();
     private readonly HashSet<string> _highlightedLabels = new();
+    private readonly HashSet<string> _highlightedContextIds = new();
     private string _highlightType = ""; // "direct", "dk", "step1", "step2"
     private CharacterSearch.MethodData? _pendingStep2; // Données pour l'étape 2 d'une séquence DK
 
@@ -583,9 +584,10 @@ sealed class VirtualKeyboard : IDisposable
 
     private void ClearHighlight()
     {
-        bool wasHighlighted = _highlightedScancodes.Count > 0 || _highlightedLabels.Count > 0;
+        bool wasHighlighted = _highlightedScancodes.Count > 0 || _highlightedLabels.Count > 0 || _highlightedContextIds.Count > 0;
         _highlightedScancodes.Clear();
         _highlightedLabels.Clear();
+        _highlightedContextIds.Clear();
         _highlightType = "";
         _pendingStep2 = null;
         if (wasHighlighted && _visible) Invalidate();
@@ -601,14 +603,14 @@ sealed class VirtualKeyboard : IDisposable
         switch (layer)
         {
             case "Shift":
-                _highlightedLabels.Add("Maj ⇧");
+                _highlightedContextIds.Add(ContextShiftLeft);
                 break;
             case "Caps":
                 _highlightedLabels.Add("Verr. Maj.");
                 break;
             case "Caps+Shift":
                 _highlightedLabels.Add("Verr. Maj.");
-                _highlightedLabels.Add("Maj ⇧");
+                _highlightedContextIds.Add(ContextShiftLeft);
                 break;
             case "AltGr":
                 _highlightedLabels.Add("AltGr");
@@ -616,7 +618,7 @@ sealed class VirtualKeyboard : IDisposable
             case "Shift+AltGr":
             case "AltGr+Shift":
                 _highlightedLabels.Add("AltGr");
-                _highlightedLabels.Add("Maj ⇧");
+                _highlightedContextIds.Add(ContextShiftLeft);
                 break;
             case "Caps+AltGr":
                 _highlightedLabels.Add("Verr. Maj.");
@@ -626,7 +628,7 @@ sealed class VirtualKeyboard : IDisposable
             case "Caps+AltGr+Shift":
                 _highlightedLabels.Add("Verr. Maj.");
                 _highlightedLabels.Add("AltGr");
-                _highlightedLabels.Add("Maj ⇧");
+                _highlightedContextIds.Add(ContextShiftLeft);
                 break;
         }
     }
@@ -634,9 +636,11 @@ sealed class VirtualKeyboard : IDisposable
     /// <summary>Vérifie si une touche doit être mise en surbrillance par la recherche.</summary>
     private bool IsKeyHighlighted(in VisualKey vk)
     {
-        if (_highlightedScancodes.Count == 0 && _highlightedLabels.Count == 0)
+        if (_highlightedScancodes.Count == 0 && _highlightedLabels.Count == 0 && _highlightedContextIds.Count == 0)
             return false;
         if (vk.Scancode != 0 && _highlightedScancodes.Contains(vk.Scancode))
+            return true;
+        if (vk.IsContextual && vk.ContextId is { Length: > 0 } && _highlightedContextIds.Contains(vk.ContextId))
             return true;
         if (vk.IsContextual && _highlightedLabels.Contains(vk.Label))
             return true;
@@ -744,6 +748,7 @@ sealed class VirtualKeyboard : IDisposable
                         var step2 = _pendingStep2;
                         _highlightedScancodes.Clear();
                         _highlightedLabels.Clear();
+                        _highlightedContextIds.Clear();
                         _highlightType = "step2";
                         AddKeyHighlight(step2.Key, step2.Layer);
                         _pendingStep2 = null;
@@ -908,7 +913,7 @@ sealed class VirtualKeyboard : IDisposable
         var hPenBorder = Win32.CreatePen(0, 1, CLR_KEY_BORDER); // PS_SOLID
 
         // Highlight de recherche (créés à la demande)
-        bool hasHighlight = _highlightedScancodes.Count > 0 || _highlightedLabels.Count > 0;
+        bool hasHighlight = _highlightedScancodes.Count > 0 || _highlightedLabels.Count > 0 || _highlightedContextIds.Count > 0;
         var (hlBorderColor, hlBgColor) = GetHighlightColors();
         var hBrushHl = hasHighlight ? Win32.CreateSolidBrush(hlBgColor) : IntPtr.Zero;
         var hPenHl = hasHighlight ? Win32.CreatePen(0, 2, hlBorderColor) : IntPtr.Zero;

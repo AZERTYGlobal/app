@@ -84,6 +84,7 @@ sealed class CharacterSearch : IDisposable
         public string MethodDisplay { get; set; } = "";
         public bool IsDirectAccess { get; set; }
         public MethodData? Method { get; set; }
+        public List<MethodData> Methods { get; set; } = new();
 
         // Champs pré-normalisés (calculés au chargement, évite NormalizeForSearch à chaque frappe)
         public string NormalizedNameFr { get; set; } = "";
@@ -268,47 +269,42 @@ sealed class CharacterSearch : IDisposable
                         aliases.Add(a);
             }
 
-            // Trouver la méthode recommandée
+            // Trouver la méthode recommandée, tout en gardant les alternatives
+            // pour les cas où la requête doit distinguer caractère vif et accent.
             string methodDisplay = "";
             bool isDirectAccess = false;
             MethodData? methodData = null;
+            var methodEntries = new List<MethodData>();
             if (entry.Value.TryGetProperty("methods", out var methods))
             {
                 // Chercher la méthode recommandée
                 JsonElement? recommended = null;
                 JsonElement? fallback = null;
+                MethodData? recommendedData = null;
+                MethodData? fallbackData = null;
                 foreach (var method in methods.EnumerateArray())
                 {
+                    var currentData = CreateMethodData(method);
+                    methodEntries.Add(currentData);
+
+                    fallback ??= method;
+                    fallbackData ??= currentData;
+
                     if (method.TryGetProperty("recommended", out var rec) && rec.GetBoolean())
                     {
                         recommended = method;
-                        break;
+                        recommendedData = currentData;
                     }
-                    fallback ??= method;
                 }
                 var chosen = recommended ?? fallback;
-                if (chosen.HasValue)
+                var chosenData = recommendedData ?? fallbackData;
+                if (chosen.HasValue && chosenData != null)
                 {
-                    methodDisplay = FormatMethod(chosen.Value);
+                    methodDisplay = FormatMethod(chosenData);
                     isDirectAccess = chosen.Value.TryGetProperty("recommended", out var r) && r.GetBoolean()
                         && chosen.Value.GetProperty("type").GetString() == "direct";
 
-                    // Stocker les données brutes pour le highlight
-                    var mType = chosen.Value.GetProperty("type").GetString() ?? "";
-                    var mKey = chosen.Value.TryGetProperty("key", out var mk) ? mk.GetString() ?? "" : "";
-                    var mLayer = chosen.Value.TryGetProperty("layer", out var ml) ? ml.GetString() ?? "" : "";
-                    methodData = new MethodData { Type = mType, Key = mKey, Layer = mLayer };
-
-                    if (mType == "deadkey")
-                    {
-                        var dkName = chosen.Value.GetProperty("deadkey").GetString() ?? "";
-                        methodData.DeadKey = dkName;
-                        if (_deadKeyActivationRaw.TryGetValue(dkName, out var dkAct))
-                        {
-                            methodData.DkActivationKey = dkAct.key;
-                            methodData.DkActivationLayer = dkAct.layer;
-                        }
-                    }
+                    methodData = chosenData;
                 }
             }
 
@@ -322,6 +318,7 @@ sealed class CharacterSearch : IDisposable
                 MethodDisplay = methodDisplay,
                 IsDirectAccess = isDirectAccess,
                 Method = methodData,
+                Methods = methodEntries,
             };
 
             // Pré-normaliser pour la recherche (évite NormalizeForSearch à chaque frappe)
@@ -336,6 +333,50 @@ sealed class CharacterSearch : IDisposable
 
             _allEntries.Add(entry2);
         }
+    }
+
+    private MethodData CreateMethodData(JsonElement method)
+    {
+        var mType = method.GetProperty("type").GetString() ?? "";
+        var mKey = method.TryGetProperty("key", out var mk) ? mk.GetString() ?? "" : "";
+        var mLayer = method.TryGetProperty("layer", out var ml) ? ml.GetString() ?? "" : "";
+        var methodData = new MethodData { Type = mType, Key = mKey, Layer = mLayer };
+
+        if (mType == "deadkey")
+        {
+            var dkName = method.GetProperty("deadkey").GetString() ?? "";
+            methodData.DeadKey = dkName;
+            if (_deadKeyActivationRaw.TryGetValue(dkName, out var dkAct))
+            {
+                methodData.DkActivationKey = dkAct.key;
+                methodData.DkActivationLayer = dkAct.layer;
+            }
+        }
+
+        return methodData;
+    }
+
+    /// <summary>Formate une méthode de saisie en texte lisible.</summary>
+    private string FormatMethod(MethodData method)
+    {
+        if (method.Type == "direct")
+        {
+            return FormatDirectMethod(method.Key, method.Layer);
+        }
+
+        if (method.Type == "deadkey")
+        {
+            var activation = _deadKeyActivations.GetValueOrDefault(method.DeadKey, method.DeadKey);
+            var keyLabel = KeyLabels.GetValueOrDefault(method.Key, method.Key);
+            var afterDk = method.Layer switch
+            {
+                "Shift" => $"puis Maj + {keyLabel}",
+                _ => $"puis {keyLabel}",
+            };
+            return $"{activation}\n{afterDk}";
+        }
+
+        return "";
     }
 
     /// <summary>Formate une méthode de saisie en texte lisible.</summary>
@@ -415,7 +456,12 @@ sealed class CharacterSearch : IDisposable
         {
             int score = MatchScore(entry, query, lowerQuery, normalizedQuery, queryWords, originalQueryWords);
             if (score > 0)
-                scored.Add((entry, score));
+            {
+                var resultEntry = ApplyQuerySpecificMethod(entry, normalizedQuery);
+                if (!ReferenceEquals(resultEntry, entry))
+                    score += 50;
+                scored.Add((resultEntry, score));
+            }
         }
 
         scored.Sort((a, b) => b.score.CompareTo(a.score));
@@ -441,6 +487,49 @@ sealed class CharacterSearch : IDisposable
                 sb.Append(char.ToLowerInvariant(c));
         }
         return sb.ToString();
+    }
+
+    private CharEntry ApplyQuerySpecificMethod(CharEntry entry, string normalizedQuery)
+    {
+        return (normalizedQuery, entry.Character) switch
+        {
+            ("circonflexe", "^") => WithPreferredMethod(entry, "direct", "", "KeyI", "AltGr"),
+            ("accent circonflexe", "^") => WithPreferredMethod(entry, "deadkey", "dk_circumflex", "Space", "Base"),
+            ("backtick", "`") => WithPreferredMethod(entry, "direct", "", "KeyL", "AltGr"),
+            ("accent grave", "`") => WithPreferredMethod(entry, "deadkey", "dk_grave", "Space", "Base"),
+            _ => entry
+        };
+    }
+
+    private CharEntry WithPreferredMethod(CharEntry entry, string type, string deadKey, string key, string layer)
+    {
+        var method = entry.Methods.FirstOrDefault(candidate =>
+            candidate.Type == type &&
+            candidate.DeadKey == deadKey &&
+            candidate.Key == key &&
+            candidate.Layer == layer);
+
+        if (method == null)
+            return entry;
+
+        return new CharEntry
+        {
+            Character = entry.Character,
+            CodePoint = entry.CodePoint,
+            NameFr = entry.NameFr,
+            NameEn = entry.NameEn,
+            Aliases = entry.Aliases,
+            MethodDisplay = FormatMethod(method),
+            IsDirectAccess = type == "direct",
+            Method = method,
+            Methods = entry.Methods,
+            NormalizedNameFr = entry.NormalizedNameFr,
+            NormalizedNameEn = entry.NormalizedNameEn,
+            NormalizedAliasWords = entry.NormalizedAliasWords,
+            NormalizedNameFrWords = entry.NormalizedNameFrWords,
+            NormalizedNameEnWords = entry.NormalizedNameEnWords,
+            NormalizedChar = entry.NormalizedChar,
+        };
     }
 
     /// <summary>Vérifie si tous les mots de la requête matchent des mots du texte (chaque mot de requête

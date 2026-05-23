@@ -5,8 +5,23 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
-$siteRoot = Resolve-Path (Join-Path $projectRoot '..\Site AZERTY Global')
-$publicRepoRoot = Join-Path $projectRoot '..\..\Microsoft Store - app repo'
+function Resolve-FirstExistingPath([string[]]$Candidates, [string]$Label) {
+    foreach ($candidate in $Candidates) {
+        if (Test-Path $candidate) {
+            return (Resolve-Path $candidate)
+        }
+    }
+    throw "$Label introuvable. Chemins testes: $($Candidates -join '; ')"
+}
+
+$siteRoot = Resolve-FirstExistingPath @(
+    (Join-Path $projectRoot '..\Site AZERTY Global'),
+    (Join-Path $projectRoot '..\2026\Site AZERTY Global')
+) 'Site AZERTY Global'
+$publicRepoRoot = Resolve-FirstExistingPath @(
+    (Join-Path $projectRoot '..\..\Microsoft Store - app repo'),
+    $projectRoot
+) 'Clone public Microsoft Store'
 
 $sourceLayout = Join-Path $siteRoot 'data\AZERTY Global Final.json'
 $sourceIndex = Join-Path $siteRoot 'tester\character-index.json'
@@ -154,8 +169,14 @@ assertDirectMethod(character(index, '#'), 'Backquote', 'Shift', true, '# recomma
 assertDirectMethod(character(index, '#'), 'Period', 'AltGr', false, '# alternative developpeur');
 assertAlias(character(index, '#'), 'hashtag', '#');
 assertDirectMethod(character(index, '^'), 'KeyI', 'AltGr', true, '^');
+assertDeadKeyMethod(character(index, '^'), 'dk_circumflex', 'Space', 'Base', false, 'Accent circonflexe espace');
+assertEqual(character(index, '^').unicodeNameFr, 'CIRCONFLEXE', '^ nom francais');
+assertAlias(character(index, '^'), 'accent circonflexe', '^');
 assertDirectMethod(character(index, '`'), 'KeyL', 'AltGr', true, 'Backtick');
+assertDeadKeyMethod(character(index, '`'), 'dk_grave', 'Space', 'Base', false, 'Accent grave espace');
+assertEqual(character(index, '`').unicodeNameFr, 'BACKTICK', 'Backtick nom francais');
 assertAlias(character(index, '`'), 'backtick', 'Backtick');
+assertAlias(character(index, '`'), 'accent grave', 'Backtick');
 assertDirectMethod(character(index, '~'), 'KeyN', 'AltGr', true, 'Tilde');
 assertEqual(character(index, '<').unicodeNameFr, 'SIGNE INF\u00c9RIEUR \u00c0', '< nom francais');
 assertAlias(character(index, '<'), 'chevron ouvrant', '<');

@@ -1315,7 +1315,10 @@
     "^": {
       "codePoint": "U+005E",
       "unicodeName": "CIRCUMFLEX ACCENT",
-      "unicodeNameFr": "ACCENT CIRCONFLEXE",
+      "unicodeNameFr": "CIRCONFLEXE",
+      "frenchAliases": [
+        "accent circonflexe"
+      ],
       "methods": [
         {
           "type": "deadkey",
@@ -1378,9 +1381,10 @@
     "`": {
       "codePoint": "U+0060",
       "unicodeName": "GRAVE ACCENT",
-      "unicodeNameFr": "ACCENT GRAVE",
+      "unicodeNameFr": "BACKTICK",
       "frenchAliases": [
-        "backtick"
+        "backtick",
+        "accent grave"
       ],
       "methods": [
         {
@@ -23553,6 +23557,6 @@
       ]
     }
   },
-  "generated": "2026-05-22T22:20:53.726Z",
+  "generated": "2026-05-23T17:47:12.394Z",
   "totalCharacters": 1032
 }

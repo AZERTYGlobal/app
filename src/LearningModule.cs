@@ -483,10 +483,17 @@ sealed class LearningModule : IDisposable
             rect = new Win32.RECT(),
             lpszText = ""
         };
+        // Audit sécu 2026-05 SEV-A2-01 : try/finally pour éviter memory leak si exception.
         var ptr = Marshal.AllocHGlobal(Marshal.SizeOf<TOOLINFOW>());
-        Marshal.StructureToPtr(ti, ptr, false);
-        Win32.SendMessageW(_hTooltip, TTM_ADDTOOLW, IntPtr.Zero, ptr);
-        Marshal.FreeHGlobal(ptr);
+        try
+        {
+            Marshal.StructureToPtr(ti, ptr, false);
+            Win32.SendMessageW(_hTooltip, TTM_ADDTOOLW, IntPtr.Zero, ptr);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
+        }
     }
 
     private void SetTooltip(string text, Win32.RECT rect)
@@ -500,11 +507,18 @@ sealed class LearningModule : IDisposable
             rect = rect,
             lpszText = text
         };
+        // Audit sécu 2026-05 SEV-A2-01 : try/finally pour éviter memory leak si exception.
         var ptr = Marshal.AllocHGlobal(Marshal.SizeOf<TOOLINFOW>());
-        Marshal.StructureToPtr(ti, ptr, false);
-        Win32.SendMessageW(_hTooltip, TTM_UPDATETIPTEXTW, IntPtr.Zero, ptr);
-        Win32.SendMessageW(_hTooltip, TTM_NEWTOOLRECTW, IntPtr.Zero, ptr);
-        Marshal.FreeHGlobal(ptr);
+        try
+        {
+            Marshal.StructureToPtr(ti, ptr, false);
+            Win32.SendMessageW(_hTooltip, TTM_UPDATETIPTEXTW, IntPtr.Zero, ptr);
+            Win32.SendMessageW(_hTooltip, TTM_NEWTOOLRECTW, IntPtr.Zero, ptr);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
+        }
     }
 
     /// <summary>Texte multi-ligne décrivant les couches d'une touche. Aligné sur deadkeys.js / keyboard.js.</summary>

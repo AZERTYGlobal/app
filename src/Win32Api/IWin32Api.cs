@@ -13,6 +13,7 @@ internal interface IWin32Api
     short VkKeyScanExW(char ch, IntPtr hkl);
     uint MapVirtualKeyExW(uint code, uint mapType, IntPtr hkl);
     short GetKeyState(int vk);
+    short GetAsyncKeyState(int vk);
     IntPtr GetKeyboardLayout(uint threadId);
 
     // Injection de frappes

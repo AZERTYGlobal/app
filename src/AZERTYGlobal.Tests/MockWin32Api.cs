@@ -36,6 +36,8 @@ internal sealed class MockWin32Api : IWin32Api
     /// <summary>Réponses scriptées pour GetKeyState. Clé = vk → result short.</summary>
     public Dictionary<int, short> KeyStateScript { get; } = new();
 
+    public Dictionary<int, short> AsyncKeyStateScript { get; } = new();
+
     /// <summary>Layout courant retourné pour GetKeyboardLayout (peu importe le thread).</summary>
     public IntPtr CurrentHkl { get; set; } = (IntPtr)0x040C040C; // AZERTY FR par défaut
 
@@ -78,6 +80,9 @@ internal sealed class MockWin32Api : IWin32Api
 
     public short GetKeyState(int vk) =>
         KeyStateScript.TryGetValue(vk, out var v) ? v : (short)0;
+
+    public short GetAsyncKeyState(int vk) =>
+        AsyncKeyStateScript.TryGetValue(vk, out var v) ? v : (short)0;
 
     public IntPtr GetKeyboardLayout(uint threadId) => CurrentHkl;
 

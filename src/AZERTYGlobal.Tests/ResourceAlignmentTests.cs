@@ -51,8 +51,15 @@ public class ResourceAlignmentTests
         AssertHasAlias(Character(characters, "#"), "hashtag");
 
         AssertDirectMethod(Character(characters, "^"), "KeyI", "AltGr", recommended: true);
+        AssertDeadKeyMethod(Character(characters, "^"), "dk_circumflex", "Space", "Base", recommended: false);
+        Assert.Equal("CIRCONFLEXE", Character(characters, "^").GetProperty("unicodeNameFr").GetString());
+        AssertHasAlias(Character(characters, "^"), "accent circonflexe");
+
         AssertDirectMethod(Character(characters, "`"), "KeyL", "AltGr", recommended: true);
+        AssertDeadKeyMethod(Character(characters, "`"), "dk_grave", "Space", "Base", recommended: false);
+        Assert.Equal("BACKTICK", Character(characters, "`").GetProperty("unicodeNameFr").GetString());
         AssertHasAlias(Character(characters, "`"), "backtick");
+        AssertHasAlias(Character(characters, "`"), "accent grave");
         AssertDirectMethod(Character(characters, "~"), "KeyN", "AltGr", recommended: true);
 
         Assert.Equal("SIGNE INFÉRIEUR À", Character(characters, "<").GetProperty("unicodeNameFr").GetString());

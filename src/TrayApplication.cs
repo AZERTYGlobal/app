@@ -257,8 +257,9 @@ sealed class TrayApplication : IDisposable
                 {
                     ConfigManager.SetCompatibilityOverride(proc, null);
                     conflicting.Add(proc);
+                    // Audit sécu 2026-05 SEV-A1-02 : anonymisation du process name dans le log.
                     ConfigManager.LogCompatCriticalEvent("OverrideInvalidCleanup",
-                        $"removed forceOn for '{proc}' (now anti-cheat-listed)");
+                        $"removed forceOn for '{ConfigManager.AnonymizeProcessName(proc)}' (now anti-cheat-listed)");
                 }
             }
             if (conflicting.Count > 0)
@@ -729,10 +730,14 @@ sealed class TrayApplication : IDisposable
             ShowSecurityBalloon("AZERTY Global",
                 $"AZERTY Global ne peut pas être activé pendant que {procName} tourne : son anti-cheat " +
                 "pourrait considérer cela comme de la triche et bannir ton compte.");
+            // Audit sécu 2026-05 SEV-A1-02 : anonymisation du process name dans le log.
             ConfigManager.LogCompatCriticalEvent("AntiCheatToggleRefused",
-                $"process={procName}, attempted=enable");
+                $"process={ConfigManager.AnonymizeProcessName(procName)}, attempted=enable");
             return;
         }
+
+        if (_enabled)
+            _mapper?.ClearPassedThroughKeys();
 
         _enabled = !_enabled;
 
@@ -835,6 +840,7 @@ sealed class TrayApplication : IDisposable
         if (_cleaned) return;
         _cleaned = true;
 
+        _mapper?.ClearPassedThroughKeys();
         _foregroundMonitor?.Dispose(); _foregroundMonitor = null;
         _hook?.Dispose(); _hook = null;
         _virtualKeyboard?.Dispose(); _virtualKeyboard = null;
@@ -979,8 +985,9 @@ sealed class TrayApplication : IDisposable
             UpdateIcon();
             ShowBalloon("AZERTY Global",
                 $"désactivé temporairement pour {procName}\n(anti-cheat : injection de frappes interdite).");
+            // Audit sécu 2026-05 SEV-A1-02 : anonymisation du process name dans le log.
             ConfigManager.LogCompatCriticalEvent("AntiCheatDetected",
-                $"process={procName}, action=disable");
+                $"process={ConfigManager.AnonymizeProcessName(procName)}, action=disable");
         }
         else if (mode != CompatibilityMode.DisabledAntiCheat && _autoDisabledForAntiCheat)
         {

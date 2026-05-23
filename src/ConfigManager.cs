@@ -1,5 +1,7 @@
 // Gestion de la configuration persistante (config.json)
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace AZERTYGlobal;
@@ -331,7 +333,7 @@ static class ConfigManager
 
     /// <summary>
     /// Audit sécu 2026-05 SEV-A1-01 : sanitize une exception pour log.
-    /// Limite à GetType().Name + premier segment de Message.
+    /// Limite à GetType().Name + premier segment de Message (avant \n ou pattern de path).
     /// Évite de logger stack traces complètes, paths absolus user, données partielles.
     /// </summary>
     internal static string SanitizeException(Exception? ex)
@@ -342,16 +344,17 @@ static class ConfigManager
         var nlIdx = msg.IndexOf('\n');
         if (nlIdx >= 0) msg = msg.Substring(0, nlIdx);
         if (msg.Length > 200) msg = msg.Substring(0, 200) + "…";
+        // Masquer les paths user (C:\Users\<NomUser>\…)
         msg = System.Text.RegularExpressions.Regex.Replace(msg,
             @"[A-Z]:\\Users\\[^\\]+\\", @"<UserDir>\");
         return $"{typeName}: {msg}";
     }
 
-    /// <summary>Écrit une entrée dans error.log de façon asynchrone et non-bloquante.</summary>
+    /// <summary>Écrit une entrée dans error.log de façon asynchrone et non-bloquante. Sanitize l'exception (SEV-A1-01).</summary>
     public static void Log(string context, Exception ex)
     {
         var logDir = LogDirectory;
-        var logEntry = $"[{DateTime.Now:s}] {context}: {ex}\n";
+        var logEntry = $"[{DateTime.Now:s}] {context}: {SanitizeException(ex)}\n";
         var logFile = Path.Combine(logDir, "error.log");
         ThreadPool.QueueUserWorkItem(_ =>
         {
@@ -365,17 +368,44 @@ static class ConfigManager
     /// **Aucune frappe utilisateur ne doit jamais être loguée**, conformément à la
     /// politique de confidentialité onboarding. Ne loguer QUE des événements agrégés
     /// sans contenu (process name, mode, action) — pas de codepoint, pas de char.
-    /// Async non-bloquant via ThreadPool, comme <see cref="Log"/>.
+    /// Ecriture synchrone et verrouillee : ces evenements sont rares et doivent rester durables.
     /// </summary>
     public static void LogCompatEvent(string eventName, string details)
     {
         var logDir = LogDirectory;
         var logEntry = $"[{DateTime.Now:s}] {eventName}: {details}\n";
         var logFile = Path.Combine(logDir, "error.log");
-        ThreadPool.QueueUserWorkItem(_ =>
+        AppendLogEntry(logDir, logFile, logEntry);
+    }
+
+    /// <summary>
+    /// Audit sécu 2026-05 SEV-A1-02 : anonymise un nom de process via HMAC-SHA256
+    /// avec sel local persisté. Format `hash:8hex`. Permet de tracer des patterns
+    /// (même process apparaît N fois) sans révéler le nom dans error.log.
+    /// </summary>
+    public static string AnonymizeProcessName(string? procName)
+    {
+        if (string.IsNullOrEmpty(procName)) return "<none>";
+        var salt = GetOrCreateLogSalt();
+        using var hmac = new HMACSHA256(salt);
+        var hashBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(procName.ToLowerInvariant()));
+        return "hash:" + Convert.ToHexString(hashBytes, 0, 4).ToLowerInvariant();
+    }
+
+    private static byte[]? _logSalt;
+    private static byte[] GetOrCreateLogSalt()
+    {
+        if (_logSalt != null) return _logSalt;
+        var saltStr = GetString("_compat_log_salt");
+        if (string.IsNullOrEmpty(saltStr) || saltStr.Length < 22)
         {
-            AppendLogEntry(logDir, logFile, logEntry);
-        });
+            // 16 bytes random → ~24 chars base64. Persisté dans config.json pour stabilité
+            // entre lancements (même hash pour le même process → suivi de patterns).
+            saltStr = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
+            SetString("_compat_log_salt", saltStr);
+        }
+        _logSalt = Encoding.UTF8.GetBytes(saltStr);
+        return _logSalt;
     }
 
     /// <summary>

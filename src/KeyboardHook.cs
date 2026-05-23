@@ -1,5 +1,6 @@
 // Low-level keyboard hook — intercepte toutes les frappes sans droits admin
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 
 namespace AZERTYGlobal;
 
@@ -11,8 +12,22 @@ sealed class KeyboardHook : IDisposable
 {
     private const int WH_KEYBOARD_LL = 13;
 
-    // Flag pour identifier nos propres injections (éviter les boucles infinies)
-    internal static readonly IntPtr INJECTED_FLAG = (IntPtr)0xA261;
+    // Audit sécu 2026-05 SEV-A3-01 : marker runtime random pour éviter qu'un
+    // attaquant qui lit le code source (open source EUPL) puisse bypass le hook
+    // en injectant des frappes avec le même flag. Bits hauts forcés à 0xA pour
+    // rester dans une plage user-defined courante (Windows réserve les valeurs
+    // basses < 0x10000 pour ses propres marqueurs internes). Régénéré à chaque
+    // démarrage : un crash + redémarrage ne préserve pas la valeur, donc une
+    // frappe « en vol » au moment du crash peut être retraitée par le nouveau
+    // hook (cas accepté, fréquence négligeable).
+    internal static readonly IntPtr INJECTED_FLAG = ComputeInjectedFlag();
+
+    private static IntPtr ComputeInjectedFlag()
+    {
+        // Random 28-bit dans la plage 0xA0000000..0xAFFFFFFF.
+        int random = RandomNumberGenerator.GetInt32(0, 0x10000000);
+        return (IntPtr)(unchecked((int)0xA0000000) | random);
+    }
 
     private IntPtr _hookId = IntPtr.Zero;
     private readonly Win32.LowLevelKeyboardProc _proc;
@@ -75,6 +90,12 @@ sealed class KeyboardHook : IDisposable
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
+        // Audit sécu 2026-05 SEV-A2-04 : try/catch défensif. Une exception remontant
+        // d'un callback Win32 LL crash le process sans passer par AppDomain.
+        // UnhandledException correctement (callback natif). Hardening défense en
+        // profondeur — happy path inchangé.
+        try
+        {
         if (nCode >= 0)
         {
             var hookStruct = Marshal.PtrToStructure<Win32.KBDLLHOOKSTRUCT>(lParam);
@@ -152,6 +173,15 @@ sealed class KeyboardHook : IDisposable
         }
 
         return Win32.CallNextHookEx(_hookId, nCode, wParam, lParam);
+        }
+        catch (Exception ex)
+        {
+            // SEV-A2-04 : log + fallthrough vers CallNextHookEx pour ne pas perdre
+            // la frappe et ne pas crash le process. ConfigManager.Log catch elle-même
+            // ses propres erreurs en interne.
+            try { ConfigManager.Log("KeyboardHook.HookCallback", ex); } catch { }
+            return Win32.CallNextHookEx(_hookId, nCode, wParam, lParam);
+        }
     }
 
     private static bool IsModifierKey(uint vkCode) => vkCode is
