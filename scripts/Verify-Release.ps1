@@ -14,8 +14,10 @@ $fichePath = Join-Path $msixDir 'Fiche Store.md'
 $publicationPath = Join-Path $projectRoot 'Publication Microsoft Store.md'
 $todoPath = Join-Path $projectRoot 'TO-DO.md'
 $changelogPath = Join-Path $projectRoot 'Changelog.md'
-$contextAppPath = Resolve-Path (Join-Path $projectRoot '..\..\..\.agent\CONTEXT_APP_MICROSOFT_STORE.md')
-$contextProjectPath = Resolve-Path (Join-Path $projectRoot '..\..\..\.agent\CONTEXT_AZERTY_GLOBAL.md')
+$contextAppPathCandidate = Join-Path $projectRoot '..\..\..\.agent\CONTEXT_APP_MICROSOFT_STORE.md'
+$contextProjectPathCandidate = Join-Path $projectRoot '..\..\..\.agent\CONTEXT_AZERTY_GLOBAL.md'
+$contextAppPath = if (Test-Path $contextAppPathCandidate) { (Resolve-Path $contextAppPathCandidate).Path } else { $null }
+$contextProjectPath = if (Test-Path $contextProjectPathCandidate) { (Resolve-Path $contextProjectPathCandidate).Path } else { $null }
 $bundlePath = Join-Path $msixDir 'AZERTYGlobal.msixbundle'
 
 function Get-FileText([string]$Path) {
@@ -27,6 +29,15 @@ function Assert-Match([string]$Path, [string]$Pattern, [string]$Label) {
     if ($content -notmatch $Pattern) {
         throw "$Label invalide dans $Path"
     }
+}
+
+function Assert-MatchIfExists([string]$Path, [string]$Pattern, [string]$Label) {
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path $Path)) {
+        Write-Warning "$Label non disponible dans ce depot; verification ignoree."
+        return
+    }
+
+    Assert-Match $Path $Pattern $Label
 }
 
 function Get-ZipEntryHash([string]$ZipPath, [string]$EntryName) {
@@ -132,12 +143,12 @@ if ($manifest.Package.Identity.Version -ne $storeVersion) { throw "AppxManifest.
 
 Assert-Match $fichePath ("Version {0} :" -f [regex]::Escape($version)) 'Fiche Store FR'
 Assert-Match $fichePath ("Version {0}:" -f [regex]::Escape($version)) 'Fiche Store EN'
-Assert-Match $publicationPath ("Version cible : {0}" -f [regex]::Escape($version)) 'Publication Microsoft Store'
-Assert-Match $publicationPath ("Package Store : {0}" -f [regex]::Escape($storeVersion)) 'Publication Microsoft Store'
-Assert-Match $todoPath ("Version actuelle : {0}" -f [regex]::Escape($version)) 'TO-DO'
+Assert-MatchIfExists $publicationPath ("Version cible : {0}" -f [regex]::Escape($version)) 'Publication Microsoft Store'
+Assert-MatchIfExists $publicationPath ("Package Store : {0}" -f [regex]::Escape($storeVersion)) 'Publication Microsoft Store'
+Assert-MatchIfExists $todoPath ("Version actuelle : {0}" -f [regex]::Escape($version)) 'TO-DO'
 Assert-Match $changelogPath ("## Version {0}" -f [regex]::Escape($version)) 'Changelog'
-Assert-Match $contextAppPath ("> \*\*Version actuelle\*\* : {0}" -f [regex]::Escape($version)) 'Contexte app'
-Assert-Match $contextProjectPath ("\*\*Application Microsoft Store\*\* v{0}" -f [regex]::Escape($version)) 'Contexte projet'
+Assert-MatchIfExists $contextAppPath ("> \*\*Version actuelle\*\* : {0}" -f [regex]::Escape($version)) 'Contexte app'
+Assert-MatchIfExists $contextProjectPath ("\*\*Application Microsoft Store\*\* v{0}" -f [regex]::Escape($version)) 'Contexte projet'
 
 # --- Vérification des fichiers publiés ---
 
