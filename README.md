@@ -14,7 +14,7 @@ L'application Windows permet d'utiliser AZERTY Global **sans installation systè
 
 ### Fonctionnalités
 
-- **Remapping clavier complet** — 48 touches, 8 couches par touche, 27 touches mortes
+- **Remapping clavier complet** — 48 touches, 8 couches par touche, 29 touches mortes
 - **Verrouillage Majuscule Intelligent** — N'affecte que les lettres : `É`, `È`, `Ç`, `À` en un appui
 - **Clavier virtuel** — Visualisation interactive de la disposition
 - **Recherche de caractères** — Trouvez n'importe quel caractère parmi les 1 000+ disponibles

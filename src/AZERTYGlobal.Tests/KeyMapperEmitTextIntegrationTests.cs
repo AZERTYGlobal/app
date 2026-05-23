@@ -167,4 +167,26 @@ public class KeyMapperEmitTextIntegrationTests : IDisposable
         Assert.Single(mock.SendInputCalls);
         Assert.Equal(4, mock.SendInputCalls[0].Length); // 4 events (down high+low, up high+low)
     }
+
+    [Fact]
+    public void EmitText_OrphanHighSurrogate_EmitsNothing()
+    {
+        var mock = new MockWin32Api { ScriptedProcessName = "notepad.exe" };
+        var km = new KeyMapper(new Layout(), mock);
+
+        km.EmitText(new string('\uD800', 1));
+
+        Assert.Empty(mock.SendInputCalls);
+    }
+
+    [Fact]
+    public void EmitText_OrphanLowSurrogate_EmitsNothing()
+    {
+        var mock = new MockWin32Api { ScriptedProcessName = "notepad.exe" };
+        var km = new KeyMapper(new Layout(), mock);
+
+        km.EmitText(new string('\uDC00', 1));
+
+        Assert.Empty(mock.SendInputCalls);
+    }
 }

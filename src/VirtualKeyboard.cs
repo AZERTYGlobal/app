@@ -76,11 +76,15 @@ sealed class VirtualKeyboard : IDisposable
     // ═══════════════════════════════════════════════════════════════
 
     /// <summary>Représente une touche visuelle sur le clavier.</summary>
+    internal const string ContextShiftLeft = "ShiftLeft";
+    internal const string ContextShiftRight = "ShiftRight";
+
     internal record struct VisualKey(
         float X, float Y, float W, float H,   // Position/taille en unités (1u = largeur touche standard)
         uint Scancode,                          // 0 = touche contextuelle (non remappée)
         string Label,                           // Label fixe en bas (repère AZERTY)
-        bool IsContextual                       // Tab, Shift, Ctrl, etc.
+        bool IsContextual,                      // Tab, Shift, Ctrl, etc.
+        string? ContextId = null                // Identifiant interne invisible (ex: ShiftLeft)
     );
 
     // Dimensions de référence (en unités de touche)
@@ -101,8 +105,8 @@ sealed class VirtualKeyboard : IDisposable
         ["dk_dot_below"] = "Point souscrit",
         ["dk_double_acute"] = "Double accent aigu",
         ["dk_double_grave"] = "Double accent grave",
-        ["dk_horn"] = "Corne",
-        ["dk_hook"] = "Crochet",
+        ["dk_horn"] = "Cornu",
+        ["dk_hook"] = "Crochet en chef",
         ["dk_caron"] = "Caron",
         ["dk_ogonek"] = "Ogonek",
         ["dk_breve"] = "Brève",
@@ -186,7 +190,7 @@ sealed class VirtualKeyboard : IDisposable
 
         // ── Rangée 4 : WXCV (Shift G + B00 + 10 touches + Shift D) ──
         x = 0;
-        keys.Add(new VisualKey(x, y, 1.25f, KEY_H, 0, "Maj ⇧", true)); // Left Shift
+        keys.Add(new VisualKey(x, y, 1.25f, KEY_H, 0, "Maj ⇧", true, ContextShiftLeft)); // Left Shift
         x = 1.25f + KEY_GAP;
         string[] row4Labels = { "<", "W", "X", "C", "V", "B", "N", ",", ".", ":", "!" };
         uint[] row4Scans = { 0x56, 0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35 };
@@ -195,7 +199,7 @@ sealed class VirtualKeyboard : IDisposable
             keys.Add(new VisualKey(x, y, 1f, KEY_H, row4Scans[i], row4Labels[i], false));
             x += 1f + KEY_GAP;
         }
-        keys.Add(new VisualKey(x, y, 2.85f, KEY_H, 0, "Maj ⇧", true)); // Right Shift
+        keys.Add(new VisualKey(x, y, 2.85f, KEY_H, 0, "Maj ⇧", true, ContextShiftRight)); // Right Shift
         y += KEY_H + ROW_GAP;
 
         // ── Rangée 5 : Espace (Ctrl, Win, Alt, Espace, AltGr, Menu, Ctrl) ──
@@ -411,10 +415,17 @@ sealed class VirtualKeyboard : IDisposable
             rect = new Win32.RECT { left = 0, top = 0, right = DEFAULT_WIDTH, bottom = DEFAULT_HEIGHT },
             lpszText = ""
         };
+        // Audit sécu 2026-05 SEV-A2-01 : try/finally pour éviter memory leak si exception.
         var ptr = Marshal.AllocHGlobal(Marshal.SizeOf<TOOLINFOW>());
-        Marshal.StructureToPtr(ti, ptr, false);
-        Win32.SendMessageW(_hTooltip, TTM_ADDTOOLW, IntPtr.Zero, ptr);
-        Marshal.FreeHGlobal(ptr);
+        try
+        {
+            Marshal.StructureToPtr(ti, ptr, false);
+            Win32.SendMessageW(_hTooltip, TTM_ADDTOOLW, IntPtr.Zero, ptr);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
+        }
     }
 
     private void UpdateTooltipRect()
@@ -428,10 +439,17 @@ sealed class VirtualKeyboard : IDisposable
             uId = (UIntPtr)1,
             rect = clientRect
         };
+        // Audit sécu 2026-05 SEV-A2-01 : try/finally pour éviter memory leak si exception.
         var ptr = Marshal.AllocHGlobal(Marshal.SizeOf<TOOLINFOW>());
-        Marshal.StructureToPtr(ti, ptr, false);
-        Win32.SendMessageW(_hTooltip, TTM_NEWTOOLRECTW, IntPtr.Zero, ptr);
-        Marshal.FreeHGlobal(ptr);
+        try
+        {
+            Marshal.StructureToPtr(ti, ptr, false);
+            Win32.SendMessageW(_hTooltip, TTM_NEWTOOLRECTW, IntPtr.Zero, ptr);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
+        }
     }
 
     private void UpdateTooltipText(string text)
@@ -443,10 +461,17 @@ sealed class VirtualKeyboard : IDisposable
             uId = (UIntPtr)1,
             lpszText = text
         };
+        // Audit sécu 2026-05 SEV-A2-01 : try/finally pour éviter memory leak si exception.
         var ptr = Marshal.AllocHGlobal(Marshal.SizeOf<TOOLINFOW>());
-        Marshal.StructureToPtr(ti, ptr, false);
-        Win32.SendMessageW(_hTooltip, TTM_UPDATETIPTEXTW, IntPtr.Zero, ptr);
-        Marshal.FreeHGlobal(ptr);
+        try
+        {
+            Marshal.StructureToPtr(ti, ptr, false);
+            Win32.SendMessageW(_hTooltip, TTM_UPDATETIPTEXTW, IntPtr.Zero, ptr);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════

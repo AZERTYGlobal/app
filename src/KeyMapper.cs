@@ -670,6 +670,8 @@ sealed class KeyMapper
                 BuildUnicodeInputs(c, text[++i], inputs);
                 continue;
             }
+            if (char.IsSurrogate(c))
+                continue; // Surrogate orphelin invalide : ne rien émettre.
 
             if (mode == CompatibilityMode.NativeCombo && hkl != IntPtr.Zero)
             {

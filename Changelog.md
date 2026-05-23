@@ -1,5 +1,28 @@
 # Changelog — Application AZERTY Global
 
+## Version 0.11.0 — 20 mai 2026
+
+**Synchronisation avec la disposition actuelle**
+
+- Ressources embarquées synchronisées avec la disposition actuelle : `AZERTY Global 2026.json` et `character-index.json`.
+- Mise à jour des raccourcis : `#` en alternative développeur sur AltGr + :, `^` sur AltGr + I, backtick vif sur AltGr + L, Latin étendu sur AltGr + 6, tiret insécable sur Maj + AltGr + 6.
+- Espaces insécables alignées : espace fine insécable sur AltGr + Espace, espace insécable sur Maj + AltGr + Espace.
+- Recherche de caractères mise à jour avec 1032 entrées d'index, dont 1003 caractères Unicode et 29 touches mortes.
+- Ajout d'un script durable de synchronisation des ressources depuis le site, avec validation des raccourcis critiques.
+
+## Version 0.10.0 — 8 mai 2026
+
+**Audit sécurité indépendant**
+
+- Hardening binaire : Control Flow Guard (CFG) activé sur les binaires AOT x64 et ARM64. Build déterministe explicite.
+- Robustesse renforcée : gestion d'erreurs défensive sur le hook clavier (try/catch sur le callback bas niveau) et les allocations mémoire natives (try/finally sur 5 sites `Marshal.AllocHGlobal`).
+- Privacy : logs locaux désormais limités (pas de stack traces complètes ni de paths utilisateur dans `error.log`) et noms de process anonymisés via HMAC-SHA256 dans les events critiques de compatibilité.
+- Isolation hook : marker d'injection randomisé au démarrage (au lieu d'une valeur fixe), mutex d'instance unique préfixé `Local\` + suffixé SID utilisateur (anti-squat).
+- CI GitHub Actions ajoutée (build reproductible x64+ARM64 + tests + Pack-MSIX + Verify-Release + BinSkim hardening + attestation SLSA L1).
+- Hygiène repo : suppression d'un fichier doublon `OnboardingWindow (# Name clash...)` issu d'un conflit de sync Proton Drive.
+
+Aucun changement fonctionnel utilisateur visible. Audit complet : `AUDIT-SECURITY-v0.10.0.md`.
+
 ## Version 0.9.8 — 5 mai 2026
 
 **Menu tray — entrée « Exercices »**
@@ -247,4 +270,4 @@ Refonte majeure de la couche d'injection pour résoudre les problèmes de compat
 
 ---
 
-*Dernière mise à jour : 2026-05-02 (v0.9.7 — refonte compat jeux + fixes audit)*
+*Dernière mise à jour : 2026-05-20 (v0.11.0 — synchronisation disposition actuelle)*

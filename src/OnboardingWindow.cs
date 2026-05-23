@@ -5,7 +5,7 @@ namespace AZERTYGlobal;
 
 /// <summary>
 /// Fenêtre Win32 d'onboarding en 3 étapes :
-///   1. Les 5 améliorations + bandeau bêta
+///   1. Les 5 améliorations
 ///   2. Comment utiliser l'application
 ///   3. Ressources, communauté et préférences
 /// DPI-aware per-monitor v2 : recalcule polices et layout sur WM_DPICHANGED.
@@ -32,7 +32,7 @@ sealed class OnboardingWindow : IDisposable
 
     // Dimensions de base (96 DPI)
     private const int BASE_WIN_W = 560;
-    private const int BASE_WIN_H = 770;
+    private const int BASE_WIN_H = 673;
     private const float ONBOARDING_UI_SCALE = 0.75f;
     private const int BASE_MARGIN = 28;
     private const int BASE_BOTTOM_MARGIN = 52;
@@ -43,6 +43,8 @@ sealed class OnboardingWindow : IDisposable
     private const int BASE_BTN_W_PREV = 120;
     private const int BASE_LINK_BANNER_W = 160;
     private const int BASE_BTN_TEXT_PAD = 28;
+    private const int STEP_CARD_MIN_H = 78;
+    private const int FEATURE_CARD_MIN_H = 73;
 
     // ── Colors (COLORREF = 0x00BBGGRR) ───────────────────────────────
     private const uint CLR_BG = 0x00DDDDDD;
@@ -257,7 +259,7 @@ sealed class OnboardingWindow : IDisposable
         Win32.SendMessageW(_hWndLinkGuide, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
         Win32.SendMessageW(_hWndLinkBeta, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
         Win32.SendMessageW(_hWndLinkDiscord, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
-        Win32.SetWindowTextW(_hWndLinkDiscord, "Échanger avec les autres testeurs");
+        Win32.SetWindowTextW(_hWndLinkDiscord, "Échanger avec les autres utilisateurs");
         Win32.SendMessageW(_hWndChkAutoStart, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
         Win32.SendMessageW(_hWndChkDontShow, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
     }
@@ -415,7 +417,7 @@ sealed class OnboardingWindow : IDisposable
         Win32.SetWindowSubclass(_hWndBtnPrev, _buttonArrowSubclassProc, (UIntPtr)21, IntPtr.Zero);
         Win32.SetWindowSubclass(_hWndBtnTry, _buttonArrowSubclassProc, (UIntPtr)22, IntPtr.Zero);
 
-        // ══ Étape 1 — Lien bandeau bêta ══
+        // ══ Étape 1 — ancien lien de retours, conserve masque pour compatibilite des handlers ══
         // Position initiale temporaire — repositionné dynamiquement dans UpdateStepVisibility
         _hWndLinkBetaBanner = Win32.CreateWindowExW(0, "STATIC", "donnez votre avis.",
             Win32.WS_CHILD | Win32.WS_VISIBLE | SS_NOTIFY | Win32.WS_TABSTOP,
@@ -439,7 +441,7 @@ sealed class OnboardingWindow : IDisposable
         Win32.SendMessageW(_hWndLinkBeta, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
         Win32.SetWindowSubclass(_hWndLinkBeta, _linkSubclassProc, (UIntPtr)3, IntPtr.Zero);
 
-        _hWndLinkDiscord = Win32.CreateWindowExW(0, "STATIC", "Discord — Échanger avec les testeurs",
+        _hWndLinkDiscord = Win32.CreateWindowExW(0, "STATIC", "Discord — Échanger avec les utilisateurs",
             Win32.WS_CHILD | SS_NOTIFY | Win32.WS_TABSTOP, margin, y, S(380), linkH,
             _hWnd, (IntPtr)IDC_LINK_DISCORD, hInstance, IntPtr.Zero);
         Win32.SendMessageW(_hWndLinkDiscord, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
@@ -471,7 +473,7 @@ sealed class OnboardingWindow : IDisposable
         Win32.SetWindowPos(_hWnd, insertAfter, 0, 0, 0, 0,
             Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
 
-        Win32.ShowWindow(_hWndLinkBetaBanner, _currentStep == 0 ? 1 : 0);
+        Win32.ShowWindow(_hWndLinkBetaBanner, 0);
 
         int step3Vis = _currentStep == 2 ? 1 : 0;
         Win32.ShowWindow(_hWndLinkGuide, step3Vis);
@@ -536,17 +538,6 @@ sealed class OnboardingWindow : IDisposable
             Win32.ShowWindow(_hWndBtnNext, 1);
             var nextGeomC = ComputeNextButtonGeometry(nextText, btnWinW, btnMargin);
             Win32.MoveWindow(_hWndBtnNext, nextGeomC.x, btnBottomY, nextGeomC.width, S(BASE_BTN_H), true);
-        }
-
-        // Repositionner le lien bandeau bêta (étape 1)
-        // Le positionnement précis est fait dans PaintStep1 après mesure du texte,
-        // mais on doit initialiser la position ici pour que le lien soit dans la zone visible
-        if (_currentStep == 0)
-        {
-            int margin = S(BASE_MARGIN);
-            int bannerTextX = margin + S(14);
-            int bannerLine2Y = _contentY + S(32);
-            Win32.MoveWindow(_hWndLinkBetaBanner, bannerTextX, bannerLine2Y, S(160), S(26), true);
         }
 
         if (_currentStep == 2)
@@ -672,7 +663,7 @@ sealed class OnboardingWindow : IDisposable
                         if (_currentStep > 0) { _currentStep--; UpdateStepVisibility(); }
                         break;
                     case IDC_LINK_BETA_BANNER: case IDC_LINK_BETA:
-                        if (code == 0) OpenLink("https://azerty.global/beta"); break;
+                        if (code == 0) OpenLink("https://azerty.global/feedback"); break;
                     case IDC_LINK_GUIDE:
                         if (code == 0) OpenLink("https://azerty.global/guide"); break;
                     case IDC_LINK_DISCORD:
@@ -1024,7 +1015,7 @@ sealed class OnboardingWindow : IDisposable
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // Étape 1 — Les 5 améliorations + bandeau bêta
+    // Étape 1 — Les 5 améliorations
     // ═══════════════════════════════════════════════════════════════
     private void GetStep3Layout(int topY, int winW,
         out Win32.RECT resourcesPanel, out Win32.RECT prefsPanel,
@@ -1118,40 +1109,7 @@ sealed class OnboardingWindow : IDisposable
     private void PaintStep1(IntPtr hdc, int cw, int ch, int y)
     {
         int margin = S(BASE_MARGIN);
-        int bannerTextX = margin + S(14);
-
-        // ── Bandeau bêta ──
-        int bannerH = S(72);
-        var bannerRect = new Win32.RECT { left = margin, top = y, right = cw - margin, bottom = y + bannerH };
-        Win32.FillRect(hdc, ref bannerRect, _hBannerBgBrush);
-
-        var borderBrush = Win32.CreateSolidBrush(CLR_BANNER_BORDER);
-        var borderRect = new Win32.RECT { left = margin, top = y, right = margin + S(4), bottom = y + bannerH };
-        Win32.FillRect(hdc, ref borderRect, borderBrush);
-        Win32.DeleteObject(borderBrush);
-
-        Win32.SelectObject(hdc, _hFontBannerBold);
-        Win32.SetTextColor(hdc, CLR_BANNER_TITLE);
-        int line1Y = y + S(9);
-        var bannerLine1 = new Win32.RECT { left = bannerTextX, top = line1Y, right = cw - margin - S(8), bottom = line1Y + S(28) };
-        Win32.DrawTextW(hdc, "Phase de tests", -1, ref bannerLine1, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
-
-        // Ligne 2 : "Après quelques jours d'utilisation, " (GDI) + "donnez votre avis" (lien STATIC)
-        int line2Y = line1Y + S(28);
-        string prefix = "Après quelques jours d'utilisation, ";
-        Win32.SelectObject(hdc, _hFontText);
-        Win32.SetTextColor(hdc, CLR_BANNER_TEXT);
-        var prefixRect = new Win32.RECT { left = bannerTextX, top = line2Y, right = cw - margin, bottom = line2Y + S(24) };
-        Win32.DrawTextW(hdc, prefix, -1, ref prefixRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
-
-        // Mesurer le préfixe et repositionner le lien
-        var measurePrefix = new Win32.RECT { left = 0, top = 0, right = 9999, bottom = 9999 };
-        Win32.DrawTextW(hdc, prefix, -1, ref measurePrefix, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX | Win32.DT_CALCRECT);
-        Win32.SetWindowPos(_hWndLinkBetaBanner, IntPtr.Zero,
-            bannerTextX + measurePrefix.right, line2Y, S(160), S(26),
-            Win32.SWP_NOZORDER | Win32.SWP_NOACTIVATE);
-
-        y += bannerH + S(18);
+        y += S(18);
 
         // ── Titre ──
         Win32.SelectObject(hdc, _hFontStepSummary);
@@ -1189,7 +1147,7 @@ sealed class OnboardingWindow : IDisposable
 
     private void DrawFeature(IntPtr hdc, int margin, int cw, ref int y, string number, string title, string description)
     {
-        DrawStepCard(hdc, margin, cw, ref y, number, title, description);
+        DrawStepCard(hdc, margin, cw, ref y, number, title, description, FEATURE_CARD_MIN_H);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1303,6 +1261,12 @@ sealed class OnboardingWindow : IDisposable
     private void DrawStepCardWithRuns(IntPtr hdc, int margin, int cw, ref int y, string number, string title,
         params (string Text, uint Color, IntPtr Font)[] descriptionRuns)
     {
+        DrawStepCardWithRuns(hdc, margin, cw, ref y, number, title, STEP_CARD_MIN_H, descriptionRuns);
+    }
+
+    private void DrawStepCardWithRuns(IntPtr hdc, int margin, int cw, ref int y, string number, string title,
+        int minCardHeight, params (string Text, uint Color, IntPtr Font)[] descriptionRuns)
+    {
         int cardTop = y;
         int cardPaddingX = S(16);
         int cardPaddingY = S(12);
@@ -1313,7 +1277,7 @@ sealed class OnboardingWindow : IDisposable
         int textWidth = contentWidth - cardPaddingX * 2 - badgeW - badgeGap;
         int titleHeight = S(24);
         int descHeight = GdiHelpers.MeasureColoredRunsHeight(hdc, textWidth, S(22), descriptionRuns);
-        int cardHeight = Math.Max(S(78), cardPaddingY * 2 + titleHeight + descHeight + S(4));
+        int cardHeight = Math.Max(S(minCardHeight), cardPaddingY * 2 + titleHeight + descHeight + S(4));
 
         var cardRect = new Win32.RECT { left = margin, top = cardTop, right = cw - margin, bottom = cardTop + cardHeight };
         GdiHelpers.DrawPanel(hdc, cardRect, CLR_PANEL_BG, CLR_PANEL_BORDER, CLR_BADGE_BG, S(4));
@@ -1337,10 +1301,10 @@ sealed class OnboardingWindow : IDisposable
 
     private void DrawFeatureWithHighlight(IntPtr hdc, int margin, int cw, ref int y, string number, string title, string description)
     {
-        DrawStepCardWithRuns(hdc, margin, cw, ref y, number, title, GetStyledDescriptionRuns(number, description));
+        DrawStepCardWithRuns(hdc, margin, cw, ref y, number, title, FEATURE_CARD_MIN_H, GetStyledDescriptionRuns(number, description));
     }
 
-    private void DrawStepCard(IntPtr hdc, int margin, int cw, ref int y, string number, string title, string description)
+    private void DrawStepCard(IntPtr hdc, int margin, int cw, ref int y, string number, string title, string description, int minCardHeight = STEP_CARD_MIN_H)
     {
         int cardTop = y;
         int cardPaddingX = S(16);
@@ -1352,7 +1316,7 @@ sealed class OnboardingWindow : IDisposable
         int textWidth = contentWidth - cardPaddingX * 2 - badgeW - badgeGap;
         int titleHeight = S(24);
         int descHeight = MeasureTextHeight(hdc, _hFontText, description, textWidth);
-        int cardHeight = Math.Max(S(78), cardPaddingY * 2 + titleHeight + descHeight + S(4));
+        int cardHeight = Math.Max(S(minCardHeight), cardPaddingY * 2 + titleHeight + descHeight + S(4));
 
         var cardRect = new Win32.RECT { left = margin, top = cardTop, right = cw - margin, bottom = cardTop + cardHeight };
         GdiHelpers.DrawPanel(hdc, cardRect, CLR_PANEL_BG, CLR_PANEL_BORDER, CLR_BADGE_BG, S(4));

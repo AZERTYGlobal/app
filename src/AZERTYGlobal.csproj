@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>AZERTY Global</AssemblyName>
     <RootNamespace>AZERTYGlobal</RootNamespace>
-    <Version>0.9.8</Version>
+    <Version>0.11.0</Version>
     <Company>AZERTY Global</Company>
     <Product>AZERTY Global</Product>
     <Copyright>© 2017-2026 Antoine Olivier — EUPL 1.2</Copyright>
@@ -27,6 +27,18 @@
     <StackTraceSupport>false</StackTraceSupport>
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
     <OptimizationPreference>Size</OptimizationPreference>
+
+    <!-- Audit sécu 2026-05 SEV-A5-01 : Control Flow Guard pour defense-in-depth contre
+         exploitation de corruption mémoire dans le code AOT natif. Ajoute le bit
+         IMAGE_DLLCHARACTERISTICS_GUARD_CF (0x4000) au binaire publié. -->
+    <ControlFlowGuard>Guard</ControlFlowGuard>
+
+    <!-- Audit sécu 2026-05 SEV-A4-02 : reproductibilité binaire explicite. -->
+    <Deterministic>true</Deterministic>
+
+    <!-- Audit sécu 2026-05 : activer les analyseurs sécurité .NET (CA1xxx, CA2xxx, CA5xxx). -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
 
     <!-- Manifest applicatif embarqué : déclare DPI awareness PerMonitorV2 + supportedOS Win10/11.
          Fixe le WARNING « DPIAwarenessValidation » du WACK v0.9.7 (test de compatibilité DPI). -->

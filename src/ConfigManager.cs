@@ -22,6 +22,7 @@ static class ConfigManager
         lock (_lock)
         {
             _configPath = path;
+            _logDirectoryOverride = Path.GetDirectoryName(path);
             _cache = null;
             _compatibilityCache = null;
         }
@@ -313,9 +314,38 @@ static class ConfigManager
     // ═══════════════════════════════════════════════════════════════
 
     /// <summary>Dossier de logs (LocalAppData en MSIX, à côté de l'exe sinon).</summary>
-    public static string LogDirectory => IsPackaged
+    private static string? _logDirectoryOverride;
+    public static string LogDirectory => _logDirectoryOverride ?? (IsPackaged
         ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AZERTY Global")
-        : AppContext.BaseDirectory;
+        : AppContext.BaseDirectory);
+
+    private static readonly object _logFlushLock = new();
+
+    private static void AppendLogEntry(string logDir, string logFile, string logEntry)
+    {
+        lock (_logFlushLock)
+        {
+            try { Directory.CreateDirectory(logDir); File.AppendAllText(logFile, logEntry); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Audit sécu 2026-05 SEV-A1-01 : sanitize une exception pour log.
+    /// Limite à GetType().Name + premier segment de Message.
+    /// Évite de logger stack traces complètes, paths absolus user, données partielles.
+    /// </summary>
+    internal static string SanitizeException(Exception? ex)
+    {
+        if (ex == null) return "null";
+        var typeName = ex.GetType().Name;
+        var msg = ex.Message ?? "";
+        var nlIdx = msg.IndexOf('\n');
+        if (nlIdx >= 0) msg = msg.Substring(0, nlIdx);
+        if (msg.Length > 200) msg = msg.Substring(0, 200) + "…";
+        msg = System.Text.RegularExpressions.Regex.Replace(msg,
+            @"[A-Z]:\\Users\\[^\\]+\\", @"<UserDir>\");
+        return $"{typeName}: {msg}";
+    }
 
     /// <summary>Écrit une entrée dans error.log de façon asynchrone et non-bloquante.</summary>
     public static void Log(string context, Exception ex)
@@ -325,7 +355,7 @@ static class ConfigManager
         var logFile = Path.Combine(logDir, "error.log");
         ThreadPool.QueueUserWorkItem(_ =>
         {
-            try { Directory.CreateDirectory(logDir); File.AppendAllText(logFile, logEntry); } catch { }
+            AppendLogEntry(logDir, logFile, logEntry);
         });
     }
 
@@ -344,7 +374,7 @@ static class ConfigManager
         var logFile = Path.Combine(logDir, "error.log");
         ThreadPool.QueueUserWorkItem(_ =>
         {
-            try { Directory.CreateDirectory(logDir); File.AppendAllText(logFile, logEntry); } catch { }
+            AppendLogEntry(logDir, logFile, logEntry);
         });
     }
 
@@ -353,16 +383,12 @@ static class ConfigManager
     /// (AntiCheatDetected, OverrideInvalidCleanup) qui doivent être persistés même si
     /// l'app crash juste après. Acquiert un lock sur _logFlushLock.
     /// </summary>
-    private static readonly object _logFlushLock = new();
     public static void LogCompatCriticalEvent(string eventName, string details)
     {
         var logDir = LogDirectory;
         var logEntry = $"[{DateTime.Now:s}] {eventName}: {details}\n";
         var logFile = Path.Combine(logDir, "error.log");
-        lock (_logFlushLock)
-        {
-            try { Directory.CreateDirectory(logDir); File.AppendAllText(logFile, logEntry); } catch { }
-        }
+        AppendLogEntry(logDir, logFile, logEntry);
     }
 
     /// <summary>

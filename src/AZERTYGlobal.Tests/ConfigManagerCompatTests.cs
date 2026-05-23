@@ -112,6 +112,40 @@ public class ConfigManagerCompatTests : IDisposable
     }
 
     [Fact]
+    public void LogCompatEvent_ConcurrentWrites_ProducesCompleteLines()
+    {
+        const int count = 100;
+        Parallel.For(0, count, i => ConfigManager.LogCompatEvent("CompatStress", $"event-{i:D3}"));
+
+        var logPath = Path.Combine(_tempDir, "error.log");
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        string[] lines = Array.Empty<string>();
+        while (DateTime.UtcNow < deadline)
+        {
+            if (File.Exists(logPath))
+            {
+                try
+                {
+                    lines = File.ReadAllLines(logPath);
+                    if (lines.Length >= count) break;
+                }
+                catch (IOException)
+                {
+                    // A writer can still be flushing the log; retry until the deadline.
+                }
+            }
+            Thread.Sleep(25);
+        }
+
+        Assert.Equal(count, lines.Length);
+        Assert.All(lines, line =>
+        {
+            Assert.StartsWith("[", line);
+            Assert.Contains("CompatStress: event-", line);
+        });
+    }
+
+    [Fact]
     public void EmptyProcessName_NoOp()
     {
         ConfigManager.SetCompatibilityOverride("", "forceOn");

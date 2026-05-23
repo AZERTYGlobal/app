@@ -21,17 +21,13 @@ AZERTY Global est l'AZERTY corrigé : mêmes lettres, meilleure ponctuation, maj
 Installez l'application, activez-la — c'est tout. Aucun droit administrateur requis.
 
 
-🧪 BÊTA EN COURS — VOTRE AVIS COMPTE
-Testez AZERTY Global et donnez votre avis : https://azerty.global/beta
-
-
 🔤 5 AMÉLIORATIONS, 99% DES HABITUDES PRÉSERVÉES
 
-1. Verrouillage Majuscule intelligent — É, È, Ç, À en un seul appui
-2. Point en accès direct — échangé avec le point-virgule
-3. @ et # sur la touche en haut à gauche
-4. Symboles de programmation { } [ ] | \ accessibles — sur la rangée de repos avec AltGr
-5. Accents internationaux sur la touche ù — accent aigu ´, grave ` et tilde ~
+1. Verrouillage Majuscule intelligent — n'affecte que les lettres → É, È, Ç, À en un appui
+2. Point en accès direct — point et point-virgule échangés
+3. @ et # sur la touche ²
+4. Symboles de programmation sur la rangée de repos — { } [ ] | \ avec AltGr + D F G H J K
+5. Accents internationaux sur la touche ù — accent aigu ´ et grave ` remplacent le ù et le % qui sont déplacés
 
 
 📝 TYPOGRAPHIE FRANÇAISE PARFAITE
@@ -66,10 +62,10 @@ Vous cherchez un symbole ? Tapez son nom et l'application vous montre où il se 
 
 
 🔒 RESPECT DE LA VIE PRIVÉE
-• Zéro collecte de données
-• Aucune connexion réseau (100% hors ligne)
-• Aucune télémétrie
+• Aucune télémétrie et aucun envoi réseau
+• Fonctionne hors ligne
 • Les frappes ne sont ni enregistrées, ni stockées, ni transmises
+• Des journaux techniques locaux peuvent être écrits pour diagnostiquer les erreurs et la compatibilité
 
 
 ✅ GRATUIT ET OPEN SOURCE
@@ -79,7 +75,12 @@ Site web : https://azerty.global
 
 ### Nouveautés de cette version (notes de version)
 
-Version 0.9.8 :
+Version 0.11.0 :
+ • Disposition synchronisée avec la version actuelle d'AZERTY Global : nouveaux accès pour #, ^, backtick, Latin étendu, tiret insécable et espaces insécables.
+ • Recherche de caractères mise à jour avec 1032 entrées d'index, dont 1003 caractères Unicode et 29 touches mortes.
+ • Les touches mortes déplacées et les tooltips du clavier virtuel sont alignés avec le site azerty.global.
+
+Version 0.10.0 :
  • Nouvelle entrée « Exercices » dans le menu de la zone de notification : permet de relancer les 6 exercices d'apprentissage à tout moment, en repartant du premier.
  • Suppression de la notification Windows redondante lors des bascules on/off : seule la fenêtre flottante en haut à droite reste affichée.
  • Compatibilité jeux entièrement repensée : les caractères AZERTY Global (@, É, «», accents, ligatures…) s'affichent désormais correctement dans les chats Minecraft, Trackmania et la plupart des jeux Unity, SDL ou GLFW, ainsi que dans les champs de recherche modés (JEI inclus).
@@ -140,17 +141,13 @@ AZERTY Global is the fixed AZERTY: same letters, better punctuation, easy accent
 Install the app, enable it — that's it. No admin rights required.
 
 
-🧪 BETA IN PROGRESS — YOUR FEEDBACK MATTERS
-Try AZERTY Global and share your feedback: https://azerty.global/beta
-
-
 🔤 5 IMPROVEMENTS, 99% OF YOUR HABITS PRESERVED
 
-1. Smart Caps Lock — É, È, Ç, À in a single keystroke
-2. Direct period access — swapped with semicolon
-3. @ and # on the top-left key
-4. Programming symbols { } [ ] | \ accessible — on the home row with AltGr
-5. International accents on the ù key — acute ´, grave ` and tilde ~
+1. Smart Caps Lock — only affects letters → É, È, Ç, À in one key press
+2. Direct period access — period and semicolon swapped
+3. @ and # on the ² key
+4. Programming symbols on the home row — { } [ ] | \ with AltGr + D F G H J K
+5. International accents on the ù key — acute ´ and grave ` replace ù and %, which are moved
 
 
 📝 PERFECT FRENCH TYPOGRAPHY
@@ -198,7 +195,12 @@ Website: https://azerty.global
 
 ### What's new (release notes)
 
-Version 0.9.8:
+Version 0.11.0:
+ • Keyboard layout synchronized with the current AZERTY Global layout: updated shortcuts for #, ^, backtick, Extended Latin, non-breaking hyphen and non-breaking spaces.
+ • Character search updated with 1032 indexed entries, including 1003 Unicode characters and 29 dead keys.
+ • Moved dead keys and virtual keyboard tooltips now match azerty.global.
+
+Version 0.10.0:
  • New "Exercises" entry in the system tray menu: lets you replay the 6 learning exercises any time, starting from the first one.
  • Removed redundant Windows notification on toggle on/off: only the floating top-right window remains.
  • Completely redesigned game compatibility: AZERTY Global characters (@, É, «», accents, ligatures…) now appear correctly in Minecraft chat, Trackmania and most Unity, SDL or GLFW games, including modded search fields (JEI included).
@@ -264,24 +266,28 @@ contact@azerty.global
 
 ### Notes pour l'équipe de certification Microsoft
 
+**v0.11.0** : synchronisation des ressources embarquées avec la disposition actuelle d'AZERTY Global. Le bundle 0.11.0 reste à produire avant soumission.
+
+**v0.10.0** : audit sécurité indépendant 2026-05 appliqué (9 patches : Control Flow Guard activé sur AOT, gestion défensive du callback hook et des allocations natives, anonymisation HMAC-SHA256 des logs de compatibilité, marker d'injection randomisé au démarrage, mutex `Local\` anti-squat, lecture atomique du contexte foreground, build déterministe, NETAnalyzers actifs, CI GitHub Actions avec attestation SLSA L1). Voir `AUDIT-SECURITY-v0.10.0.md`.
+
 Cette application utilise un hook clavier bas niveau (WH_KEYBOARD_LL via SetWindowsHookEx) pour intercepter et remapper les frappes clavier. C'est le mécanisme standard de Windows pour les dispositions de clavier logicielles.
 
 Points importants :
  • Le hook ne s'injecte dans aucun processus externe — tout le traitement se fait dans le processus de l'application.
  • L'application affiche un écran de consentement (OnboardingWindow) au premier lancement, conformément à la politique Store 10.2.8 sur la transparence des logiciels qui modifient le comportement du système.
- • Aucune donnée n'est collectée ni transmise — l'application fonctionne 100 % hors ligne.
+ • Aucune frappe n'est enregistrée, stockée ou transmise. L'application ne transmet aucune donnée : elle fonctionne hors ligne ; seuls des journaux techniques locaux peuvent être écrits pour diagnostiquer les erreurs et la compatibilité.
  • L'application est un exécutable .NET 8.0 AOT natif (pas de runtime .NET requis).
  • La capacité runFullTrust est requise car c'est une application Desktop Bridge Win32.
 
-Nouveautés v0.9.7 — APIs additionnelles pour la couche compatibilité jeux :
+APIs additionnelles introduites v0.9.7 pour la couche compatibilité jeux (toujours présentes en v0.9.8 / v0.10.0 / v0.11.0) :
  • SetWinEventHook(EVENT_SYSTEM_FOREGROUND) — pour détecter le changement d'application au premier plan et adapter le mode d'injection en conséquence.
  • OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ) + EnumProcessModulesEx + GetModuleFileNameExW — pour identifier les frameworks gaming chargés (GLFW, SDL, Unity, etc.) et basculer en mode d'injection compatible. Échoue gracieusement (try/catch) sur les processus protégés par un anti-cheat — comportement attendu et géré.
  • Aucune écriture, aucune injection de DLL ou de code dans les processus externes. Lecture seule des noms de modules pour déterminer le mode d'injection à utiliser.
  • L'application se DÉSACTIVE automatiquement sur les jeux protégés par un anti-cheat kernel-level connu (Vanguard, EAC, BattlEye, RICOCHET, etc.) — politique de sécurité utilisateur pour éviter tout risque de bannissement.
 
-### Note WACK v0.9.7 — DPIAwarenessValidation WARNING
+### Note WACK — DPIAwarenessValidation WARNING (persistant depuis v0.9.7, confirmé v0.9.8)
 
-Le rapport WACK v0.9.7 (`wack-report-v0.9.7.xml`) contient un WARNING sur le test `DPIAwarenessValidation` avec le message « Impossible de traiter le binaire ». Ce WARNING est un **faux positif lié au scanner WACK qui ne parse pas correctement les binaires .NET 8 Native AOT**.
+Le rapport WACK courant (`wack-report-v0.9.8.xml`) contient un WARNING sur le test `DPIAwarenessValidation` avec le message « Impossible de traiter le binaire ». Ce WARNING est un **faux positif lié au scanner WACK qui ne parse pas correctement les binaires .NET 8 Native AOT** — persistant depuis v0.9.7.
 
 L'application est bel et bien DPI-aware en mode Per-Monitor V2, vérifiable de deux façons :
 
@@ -319,4 +325,4 @@ Les fichiers suivants sont dans `msix/Assets/` :
 
 ---
 
-*Dernière mise à jour : 2026-05-02 (v0.9.7 — refonte compat jeux + fixes audit + corrections UX post-audit + notes WACK)*
+*Dernière mise à jour : 2026-05-23 (préparation Store 0.11.0)*

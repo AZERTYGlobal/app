@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace AZERTYGlobal;
 
 /// <summary>
-/// Charge et parse le fichier AZERTY Global Beta.json.
+/// Charge et parse la ressource embarquée de disposition AZERTY Global.
 /// Construit les tables de mapping en mémoire.
 /// </summary>
 static class LayoutLoader

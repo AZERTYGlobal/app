@@ -7,7 +7,7 @@ namespace AZERTYGlobal;
 static class Program
 {
     /// <summary>Version affichée partout (tooltip, À propos, etc.).</summary>
-    internal const string Version = "0.9.8";
+    internal const string Version = "0.11.0";
 
     [STAThread]
     static void Main()
@@ -15,8 +15,13 @@ static class Program
         // Déclarer l'app DPI-aware AVANT toute création de fenêtre
         try { Win32.SetProcessDpiAwarenessContext((IntPtr)(-4)); } // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
         catch { try { Win32.SetProcessDPIAware(); } catch { } }   // Fallback Windows 8.1-
-        // Empêcher les instances multiples
-        using var mutex = new Mutex(true, "AZERTYGlobal_SingleInstance", out bool isNew);
+        // Empêcher les instances multiples — Audit sécu 2026-05 SEV-A2-03 :
+        // préfixe Local\ explicite + qualif SID pour éviter qu'un autre process
+        // user-land squatte le nom et bloque le démarrage (DoS trivial sans
+        // préfixe). Local\ scope = current session uniquement, donc safe.
+        var sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "anon";
+        var mutexName = $"Local\\AZERTYGlobalSingleInstance.{sid}";
+        using var mutex = new Mutex(true, mutexName, out bool isNew);
         if (!isNew)
         {
             Win32.MessageBoxW(IntPtr.Zero,
@@ -35,7 +40,9 @@ static class Program
             try { Directory.CreateDirectory(ConfigManager.LogDirectory); } catch { }
             try
             {
-                File.AppendAllText(logPath, $"[{DateTime.Now:s}] FATAL: {e.ExceptionObject}\n");
+                // Audit sécu 2026-05 SEV-A1-01 : sanitize au lieu de ex.ToString() complet.
+                var safeMessage = ConfigManager.SanitizeException(e.ExceptionObject as Exception);
+                File.AppendAllText(logPath, $"[{DateTime.Now:s}] FATAL: {safeMessage}\n");
             }
             catch { }
             Win32.MessageBoxW(IntPtr.Zero,

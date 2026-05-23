@@ -363,7 +363,7 @@ sealed class TrayApplication : IDisposable
                             _settings.Show();
                             break;
                         case IDM_SITE: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global", null, null, 1); break;
-                        case IDM_FEEDBACK: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/beta", null, null, 1); break;
+                        case IDM_FEEDBACK: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/feedback", null, null, 1); break;
                         case IDM_BUG: OnReportBug(); break;
                         case IDM_SUPPORT: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/soutien", null, null, 1); break;
                         case IDM_ONBOARDING:
@@ -667,8 +667,8 @@ sealed class TrayApplication : IDisposable
         // Liens et infos
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_ONBOARDING, "Fenêtre de bienvenue");
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_SITE, "Visiter le site web");
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_FEEDBACK, "Donner son avis sur AZERTY Global");
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_BUG, "Signaler un bug (version + OS)");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_FEEDBACK, "Donner son avis");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_BUG, "Signaler un bug");
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_SUPPORT, "❤️ Soutenir le projet");
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
 

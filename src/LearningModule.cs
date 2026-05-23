@@ -305,6 +305,7 @@ sealed class LearningModule : IDisposable
     // Highlight du prochain caractère
     private readonly HashSet<uint> _highlightedScancodes = new();
     private readonly HashSet<string> _highlightedLabels = new();
+    private readonly HashSet<string> _highlightedContextIds = new();
     private string _highlightType = ""; // "direct", "step1", "step2"
     private CharacterSearch.MethodData? _pendingStep2;
 
@@ -1441,8 +1442,47 @@ sealed class LearningModule : IDisposable
     {
         _highlightedScancodes.Clear();
         _highlightedLabels.Clear();
+        _highlightedContextIds.Clear();
         _highlightType = "";
         _pendingStep2 = null;
+    }
+
+    private void AddContextHighlight(string contextId)
+    {
+        _highlightedContextIds.Add(contextId);
+    }
+
+    private void AddShiftHighlight()
+    {
+        AddContextHighlight(VirtualKeyboard.ContextShiftLeft);
+    }
+
+    private CharacterSearch.MethodData? CreateDeadKeyMethod(string deadKey, string key, string layer)
+    {
+        if (!_dkActivations.TryGetValue(deadKey, out var dkAct)) return null;
+        return new CharacterSearch.MethodData
+        {
+            Type = "deadkey",
+            DeadKey = deadKey,
+            Key = key,
+            Layer = layer,
+            DkActivationKey = dkAct.key,
+            DkActivationLayer = dkAct.layer,
+        };
+    }
+
+    private CharacterSearch.MethodData? GetLanguageExerciseMethod(string character)
+    {
+        return character switch
+        {
+            "\u00e3" => CreateDeadKeyMethod("dk_tilde", "KeyQ", "Base"),  // ã
+            "\u00c3" => CreateDeadKeyMethod("dk_tilde", "KeyQ", "Shift"), // Ã
+            "\u00f8" => CreateDeadKeyMethod("dk_stroke", "KeyO", "Base"), // ø
+            "\u00d8" => CreateDeadKeyMethod("dk_stroke", "KeyO", "Shift"), // Ø
+            "\u0142" => CreateDeadKeyMethod("dk_stroke", "KeyL", "Base"), // ł
+            "\u0141" => CreateDeadKeyMethod("dk_stroke", "KeyL", "Shift"), // Ł
+            _ => null,
+        };
     }
 
     private void UpdateHighlight()
@@ -1465,6 +1505,12 @@ sealed class LearningModule : IDisposable
             method = capsAlt;
         }
 
+        if (_currentStep == _steps.Length - 1
+            && GetLanguageExerciseMethod(nextChar) is { } languageMethod)
+        {
+            method = languageMethod;
+        }
+
         // Cas spécial : layer "Caps" — gestion dynamique
         if (method.Layer.StartsWith("Caps") && method.Type == "direct")
         {
@@ -1477,7 +1523,7 @@ sealed class LearningModule : IDisposable
                 if (VirtualKeyboard.KeyCodeToScancode.TryGetValue(method.Key, out var sc))
                     _highlightedScancodes.Add(sc);
                 if (method.Layer == "Caps+Shift" || method.Layer == "CapsShift")
-                    _highlightedLabels.Add("Maj ⇧");
+                    AddShiftHighlight();
             }
             return;
         }
@@ -1497,10 +1543,9 @@ sealed class LearningModule : IDisposable
             }
             else
             {
-                // Étape 1 + étape 2 superposées
+                // Montrer seulement l'étape 1. L'étape 2 apparaîtra après activation de la touche morte.
                 _highlightType = "step1";
                 AddKeyHighlight(method.DkActivationKey, method.DkActivationLayer);
-                _pendingStep2 = method;
             }
         }
 
@@ -1534,7 +1579,7 @@ sealed class LearningModule : IDisposable
             if (_mapper.CapsLockActive && isLetter)
                 _highlightedLabels.Add("Verr. Maj.");
             else
-                _highlightedLabels.Add("Maj \u21e7");
+                AddShiftHighlight();
         }
         if (needsAltGr)
             _highlightedLabels.Add("AltGr");
@@ -1542,8 +1587,9 @@ sealed class LearningModule : IDisposable
 
     private bool IsKeyHighlighted(in VirtualKeyboard.VisualKey vk)
     {
-        if (_highlightedScancodes.Count == 0 && _highlightedLabels.Count == 0) return false;
+        if (_highlightedScancodes.Count == 0 && _highlightedLabels.Count == 0 && _highlightedContextIds.Count == 0) return false;
         if (vk.Scancode != 0 && _highlightedScancodes.Contains(vk.Scancode)) return true;
+        if (vk.IsContextual && vk.ContextId != null && _highlightedContextIds.Contains(vk.ContextId)) return true;
         if (vk.IsContextual && _highlightedLabels.Contains(vk.Label)) return true;
         return false;
     }
@@ -1565,15 +1611,23 @@ sealed class LearningModule : IDisposable
         bool capsCoversShift = needsShift && _mapper.CapsLockActive && targetIsLetter;
         if (vk.IsContextual)
         {
-            if (needsShift && !capsCoversShift && vk.Label == "Maj ⇧") return true;
+            if (needsShift && !capsCoversShift && vk.ContextId == VirtualKeyboard.ContextShiftLeft) return true;
             if (capsCoversShift && vk.Label == "Verr. Maj.") return true;
             if (needsAltGr && vk.Label == "AltGr") return true;
         }
         return false;
     }
 
-    private (uint border, uint bg) GetHighlightColors(bool isStep2)
+    private (uint border, uint bg) GetHighlightColors(bool isStep2, in VirtualKeyboard.VisualKey vk)
     {
+        if (!isStep2
+            && vk.Label == "Verr. Maj."
+            && _currentStep < _steps.Length
+            && _steps[_currentStep].KeepCapsHighlight)
+        {
+            return (CLR_HL_DIRECT, CLR_HL_DIRECT_BG);
+        }
+
         if (isStep2) return (CLR_HL_STEP2, CLR_HL_STEP2_BG);
         return _highlightType switch
         {
@@ -2023,7 +2077,7 @@ sealed class LearningModule : IDisposable
             else if ((isHighlighted || isStep2) && isModActive)
             {
                 // À appuyer + activé → vert plein
-                var (hlBorder, hlBg) = GetHighlightColors(isStep2);
+                var (hlBorder, hlBg) = GetHighlightColors(isStep2, vk);
                 bgColor = hlBg;
                 borderColor = hlBorder;
                 borderWidth = 2;
@@ -2032,7 +2086,7 @@ sealed class LearningModule : IDisposable
             {
                 // À appuyer (pas encore activé) → contour seul
                 bgColor = vk.IsContextual ? CLR_KEY_CTX : CLR_KEY;
-                var (hlBorder, _) = GetHighlightColors(isStep2);
+                var (hlBorder, _) = GetHighlightColors(isStep2, vk);
                 borderColor = hlBorder;
                 borderWidth = 2;
             }
@@ -2128,11 +2182,14 @@ sealed class LearningModule : IDisposable
             }
 
             // Badge highlight (1 ou 2)
-            if (isHighlighted && _highlightType == "step1")
+            bool keepCapsStatusKey = vk.Label == "Verr. Maj."
+                && _currentStep < _steps.Length
+                && _steps[_currentStep].KeepCapsHighlight;
+            if (isHighlighted && _highlightType == "step1" && !keepCapsStatusKey)
             {
                 PaintBadge(hdc, kx + kw - S(12), ky + S(1), "1", CLR_HL_STEP1);
             }
-            if (isStep2)
+            else if (((isHighlighted && _highlightType == "step2") || isStep2) && !keepCapsStatusKey)
             {
                 PaintBadge(hdc, kx + kw - S(12), ky + S(1), "2", CLR_HL_STEP2);
             }
@@ -2257,9 +2314,9 @@ sealed class LearningModule : IDisposable
             return;
         }
 
-        // Filtrer les couches masquées dans le mini-onboarding (tooltips inchangés —
-        // cf. HiddenDeadKeysInOnboarding / HiddenSlotsInOnboarding).
-        keyDef = FilterKeyForOnboarding(keyDef, vk.Scancode);
+        // Exercices 1 à 5 : affichage simplifié. Exercice 6 : simplifié + quelques aides langues.
+        bool languageExercise = _currentStep == _steps.Length - 1;
+        keyDef = FilterKeyForOnboarding(keyDef, vk.Scancode, languageExercise);
 
         // ── 2. Dispatcher selon la famille de touche ──
         if (AccentedNumericScancodes.Contains(vk.Scancode))
@@ -2601,8 +2658,8 @@ sealed class LearningModule : IDisposable
     };
 
     /// <summary>
-    /// Touches mortes peu utilisées masquées sur le clavier virtuel du mini-onboarding
-    /// pour ne pas surcharger l'utilisateur. Les tooltips au survol restent inchangés.
+    /// Touches mortes peu utilisées masquées sur le clavier virtuel des exercices.
+    /// L'exercice 6 réaffiche uniquement quelques aides utiles aux mots étrangers.
     /// </summary>
     private static readonly HashSet<string> HiddenDeadKeysInOnboarding = new()
     {
@@ -2629,13 +2686,28 @@ sealed class LearningModule : IDisposable
         "dk_cyrillic",
     };
 
+    private static readonly HashSet<string> LanguageExerciseDeadKeys = new()
+    {
+        "dk_stroke",
+    };
+
     /// <summary>
-    /// Caractères directs (non-dead-key) masqués sur le clavier virtuel du mini-onboarding,
+    /// Caractères directs (non-dead-key) masqués sur le clavier virtuel des exercices 1 à 5,
     /// identifiés par (scancode, layer). Layers : 0=Base, 1=Shift, 2=AltGr, 3=ShiftAltGr,
     /// 4=Caps, 5=CapsShift, 6=CapsAltGr, 7=CapsShiftAltGr.
     /// </summary>
     private static readonly HashSet<(uint scancode, int layer)> HiddenSlotsInOnboarding = new()
     {
+        (0x56, 2), // B00 AltGr → ≤
+        (0x56, 3), // B00 ShiftAltGr → ≥
+        (0x17, 2), // D08 AltGr → ^
+        (0x26, 2), // C09 AltGr → `
+        (0x32, 2), // B07 AltGr → <
+        (0x32, 3), // B07 ShiftAltGr → ¿
+        (0x33, 2), // B08 AltGr → >
+        (0x34, 2), // B09 AltGr → #
+        (0x35, 2), // B10 AltGr → ¡
+        (0x05, 2), // E04 AltGr → ’
         (0x05, 3), // E04 ShiftAltGr → ‘ (guillemet apostrophe simple ouvrant)
         (0x07, 3), // E06 ShiftAltGr → soft hyphen U+00AD
         (0x0B, 2), // E10 AltGr → @ (l'arobase principal sur E00 reste visible)
@@ -2643,28 +2715,39 @@ sealed class LearningModule : IDisposable
         (0x2D, 3), // B02 ShiftAltGr → ” (guillemet double fermant)
     };
 
-    private static string? FilterOnboardingSlot(uint scancode, int layer, string? value)
+    private static readonly HashSet<(uint scancode, int layer)> LanguageExerciseVisibleSlots = new()
+    {
+        (0x32, 3), // B07 ShiftAltGr → ¿
+        (0x35, 2), // B10 AltGr → ¡
+    };
+
+    private static string? FilterOnboardingSlot(uint scancode, int layer, string? value, bool languageExercise)
     {
         if (string.IsNullOrEmpty(value)) return value;
-        if (value.StartsWith("dk_") && HiddenDeadKeysInOnboarding.Contains(value)) return null;
-        if (HiddenSlotsInOnboarding.Contains((scancode, layer))) return null;
+        if (value.StartsWith("dk_")
+            && HiddenDeadKeysInOnboarding.Contains(value)
+            && !(languageExercise && LanguageExerciseDeadKeys.Contains(value)))
+            return null;
+        if (HiddenSlotsInOnboarding.Contains((scancode, layer))
+            && !(languageExercise && LanguageExerciseVisibleSlots.Contains((scancode, layer))))
+            return null;
         return value;
     }
 
-    private static KeyDefinition FilterKeyForOnboarding(KeyDefinition kd, uint scancode)
+    private static KeyDefinition FilterKeyForOnboarding(KeyDefinition kd, uint scancode, bool languageExercise)
     {
         return new KeyDefinition
         {
             Position = kd.Position,
             Scancode = kd.Scancode,
-            Base = FilterOnboardingSlot(scancode, 0, kd.Base),
-            Shift = FilterOnboardingSlot(scancode, 1, kd.Shift),
-            AltGr = FilterOnboardingSlot(scancode, 2, kd.AltGr),
-            ShiftAltGr = FilterOnboardingSlot(scancode, 3, kd.ShiftAltGr),
-            Caps = FilterOnboardingSlot(scancode, 4, kd.Caps),
-            CapsShift = FilterOnboardingSlot(scancode, 5, kd.CapsShift),
-            CapsAltGr = FilterOnboardingSlot(scancode, 6, kd.CapsAltGr),
-            CapsShiftAltGr = FilterOnboardingSlot(scancode, 7, kd.CapsShiftAltGr),
+            Base = FilterOnboardingSlot(scancode, 0, kd.Base, languageExercise),
+            Shift = FilterOnboardingSlot(scancode, 1, kd.Shift, languageExercise),
+            AltGr = FilterOnboardingSlot(scancode, 2, kd.AltGr, languageExercise),
+            ShiftAltGr = FilterOnboardingSlot(scancode, 3, kd.ShiftAltGr, languageExercise),
+            Caps = FilterOnboardingSlot(scancode, 4, kd.Caps, languageExercise),
+            CapsShift = FilterOnboardingSlot(scancode, 5, kd.CapsShift, languageExercise),
+            CapsAltGr = FilterOnboardingSlot(scancode, 6, kd.CapsAltGr, languageExercise),
+            CapsShiftAltGr = FilterOnboardingSlot(scancode, 7, kd.CapsShiftAltGr, languageExercise),
         };
     }
 

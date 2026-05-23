@@ -1,38 +1,55 @@
 {
   "layout_name": "AZERTY Global",
   "version": "2026",
-  "release_date": "2026-01-01",
+  "release_date": "2026-06-01",
   "author": "Antoine OLIVIER",
   "website": "https://azerty.global",
   "license": {
-    "name": "European Union Public Licence 1.2",
-    "spdx_id": "EUPL-1.2",
-    "url": "https://eupl.eu/1.2/fr/",
-    "summary": "Licence libre européenne. Usage commercial autorisé. Les modifications doivent être partagées sous licence compatible."
+      "name": "European Union Public Licence 1.2",
+      "spdx_id": "EUPL-1.2",
+      "url": "https://eupl.eu/1.2/fr/",
+      "summary": "Licence libre européenne. Usage commercial autorisé. Les modifications doivent être partagées sous licence compatible."
   },
-  "standard": "ISO/ANSI",
+  "platforms": {
+    "windows": {"min_version": "Windows 7", "formats": ["EXE installer", "Microsoft Store app"]},
+    "macos": {"min_version": "macOS 10.12 Sierra", "formats": [".keylayout"]},
+    "linux": {"min_version": "Ubuntu 20.04+, Debian 11+, Fedora 36+, Arch", "formats": ["XKB + XCompose"]}
+  },
+  "statistics": {
+    "physical_keys": 49,
+    "direct_characters": 131,
+    "dead_keys_count": 29,
+    "dead_key_combinations": 1014,
+    "total_unique_characters": 1003,
+    "supported_languages": "200+ languages, including all European languages using Latin, Greek or Cyrillic scripts"
+  },
+  "keyboard_type": {
+    "primary": "ISO 105-key",
+    "ansi_note": "Compatible with ANSI 104-key keyboards. Key B00 (VK_OEM_102, < >) is absent on ANSI layout; its characters are accessible via other means.",
+    "iso_extra_key": "B00"
+  },
   "country": "France",
   "description": "Final version of the AZERTY Global keyboard layout, created by Antoine OLIVIER",
   "philosophy": {
     "ambition": "Become the new French AZERTY standard across all operating systems, replacing AZERTY AFNOR within 5 years",
     "target_audience": [
-      "French-speaking general public and writers needing proper French typography (goal: millions of users)",
-      "Developers needing easy access to programming symbols",
-      "Anyone typing in European languages (foreign residents in France, French speakers learning languages)"
+        "French-speaking general public and writers needing proper French typography (goal: millions of users)",
+        "Developers needing easy access to programming symbols",
+        "Anyone typing in European languages (foreign residents in France, French speakers learning languages)"
     ],
     "design_principles": [
-      "Minimal changes from classic Windows AZERTY: fix flaws without revolution",
-      "Smart Caps Lock that only affects letters, with easy access to É, È, Ç, À",
-      "Programming symbols on AltGr home row ({ } [ ] | \\)",
-      "Full support for French and European languages",
-      "Intuitive placement: no stickers needed, easy to remember",
-      "Sparse AltGr layer to limit Ctrl+Alt conflicts; rare characters via dead keys"
+        "Minimal changes from classic Windows AZERTY: fix flaws without revolution",
+        "Smart Caps Lock that only affects letters, with easy access to É, È, Ç, À",
+        "Programming symbols on AltGr home row ({ } [ ] | \\)",
+        "Full support for French and European languages",
+        "Intuitive placement: no stickers needed, easy to remember",
+        "Sparse AltGr layer to limit Ctrl+Alt conflicts; rare characters via dead keys"
     ],
     "not_goals": [
-      "Radical ergonomic optimization (this is not a Bépo or Dvorak)",
-      "Compatibility with the AFNOR NF Z71-300 standard"
+        "Radical ergonomic optimization (this is not a Bépo or Dvorak)",
+        "Compatibility with the AFNOR NF Z71-300 standard"
     ]
-  },
+},
   "changes_from_traditional_azerty": {
     "Period and semicolon swapped on B08": "Period is more frequent than semicolon",
     "Smart Caps Lock: only affects letters": "Easy access to É, È, Ç, À without Shift",
@@ -41,92 +58,102 @@
     "ù and % moved to place acute and grave accents on C11": "Direct access to very common European accents",
     "µ, § and ¤ become dead keys for Greek alphabet, punctuation and currency": "Access to many more characters via these dead keys"
   },
+  "unchanged_from_traditional": [
+    "All 26 letter positions",
+    "All 10 digits (Shift+number row)",
+    "All standard shortcuts (Ctrl+Z/X/C/V/A/S, etc.)",
+    "French accented letters: é, è, ç, à",
+    "Punctuation: comma, colon, exclamation mark, parentheses, hyphen, underscore, double quote, apostrophe",
+    "Symbols: ampersand (&), equals, plus, asterisk, < >, dollar ($), pound (£), euro (€)",
+    "Circumflex and diaeresis dead keys"
+  ],
   "conventions": {
     "caps_lock_behavior": "Caps Lock only affects keys that produce letters (accented or not)",
     "caps": "If absent, use the base value (Caps lock does not affect symbols)",
     "caps_shift": "If absent, use the shift value (Caps lock does not affect symbols)",
     "caps_alt_gr": "If absent, use the alt_gr value (Caps Lock does not affect symbols)",
     "caps_shift_alt_gr": "If absent, use the shift_alt_gr value (Caps Lock does not affect symbols)",
-    "null_meaning": "No output for this key combination"
+    "null_meaning": "No output for this key combination",
+    "vk_naming": "VK_KEY_* codes correspond to the letter each key produces on the French AZERTY layout (VK_KEY_A = key that outputs 'a'). VK_OEM_* codes are named after the US QWERTY layout (e.g., VK_OEM_6 is labeled } ] because that key produces ] and } on US QWERTY, even though it produces ^ and ¨ on French AZERTY)."
   },
   "rows": [
     {
       "row_id": 1,
       "row_name": "Number Row",
       "keys": [
-        { "position": "E00", "scancode": "SC029", "base": "@",  "shift": "#", "alt_gr": "dk_misc_symbols", "shift_alt_gr": null, "finger": "left_pinky" },
-        { "position": "E01", "scancode": "SC002", "base": "&",  "shift": "1", "alt_gr": "dk_dot_above", "shift_alt_gr": "dk_dot_below", "finger": "left_pinky" },
-        { "position": "E02", "scancode": "SC003", "base": "é",  "shift": "2", "caps": "É", "alt_gr": "dk_double_acute", "shift_alt_gr": "dk_double_grave", "finger": "left_ring" },
-        { "position": "E03", "scancode": "SC004", "base": "\"", "shift": "3", "alt_gr": "dk_horn", "shift_alt_gr": "dk_hook", "finger": "left_middle" },
-        { "position": "E04", "scancode": "SC005", "base": "'",  "shift": "4", "alt_gr": "\u2019", "shift_alt_gr": "\u2018", "finger": "left_index" },
-        { "position": "E05", "scancode": "SC006", "base": "(",  "shift": "5", "alt_gr": "dk_breve", "shift_alt_gr": "dk_inverted_breve", "finger": "left_index" },
-        { "position": "E06", "scancode": "SC007", "base": "-",  "shift": "6", "alt_gr": "\u2011", "shift_alt_gr": "\u00AD", "finger": "right_index" },
-        { "position": "E07", "scancode": "SC008", "base": "è",  "shift": "7", "caps": "È", "alt_gr": "dk_stroke", "shift_alt_gr": "dk_horizontal_stroke", "finger": "right_index" },
-        { "position": "E08", "scancode": "SC009", "base": "_",  "shift": "8", "alt_gr": "dk_macron", "shift_alt_gr": "dk_extended_latin", "finger": "right_middle" },
-        { "position": "E09", "scancode": "SC00A", "base": "ç",  "shift": "9", "caps": "Ç", "alt_gr": "dk_cedilla", "shift_alt_gr": "dk_comma", "finger": "right_ring" },
-        { "position": "E10", "scancode": "SC00B", "base": "à",  "shift": "0", "caps": "À", "alt_gr": "@", "shift_alt_gr": "dk_phonetic", "finger": "right_pinky" },
-        { "position": "E11", "scancode": "SC00C", "base": ")",  "shift": "%", "alt_gr": "°", "shift_alt_gr": "dk_ring_above", "finger": "right_pinky" },
-        { "position": "E12", "scancode": "SC00D", "base": "=",  "shift": "+", "alt_gr": "dk_scientific", "shift_alt_gr": null, "finger": "right_pinky" }
+        {"position": "E00", "scancode": "SC029", "vk": "VK_OEM_7", "base": "@", "shift": "#", "alt_gr": "dk_misc_symbols", "shift_alt_gr": null, "finger": "left_pinky"},
+        {"position": "E01", "scancode": "SC002", "vk": "VK_KEY_1", "base": "&", "shift": "1", "alt_gr": "dk_hook", "shift_alt_gr": "dk_horn", "finger": "left_pinky"},
+        {"position": "E02", "scancode": "SC003", "vk": "VK_KEY_2", "base": "é", "shift": "2", "caps": "É", "alt_gr": "dk_double_acute", "shift_alt_gr": "dk_double_grave", "finger": "left_ring"},
+        {"position": "E03", "scancode": "SC004", "vk": "VK_KEY_3", "base": "\"", "shift": "3", "alt_gr": "dk_dot_below", "shift_alt_gr": "dk_dot_above", "finger": "left_middle"},
+        {"position": "E04", "scancode": "SC005", "vk": "VK_KEY_4", "base": "'", "shift": "4", "alt_gr": "’", "shift_alt_gr": "‘", "finger": "left_index"},
+        {"position": "E05", "scancode": "SC006", "vk": "VK_KEY_5", "base": "(", "shift": "5", "alt_gr": "dk_breve", "shift_alt_gr": "dk_inverted_breve", "finger": "left_index"},
+        {"position": "E06", "scancode": "SC007", "vk": "VK_KEY_6", "base": "-", "shift": "6", "alt_gr": "dk_extended_latin", "shift_alt_gr": "‑", "finger": "right_index"},
+        {"position": "E07", "scancode": "SC008", "vk": "VK_KEY_7", "base": "è", "shift": "7", "caps": "È", "alt_gr": "dk_stroke", "shift_alt_gr": "dk_horizontal_stroke", "finger": "right_index"},
+        {"position": "E08", "scancode": "SC009", "vk": "VK_KEY_8", "base": "_", "shift": "8", "alt_gr": "dk_macron", "shift_alt_gr": null, "finger": "right_middle"},
+        {"position": "E09", "scancode": "SC00A", "vk": "VK_KEY_9", "base": "ç", "shift": "9", "caps": "Ç", "alt_gr": "dk_cedilla", "shift_alt_gr": "dk_comma", "finger": "right_ring"},
+        {"position": "E10", "scancode": "SC00B", "vk": "VK_KEY_0", "base": "à", "shift": "0", "caps": "À", "alt_gr": "@", "shift_alt_gr": "dk_phonetic", "finger": "right_pinky"},
+        {"position": "E11", "scancode": "SC00C", "vk": "VK_OEM_4", "base": ")", "shift": "%", "alt_gr": "°", "shift_alt_gr": "dk_ring_above", "finger": "right_pinky"},
+        {"position": "E12", "scancode": "SC00D", "vk": "VK_OEM_PLUS", "base": "=", "shift": "+", "alt_gr": "dk_scientific", "shift_alt_gr": null, "finger": "right_pinky"}
       ]
     },
     {
       "row_id": 2,
       "row_name": "Top Letter Row",
       "keys": [
-        { "position": "D01", "scancode": "SC010", "base": "a", "shift": "A", "caps": "A", "caps_shift": "a", "alt_gr": "æ", "shift_alt_gr": "Æ", "caps_alt_gr": "Æ", "caps_shift_alt_gr": "æ", "finger": "left_pinky" },
-        { "position": "D02", "scancode": "SC011", "base": "z", "shift": "Z", "caps": "Z", "caps_shift": "z", "alt_gr": null, "shift_alt_gr": null, "finger": "left_ring" },
-        { "position": "D03", "scancode": "SC012", "base": "e", "shift": "E", "caps": "E", "caps_shift": "e", "alt_gr": "€", "shift_alt_gr": null, "finger": "left_middle" },
-        { "position": "D04", "scancode": "SC013", "base": "r", "shift": "R", "caps": "R", "caps_shift": "r", "alt_gr": null, "shift_alt_gr": null, "finger": "left_index" },
-        { "position": "D05", "scancode": "SC014", "base": "t", "shift": "T", "caps": "T", "caps_shift": "t", "alt_gr": "\u2013", "shift_alt_gr": "\u2014", "finger": "left_index" },
-        { "position": "D06", "scancode": "SC015", "base": "y", "shift": "Y", "caps": "Y", "caps_shift": "y", "alt_gr": null, "shift_alt_gr": null, "finger": "right_index" },
-        { "position": "D07", "scancode": "SC016", "base": "u", "shift": "U", "caps": "U", "caps_shift": "u", "alt_gr": "ù", "shift_alt_gr": "Ù", "caps_alt_gr": "Ù", "caps_shift_alt_gr": "ù", "finger": "right_index" },
-        { "position": "D08", "scancode": "SC017", "base": "i", "shift": "I", "caps": "I", "caps_shift": "i", "alt_gr": null, "shift_alt_gr": null, "finger": "right_middle" },
-        { "position": "D09", "scancode": "SC018", "base": "o", "shift": "O", "caps": "O", "caps_shift": "o", "alt_gr": "œ", "shift_alt_gr": "Œ", "caps_alt_gr": "Œ", "caps_shift_alt_gr": "œ", "finger": "right_ring" },
-        { "position": "D10", "scancode": "SC019", "base": "p", "shift": "P", "caps": "P", "caps_shift": "p", "alt_gr": null, "shift_alt_gr": null, "finger": "right_pinky" },
-        { "position": "D11", "scancode": "SC01A", "base": "dk_circumflex", "shift": "dk_diaeresis", "alt_gr": "dk_caron", "shift_alt_gr": "dk_ogonek", "finger": "right_pinky" },
-        { "position": "D12", "scancode": "SC01B", "base": "$", "shift": "£", "alt_gr": "¥", "shift_alt_gr": "dk_currencies", "finger": "right_pinky" }
+        {"position": "D01", "scancode": "SC010", "vk": "VK_KEY_A", "base": "a", "shift": "A", "caps": "A", "caps_shift": "a", "alt_gr": "æ", "shift_alt_gr": "Æ", "caps_alt_gr": "Æ", "caps_shift_alt_gr": "æ", "finger": "left_pinky"},
+        {"position": "D02", "scancode": "SC011", "vk": "VK_KEY_Z", "base": "z", "shift": "Z", "caps": "Z", "caps_shift": "z", "alt_gr": null, "shift_alt_gr": null, "finger": "left_ring"},
+        {"position": "D03", "scancode": "SC012", "vk": "VK_KEY_E", "base": "e", "shift": "E", "caps": "E", "caps_shift": "e", "alt_gr": "€", "shift_alt_gr": null, "finger": "left_middle"},
+        {"position": "D04", "scancode": "SC013", "vk": "VK_KEY_R", "base": "r", "shift": "R", "caps": "R", "caps_shift": "r", "alt_gr": null, "shift_alt_gr": null, "finger": "left_index"},
+        {"position": "D05", "scancode": "SC014", "vk": "VK_KEY_T", "base": "t", "shift": "T", "caps": "T", "caps_shift": "t", "alt_gr": "–", "shift_alt_gr": "—", "finger": "left_index"},
+        {"position": "D06", "scancode": "SC015", "vk": "VK_KEY_Y", "base": "y", "shift": "Y", "caps": "Y", "caps_shift": "y", "alt_gr": null, "shift_alt_gr": null, "finger": "right_index"},
+        {"position": "D07", "scancode": "SC016", "vk": "VK_KEY_U", "base": "u", "shift": "U", "caps": "U", "caps_shift": "u", "alt_gr": "ù", "shift_alt_gr": "Ù", "caps_alt_gr": "Ù", "caps_shift_alt_gr": "ù", "finger": "right_index"},
+        {"position": "D08", "scancode": "SC017", "vk": "VK_KEY_I", "base": "i", "shift": "I", "caps": "I", "caps_shift": "i", "alt_gr": "^", "shift_alt_gr": null, "finger": "right_middle"},
+        {"position": "D09", "scancode": "SC018", "vk": "VK_KEY_O", "base": "o", "shift": "O", "caps": "O", "caps_shift": "o", "alt_gr": "œ", "shift_alt_gr": "Œ", "caps_alt_gr": "Œ", "caps_shift_alt_gr": "œ", "finger": "right_ring"},
+        {"position": "D10", "scancode": "SC019", "vk": "VK_KEY_P", "base": "p", "shift": "P", "caps": "P", "caps_shift": "p", "alt_gr": null, "shift_alt_gr": null, "finger": "right_pinky"},
+        {"position": "D11", "scancode": "SC01A", "vk": "VK_OEM_6", "base": "dk_circumflex", "shift": "dk_diaeresis", "alt_gr": "dk_caron", "shift_alt_gr": "dk_ogonek", "finger": "right_pinky"},
+        {"position": "D12", "scancode": "SC01B", "vk": "VK_OEM_1", "base": "$", "shift": "£", "alt_gr": "¥", "shift_alt_gr": "dk_currencies", "finger": "right_pinky"}
       ]
     },
     {
       "row_id": 3,
       "row_name": "Home Row",
       "keys": [
-        { "position": "C01", "scancode": "SC01E", "base": "q", "shift": "Q", "caps": "Q", "caps_shift": "q", "alt_gr": null, "shift_alt_gr": null, "finger": "left_pinky" },
-        { "position": "C02", "scancode": "SC01F", "base": "s", "shift": "S", "caps": "S", "caps_shift": "s", "alt_gr": null, "shift_alt_gr": null, "finger": "left_ring" },
-        { "position": "C03", "scancode": "SC020", "base": "d", "shift": "D", "caps": "D", "caps_shift": "d", "alt_gr": "{", "shift_alt_gr": null, "finger": "left_middle" },
-        { "position": "C04", "scancode": "SC021", "base": "f", "shift": "F", "caps": "F", "caps_shift": "f", "alt_gr": "}", "shift_alt_gr": null, "finger": "left_index" },
-        { "position": "C05", "scancode": "SC022", "base": "g", "shift": "G", "caps": "G", "caps_shift": "g", "alt_gr": "\\", "shift_alt_gr": null, "finger": "left_index" },
-        { "position": "C06", "scancode": "SC023", "base": "h", "shift": "H", "caps": "H", "caps_shift": "h", "alt_gr": "|", "shift_alt_gr": null, "finger": "right_index" },
-        { "position": "C07", "scancode": "SC024", "base": "j", "shift": "J", "caps": "J", "caps_shift": "j", "alt_gr": "[", "shift_alt_gr": null, "finger": "right_index" },
-        { "position": "C08", "scancode": "SC025", "base": "k", "shift": "K", "caps": "K", "caps_shift": "k", "alt_gr": "]", "shift_alt_gr": null, "finger": "right_middle" },
-        { "position": "C09", "scancode": "SC026", "base": "l", "shift": "L", "caps": "L", "caps_shift": "l", "alt_gr": null, "shift_alt_gr": null, "finger": "right_ring" },
-        { "position": "C10", "scancode": "SC027", "base": "m", "shift": "M", "caps": "M", "caps_shift": "m", "alt_gr": null, "shift_alt_gr": null, "finger": "right_pinky" },
-        { "position": "C11", "scancode": "SC028", "base": "dk_acute", "shift": "dk_grave", "alt_gr": "dk_tilde", "shift_alt_gr": null, "finger": "right_pinky" },
-        { "position": "C12", "scancode": "SC02B", "base": "*", "shift": "dk_greek", "alt_gr": "dk_cyrillic", "shift_alt_gr": null, "finger": "right_pinky" }
+        {"position": "C01", "scancode": "SC01E", "vk": "VK_KEY_Q", "base": "q", "shift": "Q", "caps": "Q", "caps_shift": "q", "alt_gr": null, "shift_alt_gr": null, "finger": "left_pinky"},
+        {"position": "C02", "scancode": "SC01F", "vk": "VK_KEY_S", "base": "s", "shift": "S", "caps": "S", "caps_shift": "s", "alt_gr": null, "shift_alt_gr": null, "finger": "left_ring"},
+        {"position": "C03", "scancode": "SC020", "vk": "VK_KEY_D", "base": "d", "shift": "D", "caps": "D", "caps_shift": "d", "alt_gr": "{", "shift_alt_gr": null, "finger": "left_middle"},
+        {"position": "C04", "scancode": "SC021", "vk": "VK_KEY_F", "base": "f", "shift": "F", "caps": "F", "caps_shift": "f", "alt_gr": "}", "shift_alt_gr": null, "finger": "left_index"},
+        {"position": "C05", "scancode": "SC022", "vk": "VK_KEY_G", "base": "g", "shift": "G", "caps": "G", "caps_shift": "g", "alt_gr": "\\", "shift_alt_gr": null, "finger": "left_index"},
+        {"position": "C06", "scancode": "SC023", "vk": "VK_KEY_H", "base": "h", "shift": "H", "caps": "H", "caps_shift": "h", "alt_gr": "|", "shift_alt_gr": null, "finger": "right_index"},
+        {"position": "C07", "scancode": "SC024", "vk": "VK_KEY_J", "base": "j", "shift": "J", "caps": "J", "caps_shift": "j", "alt_gr": "[", "shift_alt_gr": null, "finger": "right_index"},
+        {"position": "C08", "scancode": "SC025", "vk": "VK_KEY_K", "base": "k", "shift": "K", "caps": "K", "caps_shift": "k", "alt_gr": "]", "shift_alt_gr": null, "finger": "right_middle"},
+        {"position": "C09", "scancode": "SC026", "vk": "VK_KEY_L", "base": "l", "shift": "L", "caps": "L", "caps_shift": "l", "alt_gr": "`", "shift_alt_gr": null, "finger": "right_ring"},
+        {"position": "C10", "scancode": "SC027", "vk": "VK_KEY_M", "base": "m", "shift": "M", "caps": "M", "caps_shift": "m", "alt_gr": null, "shift_alt_gr": null, "finger": "right_pinky"},
+        {"position": "C11", "scancode": "SC028", "vk": "VK_OEM_3", "base": "dk_acute", "shift": "dk_grave", "alt_gr": "dk_tilde", "shift_alt_gr": null, "finger": "right_pinky"},
+        {"position": "C12", "scancode": "SC02B", "vk": "VK_OEM_5", "base": "*", "shift": "dk_greek", "alt_gr": "dk_cyrillic", "shift_alt_gr": null, "finger": "right_pinky"}
       ]
     },
     {
       "row_id": 4,
       "row_name": "Bottom Row",
       "keys": [
-        { "position": "B00", "scancode": "SC056", "base": "<", "shift": ">", "alt_gr": "≤", "shift_alt_gr": "≥", "finger": "left_pinky" },
-        { "position": "B01", "scancode": "SC02C", "base": "w", "shift": "W", "caps": "W", "caps_shift": "w", "alt_gr": "«", "shift_alt_gr": "\u201C", "finger": "left_pinky" },
-        { "position": "B02", "scancode": "SC02D", "base": "x", "shift": "X", "caps": "X", "caps_shift": "x", "alt_gr": "»", "shift_alt_gr": "\u201D", "finger": "left_ring" },
-        { "position": "B03", "scancode": "SC02E", "base": "c", "shift": "C", "caps": "C", "caps_shift": "c", "alt_gr": null, "shift_alt_gr": null, "finger": "left_middle" },
-        { "position": "B04", "scancode": "SC02F", "base": "v", "shift": "V", "caps": "V", "caps_shift": "v", "alt_gr": null, "shift_alt_gr": null, "finger": "left_index" },
-        { "position": "B05", "scancode": "SC030", "base": "b", "shift": "B", "caps": "B", "caps_shift": "b", "alt_gr": "ß", "shift_alt_gr": "ẞ", "caps_alt_gr": "ẞ", "caps_shift_alt_gr": "ß", "finger": "left_index" },
-        { "position": "B06", "scancode": "SC031", "base": "n", "shift": "N", "caps": "N", "caps_shift": "n", "alt_gr": "~", "shift_alt_gr": "\u0060", "finger": "right_index" },
-        { "position": "B07", "scancode": "SC032", "base": ",", "shift": "?", "alt_gr": "<", "shift_alt_gr": "¿", "finger": "right_index" },
-        { "position": "B08", "scancode": "SC033", "base": ".", "shift": ";", "alt_gr": ">", "shift_alt_gr": "·", "finger": "right_middle" },
-        { "position": "B09", "scancode": "SC034", "base": ":", "shift": "/", "alt_gr": null, "shift_alt_gr": null, "finger": "right_ring" },
-        { "position": "B10", "scancode": "SC035", "base": "!", "shift": "dk_punctuation", "alt_gr": "¡", "shift_alt_gr": null, "finger": "right_pinky" }
+        {"position": "B00", "scancode": "SC056", "vk": "VK_OEM_102", "base": "<", "shift": ">", "alt_gr": "≤", "shift_alt_gr": "≥", "finger": "left_pinky"},
+        {"position": "B01", "scancode": "SC02C", "vk": "VK_KEY_W", "base": "w", "shift": "W", "caps": "W", "caps_shift": "w", "alt_gr": "«", "shift_alt_gr": "“", "finger": "left_pinky"},
+        {"position": "B02", "scancode": "SC02D", "vk": "VK_KEY_X", "base": "x", "shift": "X", "caps": "X", "caps_shift": "x", "alt_gr": "»", "shift_alt_gr": "”", "finger": "left_ring"},
+        {"position": "B03", "scancode": "SC02E", "vk": "VK_KEY_C", "base": "c", "shift": "C", "caps": "C", "caps_shift": "c", "alt_gr": null, "shift_alt_gr": null, "finger": "left_middle"},
+        {"position": "B04", "scancode": "SC02F", "vk": "VK_KEY_V", "base": "v", "shift": "V", "caps": "V", "caps_shift": "v", "alt_gr": null, "shift_alt_gr": null, "finger": "left_index"},
+        {"position": "B05", "scancode": "SC030", "vk": "VK_KEY_B", "base": "b", "shift": "B", "caps": "B", "caps_shift": "b", "alt_gr": "ß", "shift_alt_gr": "ẞ", "caps_alt_gr": "ẞ", "caps_shift_alt_gr": "ß", "finger": "left_index"},
+        {"position": "B06", "scancode": "SC031", "vk": "VK_KEY_N", "base": "n", "shift": "N", "caps": "N", "caps_shift": "n", "alt_gr": "~", "shift_alt_gr": null, "finger": "right_index"},
+        {"position": "B07", "scancode": "SC032", "vk": "VK_OEM_COMMA", "base": ",", "shift": "?", "alt_gr": "<", "shift_alt_gr": "¿", "finger": "right_index"},
+        {"position": "B08", "scancode": "SC033", "vk": "VK_OEM_PERIOD", "base": ".", "shift": ";", "alt_gr": ">", "shift_alt_gr": "·", "finger": "right_middle"},
+        {"position": "B09", "scancode": "SC034", "vk": "VK_OEM_2", "base": ":", "shift": "/", "alt_gr": "#", "shift_alt_gr": null, "finger": "right_ring"},
+        {"position": "B10", "scancode": "SC035", "vk": "VK_OEM_8", "base": "!", "shift": "dk_punctuation", "alt_gr": "¡", "shift_alt_gr": null, "finger": "right_pinky"}
       ]
     },
     {
       "row_id": 5,
       "row_name": "Space Row",
       "keys": [
-        { "position": "A03", "scancode": "SC039", "base": "\u0020", "shift": "\u0020", "alt_gr": "\u00A0", "shift_alt_gr": "\u202F", "finger": "thumb" }
+        {"position": "A03", "scancode": "SC039", "vk": "VK_SPACE", "base": " ", "shift": " ", "alt_gr": "\u202f", "shift_alt_gr": "\u00a0", "finger": "thumb"}
       ]
     }
   ],
@@ -143,7 +170,7 @@
       "table": {
         "a": "â", "A": "Â", "c": "ĉ", "C": "Ĉ", "e": "ê", "E": "Ê",
         "g": "ĝ", "G": "Ĝ", "h": "ĥ", "H": "Ĥ", "i": "î", "I": "Î",
-        "j": "ĵ", "J": "Ĵ", "o": "ô", "O": "Ô", "s": "ŝ", "S": "Ŝ",
+        "j": "ĵ", "J": "Ĵ", "k": "ƙ", "K": "Ƙ", "o": "ô", "O": "Ô", "s": "ŝ", "S": "Ŝ",
         "u": "û", "U": "Û", "w": "ŵ", "W": "Ŵ", "y": "ŷ", "Y": "Ŷ",
         "z": "ẑ", "Z": "Ẑ", 
         "é": "É", "è": "È", "ç": "Ç", "à": "À",
@@ -175,7 +202,7 @@
         "Bonus: subscripts (₀-₉, ₊₋₌₍₎) for H₂O"
       ],
       "table": {
-        "a": "á", "A": "Á", "c": "ć", "C": "Ć", "e": "é", "E": "É",
+        "a": "á", "A": "Á", "b": "ɓ", "B": "Ɓ", "c": "ć", "C": "Ć", "e": "é", "E": "É",
         "g": "ǵ", "G": "Ǵ", "i": "í", "I": "Í", "k": "ḱ", "K": "Ḱ",
         "l": "ĺ", "L": "Ĺ", "m": "ḿ", "M": "Ḿ", "n": "ń", "N": "Ń",
         "o": "ó", "O": "Ó", "p": "ṕ", "P": "Ṕ", "r": "ŕ", "R": "Ŕ",
@@ -187,7 +214,7 @@
         "0": "\u2080", "1": "\u2081", "2": "\u2082", "3": "\u2083", "4": "\u2084", "5": "\u2085",
         "6": "\u2086", "7": "\u2087", "8": "\u2088", "9": "\u2089",
         "+": "\u208A", "-": "\u208B", "=": "\u208C", "(": "\u208D", ")": "\u208E",
-        "\u00B4": "\u0301", "\u0020": "\u00B4"
+        "'": "\u02BC", "\u00B4": "\u0301", "\u0020": "\u00B4"
       }
     },
     "dk_grave": {
@@ -268,8 +295,9 @@
       "table": {
         "a": "ả", "A": "Ả", "e": "ẻ", "E": "Ẻ", "i": "ỉ", "I": "Ỉ",
         "o": "ỏ", "O": "Ỏ", "u": "ủ", "U": "Ủ", "y": "ỷ", "Y": "Ỷ",
-        "b": "ɓ", "B": "Ɓ", "d": "ɗ", "D": "Ɗ", "f": "ƒ", "F": "Ƒ",
-        "g": "ɠ", "G": "Ɠ", "k": "ƙ", "K": "Ƙ", "t": "ƭ", "T": "Ƭ",
+        "b": "ɓ", "B": "Ɓ", "c": "ƈ", "C": "Ƈ", "d": "ɗ", "D": "Ɗ", "f": "ƒ", "F": "Ƒ",
+        "g": "ɠ", "G": "Ɠ", "k": "ƙ", "K": "Ƙ", "p": "ƥ", "P": "Ƥ", "t": "ƭ", "T": "Ƭ",
+        "V": "Ʋ", "v": "ʋ",
         "\u0309": "\u0309", "\u0020": "\u0309"
       }
     },
@@ -349,12 +377,12 @@
       "description": "Special Latin letters",
       "example": "z → ʒ",
       "table": {
-        "a": "\u0251", "A": "\u2C6D", "d": "ð", "D": "Ð", "e": "ə", "E": "Ə",
-        "g": "\u0263", "G": "\u0194", "i": "ĳ", "I": "Ĳ", "l" : "\u017F", "L": "\u017F",
-        "n": "ŋ", "N": "Ŋ", "o": "ɔ", "O": "Ɔ", "r": "ɖ", "R": "Ɖ",
+        "a": "\u0251", "A": "\u2C6D", "d": "ð", "D": "Ð", "e": "ɛ", "E": "Ɛ", "é": "ǝ", "É": "Ǝ", "2": "Ǝ",
+        "f": "\u017F", "F": "\u017F", "g": "\u0263", "G": "\u0194", "i": "ɩ", "I": "Ɩ",
+        "j": "ɲ", "J": "Ɲ", "l": "ĳ", "L": "Ĳ", "n": "ŋ", "N": "Ŋ", "o": "ɔ", "O": "Ɔ", "r": "ɖ", "R": "Ɖ",
         "s": "\u0283", "S": "\u01A9", "t": "þ", "T": "Þ", "u": "\u028A", "U": "\u01B1",
         "v": "\u028C", "V": "\u0245", "y": "\u01B4", "Y": "\u01B3", "z": "\u0292", "Z": "\u01B7",
-        "\"": "ɛ", "3": "Ɛ", "?": "\u0294",
+        "\"": "ə", "3": "Ə", "'": "\u02BC", "?": "\u0294",
         "^": "\u032D", "\u00A8": "\u0324", "\u007E": "\u0330", "\u02C7": "\u032C", "\u02D8": "\u032E",
         "\u02DA": "\u0325",
         "\u0020": "\u0020"
@@ -385,9 +413,9 @@
       "table": {
         "a": "\u0250", "d": "\u0279", "e": "\u025C", "E": "\u0258", "f": "\u0278", "h": "\u0266",
         "i": "\u0268", "I": "\u026A", "j": "\u026B", "J": "\u028E", "l": "\u026D", "L": "\u026C",
-        "m": "\u0271", "n": "\u0272", "N": "\u0273", "o": "\u0275", "O": "\u025E", "r": "\u027E",
+        "m": "\u0271", "n": "\u0273", "N": "\u0273", "o": "\u0275", "O": "\u025E", "r": "\u027E",
         "R": "\u0281", "t": "\u0288", "u": "\u026F", "v": "\u028B", "w": "\u028D", "y": "\u0265",
-        "Y": "\u028F", "z": "\u026E", "?": "\u02E4", "4": "\u0280", ":": "\u02D0", ";": "\u02D1",
+        "Y": "\u028F", "z": "\u026E", "?": "\u02E4", "\u00BF": "\u0295", "4": "\u0280", ":": "\u02D0", ";": "\u02D1",
         "'": "\u02C8", ",": "\u02CC", "-": "\u02B0", "è": "\u02B2", "&": "\u02B7", "ç": "\u02E1",
         "(": "\u02E0", "=": "\u031A", "_": "\u207F", "|": "\u0329", "\u02D8": "\u032F",
         "\u0020": "\u0281"  
@@ -438,7 +466,13 @@
         "è": "\u0450", "7": "\u0400", "_": "\u045D", "8": "\u040D", "ç": "\u0491", "9": "\u0490",
         "à": "\u044E", "0": "\u042E", ")": "\u0458", "%": "\u0408", "=": "\u0439", "+": "\u0419",
         "$": "\u0449", "£": "\u0429", ",": "\u044C", "?": "\u042C", ".": "\u044A", ";": "\u042A", 
-        "!": "\u2116", "\u0020": "\u0020"
+        "!": "№",
+        "@": "ѕ", "#": "Ѕ", "<": "љ", ">": "Љ",
+        ":": "њ", "/": "Њ", "*": "ђ", "{": "ѓ",
+        "}": "Ѓ", "]": "Ќ", "[": "ќ",
+        "´": "ћ", "`": "Ћ", "µ": "Ђ",
+        "^": "џ", "¨": "Џ",
+        " ": " "
       }
     },
     "dk_misc_symbols": {
@@ -456,7 +490,7 @@
         "&": "\u00BC", "1": "\u00BC", "é": "\u00BD", "2": "\u00BD", "\"": "\u00BE", "3": "\u00BE",
         "'": "\u2153", "4": "\u2153", "(": "\u2154", "5": "\u2154", "-": "\u263C", "6": "\u263C",
         "è": "\u263D", "7": "\u263D", "_": "\u2601", "8": "\u2601", "ç": "\u2614", "9": "\u2614",
-        "à": "\u2744", "0": "\u2744", ")": "\u263A", "%": "\u2639", "|": "\u00A6",
+        "à": "\u2744", "0": "\u2744", "@": "\u2116", "#": "\u2116", ")": "\u263A", "%": "\u2639", "|": "\u00A6",
         "<": "\u2198", ">": "\u2198", "!": "\u26A0", "\u0020": "\u2192"
       }
     },
@@ -472,6 +506,7 @@
         "t": "∥", "T": "⊥", "u": "\u222A", "U": "∩", "v": "√", "V": "∛",
         "x": "\u00D7", "X": "\u00D7", "y": "⇑", "Y": "⇑", "Z": "\u2124",
         "<": "≤", ">": "≥", "=": "≠", "+": "±", "-": "\u2212", "*": "\u00D7",
+        "\u20AC": "\u2209", "[": "\u2286", "]": "\u2287",
         ":": "\u2254", "/": "÷", "\u00B0": "\u2218", ".": "\u2219", "$": "⊗", "£": "⊕",
         "^": "\u2227", "\u00A8": "\u2228", "_": "∝", "8": "∞", "à": "∅", "0": "∅",
         "~": "≈", "%": "‰", "|": "\u210F", "@": "\u00AC", "\u0020": "±"  
@@ -487,7 +522,7 @@
         "l": "\u20BA", "L": "\u20BA", "m": "\u20A5", "M": "\u20BC", "n": "\u20A6", "N": "\u20A6",
         "p": "\u20B1", "P": "\u20A7", "r": "\u20BD", "R": "\u17DB", "s": "\u20AA", "S": "\u20AA",
         "t": "\u20B8", "T": "\u20AE", "u": "\u20B4", "U": "\u20B4", "w": "\u20A9", "W": "\u20A9",
-        "z": "\u20A2", "Z": "\u20A2", "ç": "\u20B5",
+        "z": "\u20A2", "Z": "\u20A2", "ç": "\u20B5", "\u00A3": "\u20A4",
         "\u0020": "\u00A4"
       }
     },
@@ -498,10 +533,10 @@
         "a": "\u00AA", "A": "\u00AA", "o": "\u00BA", "O": "\u00BA", "<": "\u2039", ">": "\u203A",
         "w": "\u201E", "W": "\u201E", "x": "\u201F", "X": "\u201F", "c": "\u2018", "C": "\u2018",
         "v": "\u2019", "V": "\u2019", "b": "\u201A", "B": "\u201A", "n": "\u201B", "N": "\u201B",
-        "!": "\u203D", "?": "\u2E2E", "\"": "\u2033", "'": "\u2032", "-": "\u2010", "_": "\u2423",
-		    "*": "\u2042", ".": "\u2026", "|": "\u2016", ")": "\u203F", "6": "\u2043", "^": "\u2038", 
-        ":": "\u2022", "/": "\u2023", "q": "\u00B6", "Q": "\u00B6", "r": "\u203B", "R": "\u203B",
-        "t": "\u2020", "T": "\u2021",
+        "!": "\u203D", "?": "\u2E2E", "\"": "\u2033", "é": "\u2032", "'": "\u02BC", "(": "\u02BB",
+        "-": "\u2010", "_": "\u2423", "*": "\u2042", ".": "\u2026", "|": "\u2016", ")": "\u203F",
+        "6": "\u00AD", "^": "\u2038", ":": "\u2022", "/": "\u2023", "q": "\u00B6", "Q": "\u00B6",
+        "r": "\u203B", "R": "\u203B", "t": "\u2020", "T": "\u2021",
         "\u0020": "\u00A7"
       }
     }
