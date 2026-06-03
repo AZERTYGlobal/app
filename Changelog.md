@@ -1,5 +1,26 @@
 # Changelog — Application AZERTY Global
 
+## Version 0.11.2 — 3 juin 2026
+
+**Exercice de typographie**
+
+- Phrase de l'exercice 4 remplacée par : `Lætitia demande « d'où vient ce chef-d'œuvre… » — elle l'approuve à 100 %.`
+
+**Correctifs pré-publication Store**
+
+- Mode compatibilité jeux : les combos natives utilisent désormais de vrais événements scancode (`KEYEVENTF_SCANCODE`) pour les applications qui bindent les touches physiquement.
+- Désactivation anti-cheat : la notification de sécurité reste affichée même si les notifications standard sont désactivées.
+- Journaux locaux : anonymisation du nom de process dans le log debug compat et suppression du chemin complet `learning-tweaks.json`.
+
+## Version 0.11.1 — 28 mai 2026
+
+**Correctif dispositions système non-AZERTY**
+
+- Correction du pass-through clavier quand la fenêtre cible utilise une disposition système non-AZERTY, notamment QWERTY US.
+- Les touches physiques restent pilotées par scancode : `D01` produit bien `a` au lieu de laisser passer `q`, et `E01` produit bien `&` au lieu de laisser passer `1`.
+- Le pass-through reste conservé quand la disposition de la fenêtre cible produit déjà le bon caractère.
+- Correction associée pour les raccourcis `Ctrl+touche` : `Ctrl+D01` sous QWERTY envoie bien `Ctrl+A`, pas `Ctrl+Q`.
+
 ## Version 0.11.0 — 20 mai 2026
 
 **Synchronisation avec la disposition actuelle**
@@ -21,7 +42,7 @@
 - CI GitHub Actions ajoutée (build reproductible x64+ARM64 + tests + Pack-MSIX + Verify-Release + BinSkim hardening + attestation SLSA L1).
 - Hygiène repo : suppression d'un fichier doublon `OnboardingWindow (# Name clash...)` issu d'un conflit de sync Proton Drive.
 
-Aucun changement fonctionnel utilisateur visible. Audit complet : `AUDIT-SECURITY-v0.10.0.md`.
+Aucun changement fonctionnel utilisateur visible. Audit complet : `Archives/audits/2026-05/reports/AUDIT-SECURITY-v0.10.0.md`.
 
 ## Version 0.9.8 — 5 mai 2026
 
@@ -270,4 +291,4 @@ Refonte majeure de la couche d'injection pour résoudre les problèmes de compat
 
 ---
 
-*Dernière mise à jour : 2026-05-20 (v0.11.0 — synchronisation disposition actuelle)*
+*Dernière mise à jour : 2026-06-03 (v0.11.2 — correctifs pré-WACK)*

@@ -448,8 +448,8 @@ sealed class KeyMapper
                 // Si la touche physique produit déjà ce VK sur le layout natif,
                 // pass-through pour préserver le scancode (apps qui bindent par
                 // position physique : GLFW, SDL, DirectInput — ex Ctrl+A drop dans Minecraft).
-                var hkl = _api.GetKeyboardLayout(0);
-                if (_api.MapVirtualKeyExW(scanCode, 1, hkl) == c)
+                var hkl = GetTargetKeyboardLayout();
+                if (hkl != IntPtr.Zero && _api.MapVirtualKeyExW(scanCode, 1, hkl) == c)
                     return false;
                 SendVirtualKey(scanCode, (ushort)c, isKeyDown);
                 return true;
@@ -476,7 +476,8 @@ sealed class KeyMapper
 
             // Autres caractères : utiliser VkKeyScanExW pour trouver le VK
             // dans le layout Windows actif (fonctionne pour -, =, [, ], etc.)
-            short vkResult = _api.VkKeyScanExW(baseChar[0], _api.GetKeyboardLayout(0));
+            var targetHkl = GetTargetKeyboardLayoutOrCurrent();
+            short vkResult = targetHkl != IntPtr.Zero ? _api.VkKeyScanExW(baseChar[0], targetHkl) : (short)-1;
             if (vkResult != -1)
             {
                 byte vk = (byte)(vkResult & 0xFF);
@@ -602,8 +603,10 @@ sealed class KeyMapper
         // du comportement Windows natif (qui traite CapsLock comme Shift sur la rangée numérique)
         if (output.Length != 1 || IsAltGrDown || _capsLockState) return false;
 
-        // VK correspondant à ce scancode sur le layout Windows
-        var hkl = _api.GetKeyboardLayout(0);
+        // VK correspondant à ce scancode sur le layout Windows de la fenêtre cible.
+        // Le layout du thread app peut différer du foreground (ex: app AZERTY, cible QWERTY).
+        var hkl = GetTargetKeyboardLayout();
+        if (hkl == IntPtr.Zero) return false;
         uint vk = _api.MapVirtualKeyExW(scanCode, 1, hkl); // MAPVK_VSC_TO_VK
         if (vk == 0) return false;
 
@@ -628,6 +631,18 @@ sealed class KeyMapper
         return charVk == (byte)vk
             && (shiftIrrelevant || needsShift == IsShiftDown)
             && !needsCtrl && !needsAlt;
+    }
+
+    private IntPtr GetTargetKeyboardLayout()
+    {
+        var (_, hkl) = _foregroundMonitor?.GetEmitContext() ?? (CompatibilityMode.Default, IntPtr.Zero);
+        return hkl;
+    }
+
+    private IntPtr GetTargetKeyboardLayoutOrCurrent()
+    {
+        var hkl = GetTargetKeyboardLayout();
+        return hkl != IntPtr.Zero ? hkl : _api.GetKeyboardLayout(0);
     }
 
     /// <summary>
@@ -711,12 +726,12 @@ sealed class KeyMapper
 
             if (mode == CompatibilityMode.NativeCombo && hkl != IntPtr.Zero)
             {
-                // Tenter combo native ; si caractère inaccessible sur layout natif → Alt+code ;
-                // si codepoint > 0xFF → fallback Unicode (Alt+code décimal limité à Win-1252)
+                // Tenter combo native ; si caractère inaccessible sur layout natif → Alt+code
+                // seulement si le caractère existe en Windows-1252, sinon fallback Unicode.
                 if (!BuildNativeComboInputs(c, hkl, inputs))
                 {
-                    if (c <= 0xFF)
-                        BuildAltCodeInputs(c, inputs);
+                    if (TryGetWindows1252AltCode(c, out int altCode))
+                        BuildAltCodeInputs(altCode, inputs);
                     else
                         BuildUnicodeInputs(c, null, inputs);
                 }
@@ -864,9 +879,10 @@ sealed class KeyMapper
             if (needsAlt != hasAltAlone)   inputs.Add(MakeVkInput(VK_LMENU, 0, hasAltAlone));
         }
 
-        // Press + release du VK avec scancode valide
-        inputs.Add(MakeVkInput(vk, scanCode, false));
-        inputs.Add(MakeVkInput(vk, scanCode, true));
+        // Press + release par scancode : les jeux/frameworks qui bindent les touches
+        // physiquement (GLFW, SDL, Unity) ignorent souvent un SendInput VK-only.
+        inputs.Add(MakeScanCodeInput(scanCode, false));
+        inputs.Add(MakeScanCodeInput(scanCode, true));
 
         // Restauration symétrique : action inverse de la préparation
         if (!needsAltGr)
@@ -882,7 +898,7 @@ sealed class KeyMapper
     /// Construit la séquence Alt+0XXX pour injecter un caractère universellement
     /// (Alt down + Numpad 0/X/X/X + Alt up → Windows produit le WM_CHAR au release Alt).
     /// Toggle NumLock si OFF, release des modifs physiques tenus, restore symétrique.
-    /// Le caractère doit être ≤ 0xFF (Win-1252) pour que Alt+code décimal fonctionne.
+    /// Le code doit être un octet Windows-1252 (0..255) pour que Alt+code décimal fonctionne.
     ///
     /// Note AltGr simulé (RCtrl+LAlt, courant en RDP/VPN) : les modifs physiques RCtrl
     /// et LAlt doivent être relâchés malgré IsAltGrDown=true. Sans cela, l'app foreground
@@ -890,9 +906,8 @@ sealed class KeyMapper
     /// LCtrl est phantom uniquement quand RAlt (AltGr réel) est tenu — ne pas le manipuler
     /// dans ce cas, le driver le gère.
     /// </summary>
-    internal void BuildAltCodeInputs(char c, List<Win32.INPUT> inputs)
+    internal void BuildAltCodeInputs(int code, List<Win32.INPUT> inputs)
     {
-        int code = c; // codepoint décimal Win-1252
         bool numLockOn = (_api.GetKeyState((int)Win32.VK_NUMLOCK) & 0x0001) != 0;
 
         // Snapshot modifs physiques tenus à release temporairement.
@@ -935,6 +950,58 @@ sealed class KeyMapper
             inputs.Add(MakeVkInput(Win32.VK_NUMLOCK, 0, false));
             inputs.Add(MakeVkInput(Win32.VK_NUMLOCK, 0, true));
         }
+    }
+
+    /// <summary>
+    /// Retourne le byte Windows-1252 à utiliser pour Alt+0XXX. Les caractères hors
+    /// CP1252 doivent passer par KEYEVENTF_UNICODE, même si leur codepoint Unicode est ≤ 0xFF.
+    /// </summary>
+    internal static bool TryGetWindows1252AltCode(char c, out int code)
+    {
+        if (c <= '\u007F')
+        {
+            code = c;
+            return true;
+        }
+
+        if (c >= '\u00A0' && c <= '\u00FF')
+        {
+            code = c;
+            return true;
+        }
+
+        code = c switch
+        {
+            '\u20AC' => 0x80, // €
+            '\u201A' => 0x82, // ‚
+            '\u0192' => 0x83, // ƒ
+            '\u201E' => 0x84, // „
+            '\u2026' => 0x85, // …
+            '\u2020' => 0x86, // †
+            '\u2021' => 0x87, // ‡
+            '\u02C6' => 0x88, // ˆ
+            '\u2030' => 0x89, // ‰
+            '\u0160' => 0x8A, // Š
+            '\u2039' => 0x8B, // ‹
+            '\u0152' => 0x8C, // Œ
+            '\u017D' => 0x8E, // Ž
+            '\u2018' => 0x91, // ‘
+            '\u2019' => 0x92, // ’
+            '\u201C' => 0x93, // “
+            '\u201D' => 0x94, // ”
+            '\u2022' => 0x95, // •
+            '\u2013' => 0x96, // –
+            '\u2014' => 0x97, // —
+            '\u02DC' => 0x98, // ˜
+            '\u2122' => 0x99, // ™
+            '\u0161' => 0x9A, // š
+            '\u203A' => 0x9B, // ›
+            '\u0153' => 0x9C, // œ
+            '\u017E' => 0x9E, // ž
+            '\u0178' => 0x9F, // Ÿ
+            _ => -1
+        };
+        return code >= 0;
     }
 
     /// <summary>Append press+release pour un chiffre du Numpad (0-9). Utilisé par Alt+code.</summary>
@@ -1005,6 +1072,22 @@ sealed class KeyMapper
                 wVk = (ushort)vk,
                 wScan = scanCode,
                 dwFlags = keyUp ? KEYEVENTF_KEYUP : 0,
+                time = 0,
+                dwExtraInfo = KeyboardHook.INJECTED_FLAG
+            }
+        }
+    };
+
+    private static Win32.INPUT MakeScanCodeInput(ushort scanCode, bool keyUp) => new()
+    {
+        type = INPUT_KEYBOARD,
+        u = new Win32.INPUTUNION
+        {
+            ki = new Win32.KEYBDINPUT
+            {
+                wVk = 0,
+                wScan = scanCode,
+                dwFlags = KEYEVENTF_SCANCODE | (keyUp ? KEYEVENTF_KEYUP : 0),
                 time = 0,
                 dwExtraInfo = KeyboardHook.INJECTED_FLAG
             }

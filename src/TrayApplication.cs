@@ -227,6 +227,9 @@ sealed class TrayApplication : IDisposable
             _foregroundMonitor = new ForegroundMonitor(_win32Api, _hWnd);
             _foregroundMonitor.ForegroundChanged += OnForegroundChanged;
             _mapper.SetForegroundMonitor(_foregroundMonitor);
+            // Le ctor de ForegroundMonitor a deja calcule un snapshot initial avant
+            // l'abonnement ci-dessus : appliquer cet etat au hook immediatement.
+            OnForegroundChanged();
         }
         catch (Exception ex)
         {
@@ -495,7 +498,7 @@ sealed class TrayApplication : IDisposable
             newHook.SearchRequested += () => Win32.PostMessageW(_hWnd, WM_APP_SEARCH, IntPtr.Zero, IntPtr.Zero);
             newHook.VirtualKeyboardRequested += () => Win32.PostMessageW(_hWnd, WM_APP_VKBD, IntPtr.Zero, IntPtr.Zero);
             newHook.LayoutMayHaveChanged += OnLayoutMayHaveChanged;
-            newHook.Enabled = _enabled;
+            newHook.Enabled = _enabled && !_autoDisabledForAntiCheat;
             newHook.Install();
             _hook = newHook;
             oldHook.Dispose();
@@ -983,7 +986,7 @@ sealed class TrayApplication : IDisposable
             }
             _autoDisabledForAntiCheat = true;
             UpdateIcon();
-            ShowBalloon("AZERTY Global",
+            ShowSecurityBalloon("AZERTY Global",
                 $"désactivé temporairement pour {procName}\n(anti-cheat : injection de frappes interdite).");
             // Audit sécu 2026-05 SEV-A1-02 : anonymisation du process name dans le log.
             ConfigManager.LogCompatCriticalEvent("AntiCheatDetected",

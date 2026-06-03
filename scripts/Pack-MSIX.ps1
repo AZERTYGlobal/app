@@ -8,6 +8,7 @@ $srcDir = Join-Path $projectRoot 'src'
 $msixDir = Join-Path $projectRoot 'msix'
 $bundleStagingDir = Join-Path $projectRoot '.msix-bundle-staging'
 $archivesDir = Join-Path $projectRoot 'Archives'
+$msixArchiveRoot = Join-Path $archivesDir 'msix-previous'
 $csprojPath = Join-Path $srcDir 'AZERTYGlobal.csproj'
 
 # Chemins de sortie
@@ -16,7 +17,8 @@ $stableBundlePath = Join-Path $msixDir 'AZERTYGlobal.msixbundle'
 function Copy-DirectoryContent([string]$Source, [string]$Destination) {
     Get-ChildItem $Source -Force |
         Where-Object { $_.Name -notlike '*.msix' -and $_.Name -notlike '*.msixbundle' -and
-                       $_.Name -notlike '*.exe' -and $_.Name -notlike 'wack-report*' } |
+                       $_.Name -notlike '*.exe' -and $_.Name -notlike '*.md' -and
+                       $_.Name -notlike 'wack-report*' } |
         ForEach-Object {
             $target = Join-Path $Destination $_.Name
             if ($_.PSIsContainer) {
@@ -56,7 +58,8 @@ if ([string]::IsNullOrWhiteSpace($version)) {
 # Le manifest MSIX exige exactement 4 segments (Major.Minor.Build.Revision).
 # Si le csproj declare 3 segments, on complete avec .0. Si 4 deja presents, on les utilise tels quels.
 $storeVersion = if (($version -split '\.').Count -eq 4) { $version } else { "$version.0" }
-$versionedBundlePath = Join-Path $projectRoot ("AZERTYGlobal-{0}.msixbundle" -f $storeVersion)
+$versionedBundlePath = Join-Path $msixDir ("AZERTYGlobal-{0}.msixbundle" -f $storeVersion)
+$msixArchiveDir = Join-Path (Join-Path $msixArchiveRoot 'by-version') $storeVersion
 
 # Vérifier que les exécutables publiés existent
 foreach ($arch in $architectures) {
@@ -130,9 +133,9 @@ if ($LASTEXITCODE -ne 0) { throw "MakeAppx bundle a échoué" }
 
 # Archiver l'ancien bundle stable
 if (Test-Path $stableBundlePath) {
-    New-Item -ItemType Directory -Path $archivesDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $msixArchiveDir -Force | Out-Null
     $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $backupPath = Join-Path $archivesDir ("AZERTYGlobal-previous-{0}.msixbundle" -f $timestamp)
+    $backupPath = Join-Path $msixArchiveDir ("AZERTYGlobal-{0}-stable-backup-{1}.msixbundle" -f $storeVersion, $timestamp)
     Move-Item -LiteralPath $stableBundlePath -Destination $backupPath -Force
 }
 

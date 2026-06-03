@@ -10,6 +10,9 @@ namespace AZERTYGlobal.Tests;
 /// </summary>
 public class KeyMapperBuildInputsTests
 {
+    private const uint KEYEVENTF_KEYUP = 0x0002;
+    private const uint KEYEVENTF_SCANCODE = 0x0008;
+
     private static KeyMapper NewMapper(MockWin32Api mock) => new(new Layout(), mock);
 
     // ────────────────────────────────────────────────────────────────
@@ -57,7 +60,7 @@ public class KeyMapperBuildInputsTests
         var km = NewMapper(mock);
         var list = new List<Win32.INPUT>();
 
-        km.BuildAltCodeInputs('É', list); // codepoint 201 → 0/2/0/1
+        km.BuildAltCodeInputs(201, list); // CP1252 201 → 0/2/0/1
 
         // 1 LAlt down + 4*2 numpad + 1 LAlt up = 10 events (pas de NumLock toggle)
         Assert.Equal(10, list.Count);
@@ -79,7 +82,7 @@ public class KeyMapperBuildInputsTests
         var km = NewMapper(mock);
         var list = new List<Win32.INPUT>();
 
-        km.BuildAltCodeInputs('@', list); // 0x40 = 64 → 0/0/6/4
+        km.BuildAltCodeInputs(64, list); // 0x40 = 64 → 0/0/6/4
 
         // 2 NumLock toggle + 1 LAlt down + 4*2 numpad + 1 LAlt up + 2 NumLock toggle = 14
         Assert.Equal(14, list.Count);
@@ -87,6 +90,42 @@ public class KeyMapperBuildInputsTests
         Assert.Equal(0x90, list[1].u.ki.wVk); // VK_NUMLOCK up
         Assert.Equal(0x90, list[12].u.ki.wVk); // restore NumLock down
         Assert.Equal(0x90, list[13].u.ki.wVk); // restore NumLock up
+    }
+
+    [Theory]
+    [InlineData('É', 201)]
+    [InlineData('€', 128)]
+    [InlineData('Œ', 140)]
+    [InlineData('œ', 156)]
+    [InlineData('—', 151)]
+    public void TryGetWindows1252AltCode_Cp1252Characters_ReturnsByte(char c, int expectedCode)
+    {
+        Assert.True(KeyMapper.TryGetWindows1252AltCode(c, out int code));
+        Assert.Equal(expectedCode, code);
+    }
+
+    [Fact]
+    public void TryGetWindows1252AltCode_NotCp1252_ReturnsFalse()
+    {
+        Assert.False(KeyMapper.TryGetWindows1252AltCode('≠', out _));
+    }
+
+    [Fact]
+    public void BuildAltCodeInputs_OeLigature_GeneratesAlt0140Sequence_NumLockOn()
+    {
+        var mock = new MockWin32Api();
+        mock.KeyStateScript[(int)Win32.VK_NUMLOCK] = 0x0001; // NumLock ON
+        var km = NewMapper(mock);
+        var list = new List<Win32.INPUT>();
+
+        Assert.True(KeyMapper.TryGetWindows1252AltCode('Œ', out int code));
+        km.BuildAltCodeInputs(code, list); // CP1252 140 → 0/1/4/0
+
+        Assert.Equal(10, list.Count);
+        Assert.Equal(0x60, list[1].u.ki.wVk); // 0
+        Assert.Equal(0x61, list[3].u.ki.wVk); // 1
+        Assert.Equal(0x64, list[5].u.ki.wVk); // 4
+        Assert.Equal(0x60, list[7].u.ki.wVk); // 0
     }
 
     [Fact]
@@ -103,7 +142,7 @@ public class KeyMapperBuildInputsTests
         km.TrackModifiers(0xA4 /*VK_LMENU*/, 0, 0, true);
         var list = new List<Win32.INPUT>();
 
-        km.BuildAltCodeInputs('É', list); // codepoint 201
+        km.BuildAltCodeInputs(201, list); // CP1252 201
 
         // Index du premier event Numpad (= début de la séquence Alt+code injectée)
         int firstNumpadIdx = list.FindIndex(ev => ev.u.ki.wVk >= 0x60 && ev.u.ki.wVk <= 0x69);
@@ -144,7 +183,7 @@ public class KeyMapperBuildInputsTests
         km.TrackModifiers(0xA2 /*VK_LCONTROL*/, 0, 0, true); // phantom
         var list = new List<Win32.INPUT>();
 
-        km.BuildAltCodeInputs('É', list);
+        km.BuildAltCodeInputs(201, list);
 
         // RAlt doit être relâché puis restauré
         Assert.Contains(list, ev => ev.u.ki.wVk == 0xA5 && (ev.u.ki.dwFlags & 0x0002) != 0);
@@ -168,8 +207,12 @@ public class KeyMapperBuildInputsTests
         // Combo simple : VK = 0x41 (A), aucun modif requis, aucun modif tenu
         km.BuildVkComboInputs(0x41, 0x1E, false, false, false, false, IntPtr.Zero, list);
 
-        Assert.Equal(2, list.Count); // VK down + up
-        Assert.Equal(0x41, list[0].u.ki.wVk);
+        Assert.Equal(2, list.Count); // scancode down + up
+        Assert.Equal(0, list[0].u.ki.wVk);
+        Assert.Equal((ushort)0x1E, list[0].u.ki.wScan);
+        Assert.True((list[0].u.ki.dwFlags & KEYEVENTF_SCANCODE) != 0);
+        Assert.True((list[1].u.ki.dwFlags & KEYEVENTF_SCANCODE) != 0);
+        Assert.True((list[1].u.ki.dwFlags & KEYEVENTF_KEYUP) != 0);
     }
 
     [Fact]
@@ -182,9 +225,13 @@ public class KeyMapperBuildInputsTests
         // Combo AltGr+0 → @ : on n'a pas AltGr tenu, on doit l'ajouter en synthétique
         km.BuildVkComboInputs(0x30, 0x0B, false, true /*needsAltGr*/, false, false, IntPtr.Zero, list);
 
-        Assert.Equal(4, list.Count); // RMenu down + VK down + VK up + RMenu up
+        Assert.Equal(4, list.Count); // RMenu down + scancode down + scancode up + RMenu up
         Assert.Equal(0xA5, list[0].u.ki.wVk); // VK_RMENU down
-        Assert.Equal(0x30, list[1].u.ki.wVk); // VK down
+        Assert.Equal(0, list[1].u.ki.wVk); // scancode down
+        Assert.Equal((ushort)0x0B, list[1].u.ki.wScan);
+        Assert.True((list[1].u.ki.dwFlags & KEYEVENTF_SCANCODE) != 0);
+        Assert.True((list[2].u.ki.dwFlags & KEYEVENTF_SCANCODE) != 0);
+        Assert.True((list[2].u.ki.dwFlags & KEYEVENTF_KEYUP) != 0);
         Assert.Equal(0xA5, list[3].u.ki.wVk); // VK_RMENU up
     }
 
@@ -283,11 +330,14 @@ public class KeyMapperBuildInputsTests
 
         bool ok = km.BuildNativeComboInputs('@', mock.CurrentHkl, list);
         Assert.True(ok);
-        // Au minimum : RMenu down + VK_0 down + VK_0 up + RMenu up = 4 inputs
+        // Au minimum : RMenu down + scancode down + scancode up + RMenu up = 4 inputs
         Assert.True(list.Count >= 4);
         Assert.Equal(0xA5, list[0].u.ki.wVk); // RMenu (AltGr) down
-        Assert.Equal(0x30, list[1].u.ki.wVk); // VK_0 down
+        Assert.Equal(0, list[1].u.ki.wVk); // scancode down
         Assert.Equal((ushort)0x0B, list[1].u.ki.wScan); // scancode SC00B
+        Assert.True((list[1].u.ki.dwFlags & KEYEVENTF_SCANCODE) != 0);
+        Assert.True((list[2].u.ki.dwFlags & KEYEVENTF_SCANCODE) != 0);
+        Assert.True((list[2].u.ki.dwFlags & KEYEVENTF_KEYUP) != 0);
         Assert.Equal(0xA5, list[3].u.ki.wVk); // RMenu up
     }
 }

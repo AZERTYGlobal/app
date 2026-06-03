@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>AZERTY Global</AssemblyName>
     <RootNamespace>AZERTYGlobal</RootNamespace>
-    <Version>0.11.0</Version>
+    <Version>0.11.2</Version>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <Company>AZERTY Global</Company>
     <Product>AZERTY Global</Product>

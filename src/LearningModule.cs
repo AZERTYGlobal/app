@@ -30,7 +30,7 @@ sealed class LearningModule : IDisposable
             "jean.dupont@education.gouv.fr", false, false),
         new("Typographie fran\u00e7aise",
             "Tapez cette phrase avec les caract\u00e8res typographiques \u2014 suivez les indications du clavier",
-            "L\u00e6titia dit \u00ab c'est un chef-d'\u0153uvre\u2026 \u00bb \u2014 personne ne la contredit.", false, false),
+            "L\u00e6titia demande \u00ab d'o\u00f9 vient ce chef-d'\u0153uvre\u2026 \u00bb \u2014 elle l'approuve \u00e0 100 %.", false, false),
         new("Ligne de code",
             "Tapez cette ligne de code \u2014 les symboles sont accessibles via AltGr",
             "type Config = { items: string[]; sep: \"~\" | \"\\\\\" };", true, false),
@@ -224,12 +224,12 @@ sealed class LearningModule : IDisposable
                     }
                 }
                 ConfigManager.LogCompatEvent("LearningTweaks",
-                    $"loaded from {path} : main={tweaks.FontSizeMain}, small={tweaks.FontSizeSmall}, ctx={tweaks.FontSizeCtx}, pad={tweaks.PadRatio}, overrides={tweaks.CharOverrides.Count}");
+                    $"loaded : main={tweaks.FontSizeMain}, small={tweaks.FontSizeSmall}, ctx={tweaks.FontSizeCtx}, pad={tweaks.PadRatio}, overrides={tweaks.CharOverrides.Count}");
                 return tweaks;
             }
             catch (Exception ex)
             {
-                ConfigManager.Log($"LearningTweaks.Load({path})", ex);
+                ConfigManager.Log("LearningTweaks.Load", ex);
                 return new LearningTweaks();
             }
         }

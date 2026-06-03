@@ -12,6 +12,8 @@ AZERTY Global est une disposition clavier française améliorée, alternative à
 
 L'application Windows permet d'utiliser AZERTY Global **sans installation système et sans droits administrateur**. Elle fonctionne en arrière-plan et intercepte les frappes clavier pour appliquer la disposition.
 
+**Version actuelle du code :** 0.11.2 — package Microsoft Store 0.11.2.0.
+
 ### Fonctionnalités
 
 - **Remapping clavier complet** — 48 touches, 8 couches par touche, 29 touches mortes
@@ -20,6 +22,7 @@ L'application Windows permet d'utiliser AZERTY Global **sans installation systè
 - **Recherche de caractères** — Trouvez n'importe quel caractère parmi les 1 000+ disponibles
 - **Module d'apprentissage** — Leçons interactives pour s'entraîner aux 5 améliorations
 - **Suspension automatique pour les jeux** — Détection des applications fullscreen et désactivation transparente du remapping
+- **Compatibilité jeux renforcée** — Mode d'émission natif par scancode et désactivation de sécurité pour les anti-cheats connus
 - **Détection de l'application au premier plan** — Pour des comportements contextuels par application
 - **Icône dans la zone de notification** — Activation / désactivation rapide
 - **Aucune installation requise** — Fonctionne depuis le Microsoft Store
@@ -34,7 +37,10 @@ L'application Windows permet d'utiliser AZERTY Global **sans installation systè
 Le projet utilise .NET 8.0 avec compilation AOT native :
 
 ```bash
-dotnet publish -c Release
+dotnet publish -c Release -r win-x64
+dotnet publish -c Release -r win-arm64
+pwsh ./scripts/Pack-MSIX.ps1
+pwsh ./scripts/Verify-Release.ps1
 ```
 
 > **Note :** Le linker AOT peut échouer si le chemin contient des espaces. Si c'est le cas, copiez les sources dans un chemin sans espaces (ex : `C:\temp\agp-build`).
@@ -48,6 +54,8 @@ Le projet inclut une suite de tests unitaires xUnit dans `src/AZERTYGlobal.Tests
 ```bash
 dotnet test src/AZERTYGlobal.Tests
 ```
+
+La version 0.11.2 compte 96 tests unitaires.
 
 ## Structure du projet
 
@@ -85,6 +93,7 @@ msix/                             Packaging Microsoft Store
 └── Assets/                       Logos, screenshots et templates
 scripts/                          Scripts de build
 ├── Pack-MSIX.ps1                 Packaging MSIX
+├── Sync-LayoutResources.ps1       Synchronisation des ressources de disposition
 └── Verify-Release.ps1            Vérification pré-publication
 ```
 

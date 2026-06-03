@@ -9,6 +9,9 @@ namespace AZERTYGlobal.Tests;
 /// </summary>
 public class KeyMapperEmitTextIntegrationTests : IDisposable
 {
+    private const uint KEYEVENTF_KEYUP = 0x0002;
+    private const uint KEYEVENTF_SCANCODE = 0x0008;
+
     private readonly string _tempDir;
     private readonly string _configPath;
 
@@ -70,11 +73,14 @@ public class KeyMapperEmitTextIntegrationTests : IDisposable
 
         Assert.Single(mock.SendInputCalls);
         var inputs = mock.SendInputCalls[0];
-        // RMenu down + VK_0 down + VK_0 up + RMenu up (au minimum)
+        // RMenu down + scancode down + scancode up + RMenu up (au minimum)
         Assert.True(inputs.Length >= 4);
         Assert.Equal(0xA5, inputs[0].u.ki.wVk); // VK_RMENU
-        Assert.Equal(0x30, inputs[1].u.ki.wVk); // VK_0
+        Assert.Equal(0, inputs[1].u.ki.wVk); // scancode input
         Assert.Equal((ushort)0x0B, inputs[1].u.ki.wScan); // scancode SC00B (pas 0)
+        Assert.True((inputs[1].u.ki.dwFlags & KEYEVENTF_SCANCODE) != 0);
+        Assert.True((inputs[2].u.ki.dwFlags & KEYEVENTF_SCANCODE) != 0);
+        Assert.True((inputs[2].u.ki.dwFlags & KEYEVENTF_KEYUP) != 0);
     }
 
     [Fact]
@@ -102,6 +108,32 @@ public class KeyMapperEmitTextIntegrationTests : IDisposable
         Assert.Contains(inputs, ev => ev.u.ki.wVk == 0xA4); // VK_LMENU
         // Doit contenir un VK_NUMPAD2 (0x62) pour le chiffre 2 du 0201
         Assert.Contains(inputs, ev => ev.u.ki.wVk == 0x62); // VK_NUMPAD2
+    }
+
+    [Fact]
+    public void EmitText_NativeCombo_UnknownCp1252Extended_FallsBackToAltCode()
+    {
+        var mock = new MockWin32Api
+        {
+            ScriptedProcessName = "javaw.exe",
+            ScriptedFullPath = @"C:\Java\javaw.exe",
+            ScriptedModules = new[] { "lwjgl_glfw.dll" },
+            CurrentHkl = (IntPtr)0x040C040C
+        };
+        mock.KeyStateScript[(int)Win32.VK_NUMLOCK] = 0x0001;
+
+        var fm = new ForegroundMonitor(mock, IntPtr.Zero);
+        var km = new KeyMapper(new Layout(), mock);
+        km.SetForegroundMonitor(fm);
+        mock.SendInputCalls.Clear();
+
+        km.EmitText("Œ"); // CP1252 140 → Alt+0140
+
+        Assert.Single(mock.SendInputCalls);
+        var inputs = mock.SendInputCalls[0];
+        Assert.Contains(inputs, ev => ev.u.ki.wVk == 0xA4); // VK_LMENU
+        Assert.Contains(inputs, ev => ev.u.ki.wVk == 0x61); // VK_NUMPAD1
+        Assert.Contains(inputs, ev => ev.u.ki.wVk == 0x64); // VK_NUMPAD4
     }
 
     [Fact]

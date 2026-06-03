@@ -161,7 +161,7 @@ internal sealed class ForegroundMonitor : IDisposable
             if (oldMode != mode && ConfigManager.CompatibilityDebugLog)
             {
                 ConfigManager.LogCompatEvent("CompatMode",
-                    $"{oldMode} → {mode} (process={processName ?? "<none>"})");
+                    $"{oldMode} → {mode} (process={ConfigManager.AnonymizeProcessName(processName)})");
             }
 
             if (oldMode != mode || (oldMode == mode && processName != null))

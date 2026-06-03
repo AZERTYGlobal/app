@@ -75,40 +75,27 @@ Site web : https://azerty.global
 
 ### Nouveautés de cette version (notes de version)
 
+Version 0.11.2 :
+ • Mise à jour de la phrase de l'exercice 4 dans le mini-onboarding.
+ • Correctif de compatibilité jeux : les combos natives utilisent désormais de vrais événements scancode.
+ • Notification de sécurité anti-cheat renforcée.
+ • Journaux techniques locaux durcis : moins d'informations nominatives dans les logs de compatibilité.
+
+Version 0.11.1 :
+ • Correctif pour les utilisateurs dont la disposition système Windows est en QWERTY ou une autre disposition non-AZERTY.
+ • Les touches physiques AZERTY Global produisent désormais les bons caractères même si Windows associe une autre lettre ou un autre symbole à la même position.
+ • Le pass-through clavier reste actif quand la disposition de la fenêtre cible produit déjà le bon caractère.
+
 Version 0.11.0 :
  • Disposition synchronisée avec la version actuelle d'AZERTY Global : nouveaux accès pour #, ^, backtick, Latin étendu, tiret insécable et espaces insécables.
  • Recherche de caractères mise à jour avec 1032 entrées d'index, dont 1003 caractères Unicode et 29 touches mortes.
- • Les touches mortes déplacées et les tooltips du clavier virtuel sont alignés avec le site azerty.global.
-
-Version 0.10.0 :
- • Nouvelle entrée « Exercices » dans le menu de la zone de notification : permet de relancer les 6 exercices d'apprentissage à tout moment, en repartant du premier.
- • Suppression de la notification Windows redondante lors des bascules on/off : seule la fenêtre flottante en haut à droite reste affichée.
- • Compatibilité jeux entièrement repensée : les caractères AZERTY Global (@, É, «», accents, ligatures…) s'affichent désormais correctement dans les chats Minecraft, Trackmania et la plupart des jeux Unity, SDL ou GLFW, ainsi que dans les champs de recherche modés (JEI inclus).
- • Désactivation automatique sur les jeux protégés par un anti-cheat (Valorant, League of Legends, Fortnite, Call of Duty, Apex Legends, R6 Siege, Tarkov, Genshin Impact, Roblox, FACEIT et autres) pour éviter tout risque de bannissement. Réactivation automatique à la fermeture du jeu.
- • Nouveau sous-menu de compatibilité par application dans le menu de la zone de notification : permet de forcer la compatibilité jeu ou la désactivation pour une application précise.
- • Corrections en jeu : saut possible en sprint (Maj+Z+Espace dans Minecraft), plus de touche fantôme après désactivation rapide, Ctrl+A pour drop d'item à nouveau fonctionnel.
- • Refonte du mini-onboarding : bouton et instruction lisibles, mention de confidentialité ajoutée.
- • Clavier des exercices aligné sur le testeur du site (accent bleu AltGr, légende des modificateurs).
- • Page de félicitations en fin d'exercices, exercices facultatifs identifiés par une pill « Bonus ».
- • Étape 3 simplifiée : retrait des liens redondants.
-
-Version 0.9.6 :
- • Audit complet de l'architecture et du code.
- • Aucun changement fonctionnel — version de consolidation.
-
-Version 0.9.5 :
- • Fiabilité de publication renforcée : version, manifeste MSIX et artefacts packagés remis en cohérence.
- • Lancement automatique plus fiable : l'application relit désormais l'état réel de Windows.
- • Recherche de caractère améliorée : copie presse-papiers fiabilisée et meilleure gestion du DPI.
-
-Version 0.9.2 :
- • Correction : Verr. Maj n'affecte plus la rangée numérique (Smart Caps Lock).
- • Nouveau : option « Signaler un bug » dans le menu de la barre des tâches.
-
-Version 0.9.1 :
- • Démarrage automatique avec Windows (sans droits administrateur).
- • Raccourcis clavier personnalisables.
- • Meilleure compatibilité avec les touches mortes de l'AZERTY traditionnel.
+ • Nouveau menu « Exercices » : relancez les 6 exercices guidés à tout moment.
+ • Mini-onboarding simplifié, plus lisible, avec mention de confidentialité et liens utiles.
+ • Compatibilité jeux entièrement repensée : meilleure saisie dans Minecraft, Trackmania et la plupart des jeux Unity, SDL ou GLFW.
+ • Désactivation automatique sur les jeux protégés par anti-cheat pour éviter tout risque de bannissement.
+ • Nouveau sous-menu de compatibilité par application.
+ • Corrections en jeu : plus de touches fantômes après bascule rapide, sprint/saut plus fiable, Ctrl+A restauré dans les cas concernés.
+ • Notifications de bascule simplifiées : seule la fenêtre flottante reste affichée.
 
 ### Mots-clés de recherche (max 7, séparés par des points-virgules)
 
@@ -136,18 +123,18 @@ Improved French keyboard layout. Direct accented capitals, better punctuation, n
 
 ### Long description
 
-AZERTY Global is the fixed AZERTY: same letters, better punctuation, easy accented capitals, accessible dev symbols.
+AZERTY Global is an improved French keyboard layout for Windows: the same AZERTY base, cleaner punctuation, easy accented capitals, accessible programming symbols and broad multilingual coverage.
 
-Install the app, enable it — that's it. No admin rights required.
+Install the app, enable it — that's it. No admin rights required, and almost no relearning.
 
 
 🔤 5 IMPROVEMENTS, 99% OF YOUR HABITS PRESERVED
 
-1. Smart Caps Lock — only affects letters → É, È, Ç, À in one key press
+1. Smart Caps Lock — only affects letters → É, È, Ç, À, Ù in one key press
 2. Direct period access — period and semicolon swapped
-3. @ and # on the ² key
+3. @ and # on the top-left key, where ² usually is on French keyboards
 4. Programming symbols on the home row — { } [ ] | \ with AltGr + D F G H J K
-5. International accents on the ù key — acute ´ and grave ` replace ù and %, which are moved
+5. International accents on the ù key — acute ´, grave ` and tilde ~ for multilingual typing
 
 
 📝 PERFECT FRENCH TYPOGRAPHY
@@ -156,17 +143,21 @@ Install the app, enable it — that's it. No admin rights required.
 • French guillemets « » and foreign quotation marks
 • Em dash — and en dash –
 • Ellipsis …
-• Typographic apostrophe '
-• Non-breaking space and narrow non-breaking space
+• Typographic apostrophe ’
+• Non-breaking spaces and non-breaking hyphen
 • And much more!
 
 
 💻 DEVELOPER-FRIENDLY
-Braces, brackets, pipe and backslash accessible without finger gymnastics — on the home row.
+Braces, brackets, pipe and backslash are accessible without finger gymnastics — on the home row. Direct shortcuts for #, ^ and backtick are also included.
 
 
-🌍 ALL EUROPEAN AND FRANCOPHONE AFRICAN LANGUAGES
-Spanish, German, Portuguese, Italian and all other European languages. Also Francophone African languages: Wolof, Bambara, Yoruba, Hausa and many more.
+🌍 EUROPEAN AND FRANCOPHONE AFRICAN LANGUAGES
+Useful characters for Spanish, German, Portuguese, Italian and many other European languages. Also supports many francophone African languages, including Wolof, Bambara, Yoruba, Hausa and more.
+
+
+🎓 BUILT-IN MINI-TUTORIAL
+Six guided exercises help you practice the main improvements: accented capitals, direct period access, programming symbols and international accents. It takes about ten minutes.
 
 
 🔢 MISCELLANEOUS
@@ -182,10 +173,11 @@ Looking for a symbol? Type its name and the app shows where it is on the keyboar
 
 
 🔒 PRIVACY-FIRST
-• Zero data collection
-• No network connection (100% offline)
 • No telemetry
+• No account required
 • Keystrokes are never recorded, stored, or transmitted
+• Technical logs, when needed, stay local on your device
+• External links open only when you choose them
 
 
 ✅ FREE AND OPEN SOURCE
@@ -195,40 +187,27 @@ Website: https://azerty.global
 
 ### What's new (release notes)
 
+Version 0.11.2:
+ • Updated the sentence used in exercise 4 of the mini-onboarding.
+ • Game compatibility fix: native combos now use real scancode events.
+ • Stronger anti-cheat safety notification.
+ • Hardened local technical logs: fewer identifying details in compatibility logs.
+
+Version 0.11.1:
+ • Fix for users whose Windows system keyboard layout is QWERTY or another non-AZERTY layout.
+ • AZERTY Global physical keys now output the expected characters even when Windows maps another letter or symbol to the same key position.
+ • Keyboard pass-through remains enabled when the target window layout already outputs the correct character.
+
 Version 0.11.0:
  • Keyboard layout synchronized with the current AZERTY Global layout: updated shortcuts for #, ^, backtick, Extended Latin, non-breaking hyphen and non-breaking spaces.
  • Character search updated with 1032 indexed entries, including 1003 Unicode characters and 29 dead keys.
- • Moved dead keys and virtual keyboard tooltips now match azerty.global.
-
-Version 0.10.0:
- • New "Exercises" entry in the system tray menu: lets you replay the 6 learning exercises any time, starting from the first one.
- • Removed redundant Windows notification on toggle on/off: only the floating top-right window remains.
- • Completely redesigned game compatibility: AZERTY Global characters (@, É, «», accents, ligatures…) now appear correctly in Minecraft chat, Trackmania and most Unity, SDL or GLFW games, including modded search fields (JEI included).
- • Automatic disabling on games protected by an anti-cheat (Valorant, League of Legends, Fortnite, Call of Duty, Apex Legends, R6 Siege, Tarkov, Genshin Impact, Roblox, FACEIT and others) to prevent any ban risk. Automatic re-enabling when the game closes.
- • New per-application compatibility submenu in the system tray menu: lets you force game-compatible mode or disable the app for a specific application.
- • In-game fixes: jump while sprinting (Shift+Z+Space in Minecraft), no more "phantom key" after rapid toggling, Ctrl+A item drop working again.
- • Mini-onboarding overhaul: readable button and instructions, added privacy notice.
- • Exercise keyboard aligned with the website tester (blue AltGr accent, modifier legend).
- • Congratulations screen at the end of exercises, optional exercises tagged with a "Bonus" pill.
- • Simplified step 3: removed redundant links.
-
-Version 0.9.6:
- • Full architecture and code audit.
- • No functional changes — consolidation release.
-
-Version 0.9.5:
- • Stronger release reliability: app version, MSIX manifest and packaged artifacts are kept in sync.
- • More reliable auto-start: the app now reloads the real Windows state instead of a cached flag.
- • Improved character search: safer clipboard copy path and better DPI handling.
-
-Version 0.9.2:
- • Fix: Caps Lock no longer affects the number row (Smart Caps Lock).
- • New: "Report a bug" option in the system tray menu.
-
-Version 0.9.1:
- • Auto-start with Windows (no admin rights needed).
- • Customizable keyboard shortcuts.
- • Better compatibility with traditional AZERTY dead keys.
+ • New “Exercises” menu item: replay the 6 guided exercises at any time.
+ • Clearer mini-onboarding with privacy notice and useful links.
+ • Completely redesigned game compatibility: better typing in Minecraft, Trackmania and most Unity, SDL or GLFW games.
+ • Automatic disabling on games protected by anti-cheat systems to prevent ban risk.
+ • New per-application compatibility submenu.
+ • In-game fixes: no more phantom keys after rapid toggling, more reliable sprint/jump behavior, Ctrl+A restored in affected cases.
+ • Simpler toggle notifications: only the floating status window remains.
 
 ### Search terms (max 7, semicolon-separated)
 
@@ -266,9 +245,11 @@ contact@azerty.global
 
 ### Notes pour l'équipe de certification Microsoft
 
+**v0.11.2** : correctifs pré-publication Store (injection scancode réelle en mode compatibilité jeux, notification anti-cheat renforcée, journaux locaux durcis). Bundle 0.11.2.0 produit et vérifié (`Verify-Release.ps1` PASS). Rapport WACK `wack-report-v0.11.2.xml` : `OVERALL_RESULT=PASS`.
+
 **v0.11.0** : synchronisation des ressources embarquées avec la disposition actuelle d'AZERTY Global. Bundle 0.11.0.0 produit et vérifié (`Verify-Release.ps1` PASS). Rapport WACK `wack-report-v0.11.0.xml` : `OVERALL_RESULT=PASS`.
 
-**v0.10.0** : audit sécurité indépendant 2026-05 appliqué (9 patches : Control Flow Guard activé sur AOT, gestion défensive du callback hook et des allocations natives, anonymisation HMAC-SHA256 des logs de compatibilité, marker d'injection randomisé au démarrage, mutex `Local\` anti-squat, lecture atomique du contexte foreground, build déterministe, NETAnalyzers actifs, CI GitHub Actions avec attestation SLSA L1). Voir `AUDIT-SECURITY-v0.10.0.md`.
+**v0.10.0** : audit sécurité indépendant 2026-05 appliqué (9 patches : Control Flow Guard activé sur AOT, gestion défensive du callback hook et des allocations natives, anonymisation HMAC-SHA256 des logs de compatibilité, marker d'injection randomisé au démarrage, mutex `Local\` anti-squat, lecture atomique du contexte foreground, build déterministe, NETAnalyzers actifs, CI GitHub Actions avec attestation SLSA L1). Voir `../Archives/audits/2026-05/reports/AUDIT-SECURITY-v0.10.0.md`.
 
 Cette application utilise un hook clavier bas niveau (WH_KEYBOARD_LL via SetWindowsHookEx) pour intercepter et remapper les frappes clavier. C'est le mécanisme standard de Windows pour les dispositions de clavier logicielles.
 
@@ -279,7 +260,7 @@ Points importants :
  • L'application est un exécutable .NET 8.0 AOT natif (pas de runtime .NET requis).
  • La capacité runFullTrust est requise car c'est une application Desktop Bridge Win32.
 
-APIs additionnelles introduites v0.9.7 pour la couche compatibilité jeux (toujours présentes en v0.9.8 / v0.10.0 / v0.11.0) :
+APIs additionnelles introduites v0.9.7 pour la couche compatibilité jeux (toujours présentes en v0.9.8 / v0.10.0 / v0.11.0 / v0.11.1 / v0.11.2) :
  • SetWinEventHook(EVENT_SYSTEM_FOREGROUND) — pour détecter le changement d'application au premier plan et adapter le mode d'injection en conséquence.
  • OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ) + EnumProcessModulesEx + GetModuleFileNameExW — pour identifier les frameworks gaming chargés (GLFW, SDL, Unity, etc.) et basculer en mode d'injection compatible. Échoue gracieusement (try/catch) sur les processus protégés par un anti-cheat — comportement attendu et géré.
  • Aucune écriture, aucune injection de DLL ou de code dans les processus externes. Lecture seule des noms de modules pour déterminer le mode d'injection à utiliser.
@@ -287,7 +268,7 @@ APIs additionnelles introduites v0.9.7 pour la couche compatibilité jeux (toujo
 
 ### Note WACK — DPIAwarenessValidation
 
-Le rapport WACK courant `wack-report-v0.11.0.xml` passe `DPIAwarenessValidation`. Les versions précédentes pouvaient produire un WARNING faux positif lié au scanner WACK sur les binaires .NET 8 Native AOT ; cette note est conservée uniquement si Microsoft le signale à nouveau pendant la certification.
+Le dernier rapport WACK exécuté (`wack-report-v0.11.2.xml`) passe `DPIAwarenessValidation`. Les versions précédentes pouvaient produire un WARNING faux positif lié au scanner WACK sur les binaires .NET 8 Native AOT ; cette note est conservée uniquement si Microsoft le signale à nouveau pendant la certification.
 
 L'application est bel et bien DPI-aware en mode Per-Monitor V2, vérifiable de deux façons :
 
@@ -302,7 +283,7 @@ Le comportement DPI réel est conforme aux exigences ; toutes les fenêtres de l
 
 ### Note WACK — FAIL OPTIONAL « Fichiers exécutables bloqués »
 
-Ce test (`OPTIONAL=TRUE` dans le rapport WACK v0.11.0) FAIL depuis la v0.9.5 (acceptée par Microsoft à la review précédente). Causes :
+Ce test (`OPTIONAL=TRUE` dans le rapport WACK v0.11.2) FAIL depuis la v0.9.5 (acceptée par Microsoft à la review précédente). Causes :
  • Référence `shell32.dll!ShellExecuteW` — usage légitime pour ouvrir les liens externes (site web, GitHub, Discord, EUPL) depuis le menu tray et la fenêtre À propos.
  • Strings du runtime .NET Native AOT (`CsI`, `cdB`, `CMD`, `MSBuild`) — résidus de noms d'outils dans le binaire, non utilisés à l'exécution.
  • Référence `powershell` dans le `README.md` distribué avec le package.
@@ -326,4 +307,4 @@ Les fichiers suivants sont dans `msix/Assets/` :
 
 ---
 
-*Dernière mise à jour : 2026-05-23 (préparation Store 0.11.0)*
+*Dernière mise à jour : 2026-06-03 (préparation Store 0.11.2)*

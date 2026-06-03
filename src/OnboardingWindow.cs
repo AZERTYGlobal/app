@@ -590,22 +590,21 @@ sealed class OnboardingWindow : IDisposable
 
     public void Close()
     {
-        // Ne persister la preference « Ne plus afficher » QUE si l'utilisateur a vu l'etape 3
-        // (ou la checkbox est visible). Sinon, fermer le wizard a l'etape 1 ou 2 (croix, Esc,
-        // Quitter) ne touche pas a ShowOnboardingAtStartup. Avant v0.9.7.1, la persistance
-        // inconditionnelle + default-checked transformait toute fermeture precoce en opt-out
-        // permanent silencieux.
+        // Ne persister les preferences visibles QUE si l'utilisateur a vu l'etape 3.
+        // Sinon, fermer le wizard a l'etape 1 ou 2 (croix, Esc, Quitter) ne touche ni
+        // ShowOnboardingAtStartup ni l'autostart. Les checkboxes sont initialisees par
+        // defaut dans Show(), mais ne deviennent un choix utilisateur qu'une fois visibles.
         if (_step3Reached)
         {
             var checkState = Win32.SendMessageW(_hWndChkDontShow, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero);
             ConfigManager.SetShowOnboardingAtStartup(checkState != (IntPtr)BST_CHECKED);
-        }
 
-        var autoStartState = Win32.SendMessageW(_hWndChkAutoStart, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero);
-        bool autoStartSaved = AutoStart.Set(autoStartState == (IntPtr)BST_CHECKED);
-        RefreshAutoStartCheckbox();
-        if (!autoStartSaved)
-            ShowAutoStartError();
+            var autoStartState = Win32.SendMessageW(_hWndChkAutoStart, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero);
+            bool autoStartSaved = AutoStart.Set(autoStartState == (IntPtr)BST_CHECKED);
+            RefreshAutoStartCheckbox();
+            if (!autoStartSaved)
+                ShowAutoStartError();
+        }
 
         Win32.ShowWindow(_hWnd, 0);
         _visible = false;

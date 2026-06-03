@@ -6,6 +6,8 @@ obj/
 *.exe
 *.pdb
 *.msix
+*.msixbundle
+wack-report-*.xml
 
 # Test results
 TestResults/

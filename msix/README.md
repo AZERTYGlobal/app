@@ -62,8 +62,8 @@ powershell -ExecutionPolicy Bypass -File "..\scripts\Pack-MSIX.ps1"
 - copie chaque exe publie (x64 + arm64) dans un dossier de staging temporaire
 - ajuste `ProcessorArchitecture` dans `AppxManifest.xml` selon l'arch
 - produit un `.msix` par architecture, puis les groupe dans un `.msixbundle`
-- ecrit le bundle versionne `AZERTYGlobal-<version>.msixbundle` a la racine du dossier `Microsoft Store/`
-- rafraichit aussi `msix\AZERTYGlobal.msixbundle` (bundle stable, archive l'ancien dans `Archives/`)
+- ecrit le bundle versionne `msix\AZERTYGlobal-<version>.msixbundle`
+- rafraichit aussi `msix\AZERTYGlobal.msixbundle` (bundle stable, archive l'ancien dans `Archives\msix-previous\by-version\<version>\`)
 
 `MakeAppx.exe` se trouve en general dans :
 
@@ -82,7 +82,7 @@ Verifie que la version est alignee dans : `Program.cs`, `.csproj`, `AssemblyInfo
 ### 5. Tester localement avant soumission
 
 ```powershell
-Add-AppxPackage -Path ".\AZERTYGlobal.msixbundle"
+Add-AppxPackage -Path ".\msix\AZERTYGlobal-<version>.msixbundle"
 ```
 
 Verifier :
@@ -98,7 +98,7 @@ Verifier :
 ### 6. Validation WACK
 
 ```powershell
-appcert.exe test -appxpackagepath "AZERTYGlobal-<version>.msixbundle" -reportoutputpath "wack-report-v<version>.xml"
+appcert.exe test -appxpackagepath "msix\AZERTYGlobal-<version>.msixbundle" -reportoutputpath "wack-report-v<version>.xml"
 ```
 
 Corriger les problemes signales avant soumission. Les nouvelles APIs v0.9.7 (`PSAPI`, `SetWinEventHook`) sont declaratees dans `Fiche Store.md` (notes de certification).
@@ -106,7 +106,7 @@ Corriger les problemes signales avant soumission. Les nouvelles APIs v0.9.7 (`PS
 ### 7. Soumettre au Store
 
 1. Ouvrir la soumission dans Partner Center
-2. Uploader le `.msixbundle`
+2. Uploader le `.msixbundle` versionne depuis `msix\`
 3. Completer la fiche Store, les captures, la privacy policy et la classification
 4. Ajouter une note de certification expliquant l'usage de `WH_KEYBOARD_LL` + APIs v0.9.7 (`PSAPI`, `SetWinEventHook`) — voir section "Notes pour l'equipe de certification Microsoft" de `Fiche Store.md`
 5. Soumettre

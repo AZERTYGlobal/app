@@ -123,6 +123,7 @@ if ([string]::IsNullOrWhiteSpace($version)) {
 # Le manifest MSIX exige exactement 4 segments (Major.Minor.Build.Revision).
 # Si le csproj declare 3 segments, on complete avec .0. Si 4 deja presents, on les utilise tels quels.
 $storeVersion = if (($version -split '\.').Count -eq 4) { $version } else { "$version.0" }
+$versionedBundlePath = Join-Path $msixDir ("AZERTYGlobal-{0}.msixbundle" -f $storeVersion)
 $programText = Get-FileText $programPath
 $assemblyInfoText = Get-FileText $assemblyInfoPath
 [xml]$manifest = Get-FileText $manifestPath
@@ -162,6 +163,15 @@ foreach ($arch in $architectures) {
 if (-not (Test-Path $bundlePath)) {
     throw "Fichier requis introuvable: $bundlePath"
 }
+if (-not (Test-Path $versionedBundlePath)) {
+    throw "Fichier requis introuvable: $versionedBundlePath"
+}
+
+$stableBundleHash = (Get-FileHash $bundlePath -Algorithm SHA256).Hash
+$versionedBundleHash = (Get-FileHash $versionedBundlePath -Algorithm SHA256).Hash
+if ($stableBundleHash -ne $versionedBundleHash) {
+    throw "Le bundle stable ne correspond pas au bundle versionne"
+}
 
 # --- Vérification des hashes (publish → bundle) ---
 
@@ -183,3 +193,4 @@ foreach ($arch in $architectures) {
 Write-Host ""
 Write-Host "Release vérifiée: version $version / package $storeVersion"
 Write-Host "Architectures: $($architectures -join ', ')"
+Write-Host "Bundle versionne: $versionedBundlePath"
