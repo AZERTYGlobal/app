@@ -64,19 +64,19 @@ jobs:
         run: |
           Get-FileHash -Algorithm SHA256 "src/bin/Release/net8.0-windows10.0.17763.0/win-x64/publish/AZERTY Global.exe"
           Get-FileHash -Algorithm SHA256 "src/bin/Release/net8.0-windows10.0.17763.0/win-arm64/publish/AZERTY Global.exe"
-          Get-ChildItem . -Filter "AZERTYGlobal-*.msixbundle" | ForEach-Object { Get-FileHash -Algorithm SHA256 $_.FullName }
+          Get-ChildItem ./msix -Filter "AZERTYGlobal-*.msixbundle" | ForEach-Object { Get-FileHash -Algorithm SHA256 $_.FullName }
 
       - name: Upload msixbundle artefact
         uses: actions/upload-artifact@v4
         with:
           name: msixbundle
-          path: AZERTYGlobal-*.msixbundle
+          path: msix/AZERTYGlobal-*.msixbundle
           retention-days: 90
 
       - name: Attest provenance (SLSA L1)
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: 'AZERTYGlobal-*.msixbundle'
+          subject-path: 'msix/AZERTYGlobal-*.msixbundle'
 
       - name: Upload BinSkim SARIF
         if: always() && steps.binskim_sarif.outputs.found == 'true'
