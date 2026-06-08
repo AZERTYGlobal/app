@@ -23,7 +23,7 @@ $publicRepoRoot = Resolve-FirstExistingPath @(
     $projectRoot
 ) 'Clone public Microsoft Store'
 
-$sourceLayout = Join-Path $siteRoot 'data\AZERTY Global Final.json'
+$sourceLayout = Join-Path $siteRoot 'data\AZERTY Global.json'
 $sourceIndex = Join-Path $siteRoot 'tester\character-index.json'
 $targetLayout = Join-Path $projectRoot 'src\AZERTY Global 2026.json'
 $targetIndex = Join-Path $projectRoot 'src\character-index.json'
@@ -143,10 +143,10 @@ const layout = readJson(layoutPath);
 const index = readJson(indexPath);
 assertEqual(Object.keys(layout.dead_keys || {}).length, 29, 'Nombre de touches mortes');
 assertEqual(layout.statistics.direct_characters, 131, 'direct_characters');
-assertEqual(layout.statistics.dead_key_combinations, 1014, 'dead_key_combinations');
-assertEqual(layout.statistics.total_unique_characters, 1003, 'total_unique_characters');
-assertEqual(index.totalCharacters, 1032, 'totalCharacters');
-assertEqual(Object.keys(index.characters || {}).length, 1032, 'Nombre de caracteres indexes');
+assertEqual(layout.statistics.dead_key_combinations, 1016, 'dead_key_combinations');
+assertEqual(layout.statistics.total_unique_characters, 1005, 'total_unique_characters');
+assertEqual(index.totalCharacters, 1034, 'totalCharacters');
+assertEqual(Object.keys(index.characters || {}).length, 1034, 'Nombre de caracteres indexes');
 const checks = [
   ['E00', 'shift', '#', '# sur Maj+@'],
   ['B09', 'alt_gr', '#', '# sur AltGr+:'],
@@ -244,7 +244,7 @@ if ($SyncPublicRepo) {
 
 Write-Host 'Ressources layout synchronisees.'
 Write-Host " - Layout: 29 touches mortes"
-Write-Host " - Character index: 1032 entrees (1003 caracteres Unicode + 29 touches mortes)"
+Write-Host " - Character index: 1034 entrees (1005 caracteres Unicode + 29 touches mortes)"
 if ($SyncPublicRepo) {
     Write-Host " - Clone public synchronise: $publicRepoRoot"
 }

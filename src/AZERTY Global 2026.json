@@ -19,8 +19,8 @@
     "physical_keys": 49,
     "direct_characters": 131,
     "dead_keys_count": 29,
-    "dead_key_combinations": 1014,
-    "total_unique_characters": 1003,
+    "dead_key_combinations": 1016,
+    "total_unique_characters": 1005,
     "supported_languages": "200+ languages, including all European languages using Latin, Greek or Cyrillic scripts"
   },
   "keyboard_type": {
@@ -370,7 +370,7 @@
         "b": "ḇ", "B": "Ḇ", "d": "ḏ", "D": "Ḏ", "h": "ẖ", "k": "ḵ",
         "K": "Ḵ", "l": "ḻ", "L": "Ḻ", "n": "ṉ", "N": "Ṉ", "r": "ṟ",
         "R": "Ṟ", "t": "ṯ", "T": "Ṯ", "z": "ẕ", "Z": "Ẕ",
-        "_": "\u0331", "8": "\u0305", "\u00AF": "\u0304", "\u0020": "\u00AF"
+        "_": "\u0331", "8": "\u0305", "\u0060": "\u1DC6", "\u00B4": "\u1DC7", "\u00AF": "\u0304", "\u0020": "\u00AF"
       }
     },
     "dk_extended_latin": {

@@ -28,7 +28,7 @@
 - Ressources embarquées synchronisées avec la disposition actuelle : `AZERTY Global 2026.json` et `character-index.json`.
 - Mise à jour des raccourcis : `#` en alternative développeur sur AltGr + :, `^` sur AltGr + I, backtick vif sur AltGr + L, Latin étendu sur AltGr + 6, tiret insécable sur Maj + AltGr + 6.
 - Espaces insécables alignées : espace fine insécable sur AltGr + Espace, espace insécable sur Maj + AltGr + Espace.
-- Recherche de caractères mise à jour avec 1032 entrées d'index, dont 1003 caractères Unicode et 29 touches mortes.
+- Recherche de caractères mise à jour avec 1034 entrées d'index, dont 1005 caractères Unicode et 29 touches mortes.
 - Ajout d'un script durable de synchronisation des ressources depuis le site, avec validation des raccourcis critiques.
 
 ## Version 0.10.0 — 8 mai 2026

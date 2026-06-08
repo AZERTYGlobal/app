@@ -34,8 +34,8 @@ public class ResourceAlignmentTests
         var root = doc.RootElement;
         var characters = root.GetProperty("characters");
 
-        Assert.Equal(1032, root.GetProperty("totalCharacters").GetInt32());
-        Assert.Equal(1032, characters.EnumerateObject().Count());
+        Assert.Equal(1034, root.GetProperty("totalCharacters").GetInt32());
+        Assert.Equal(1034, characters.EnumerateObject().Count());
         Assert.True(characters.TryGetProperty("\u02BC", out _));
         Assert.True(characters.TryGetProperty("\u02BB", out _));
     }

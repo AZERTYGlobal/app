@@ -88,7 +88,7 @@ Version 0.11.1 :
 
 Version 0.11.0 :
  • Disposition synchronisée avec la version actuelle d'AZERTY Global : nouveaux accès pour #, ^, backtick, Latin étendu, tiret insécable et espaces insécables.
- • Recherche de caractères mise à jour avec 1032 entrées d'index, dont 1003 caractères Unicode et 29 touches mortes.
+ • Recherche de caractères mise à jour avec 1034 entrées d'index, dont 1005 caractères Unicode et 29 touches mortes.
  • Nouveau menu « Exercices » : relancez les 6 exercices guidés à tout moment.
  • Mini-onboarding simplifié, plus lisible, avec mention de confidentialité et liens utiles.
  • Compatibilité jeux entièrement repensée : meilleure saisie dans Minecraft, Trackmania et la plupart des jeux Unity, SDL ou GLFW.
@@ -200,7 +200,7 @@ Version 0.11.1:
 
 Version 0.11.0:
  • Keyboard layout synchronized with the current AZERTY Global layout: updated shortcuts for #, ^, backtick, Extended Latin, non-breaking hyphen and non-breaking spaces.
- • Character search updated with 1032 indexed entries, including 1003 Unicode characters and 29 dead keys.
+ • Character search updated with 1034 indexed entries, including 1005 Unicode characters and 29 dead keys.
  • New “Exercises” menu item: replay the 6 guided exercises at any time.
  • Clearer mini-onboarding with privacy notice and useful links.
  • Completely redesigned game compatibility: better typing in Minecraft, Trackmania and most Unity, SDL or GLFW games.
