@@ -152,4 +152,16 @@ public class ConfigManagerCompatTests : IDisposable
         Assert.Empty(ConfigManager.GetAllCompatibilityOverrides());
         Assert.Null(ConfigManager.GetCompatibilityOverride(""));
     }
+
+    [Fact]
+    public void Save_DoesNotOverwriteExistingConfig_WhenLoadFailed()
+    {
+        const string invalidJson = "{ invalid";
+        File.WriteAllText(_configPath, invalidJson);
+        ConfigManager.OverrideConfigPathForTests(_configPath);
+
+        ConfigManager.SetNotifications(false);
+
+        Assert.Equal(invalidJson, File.ReadAllText(_configPath));
+    }
 }

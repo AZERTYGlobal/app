@@ -1,5 +1,25 @@
 # Changelog — Application AZERTY Global
 
+## Version 0.12.0 — 19 juin 2026
+
+**Module Leçons**
+
+- Ajout d'une fenêtre `Leçons` accessible depuis le tray, avec catalogue embarqué `lessons.json`, progression locale et mode libre non persistant.
+- Ajout d'un renderer clavier commun utilisé par le clavier virtuel, l'onboarding et les leçons.
+- Ajout du moteur `LessonTypingSession`, du chargement de catalogue, des indices et du stockage `lessons-progress.json`.
+
+**Correctifs pré-test manuel**
+
+- Les leçons reprennent la gestion `WM_SYSCHAR` / `WM_SYSKEYDOWN` et la résolution positionnelle déjà utilisée par l'onboarding pour les dispositions sous-jacentes non-AZERTY.
+- Le pass-through des lettres identiques reste actif même avec Verr. Maj. afin de préserver les raccourcis applicatifs comme `K` sur YouTube.
+- Les échecs de sauvegarde de `config.json` sont maintenant journalisés.
+
+**Validation RC Store**
+
+- Bundle Store 0.12.0.0 produit le 2026-06-21 (`msix/AZERTYGlobal-0.12.0.0.msixbundle`) pour x64 + ARM64.
+- `scripts/Verify-Release.ps1` PASS : hashes des exécutables publiés identiques aux exécutables embarqués dans le bundle.
+- WACK 0.12.0 PASS (`Archives/wack/2026-06/wack-report-v0.12.0.xml`) ; `DPIAwarenessValidation` PASS, optional `Blocked executables` non bloquant conservé.
+
 ## Version 0.11.2 — 3 juin 2026
 
 **Exercice de typographie**
@@ -291,4 +311,4 @@ Refonte majeure de la couche d'injection pour résoudre les problèmes de compat
 
 ---
 
-*Dernière mise à jour : 2026-06-03 (v0.11.2 — correctifs pré-WACK)*
+*Dernière mise à jour : 2026-06-21 (v0.12.0 — RC Store vérifiée)*

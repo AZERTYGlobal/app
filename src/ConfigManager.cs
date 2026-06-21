@@ -27,6 +27,7 @@ static class ConfigManager
             _logDirectoryOverride = Path.GetDirectoryName(path);
             _cache = null;
             _compatibilityCache = null;
+            _loadFailed = false;
         }
     }
 
@@ -61,25 +62,6 @@ static class ConfigManager
             var appDataDir = Path.Combine(localAppData, "AZERTY Global");
             Directory.CreateDirectory(appDataDir);
 
-            // Migration : copier les fichiers depuis l'ancien dossier "AZERTY Global Portable"
-            // (nom historique de la version ZIP autonome, supprimee — on conserve le code de
-            // migration pour les utilisateurs ayant l'ancien dossier sur disque).
-            var oldDir = Path.Combine(localAppData, "AZERTY Global Portable");
-            if (Directory.Exists(oldDir))
-            {
-                try
-                {
-                    foreach (var file in Directory.GetFiles(oldDir))
-                    {
-                        var dest = Path.Combine(appDataDir, Path.GetFileName(file));
-                        if (!File.Exists(dest))
-                            File.Copy(file, dest);
-                    }
-                    Directory.Delete(oldDir, true);
-                }
-                catch { /* Migration best-effort — ne pas bloquer le démarrage */ }
-            }
-
             return Path.Combine(appDataDir, "config.json");
         }
 
@@ -90,6 +72,7 @@ static class ConfigManager
     private static Dictionary<string, JsonElement>? _cache;
     private static Dictionary<string, string>? _compatibilityCache; // sous-objet compatibility (process → "forceOn"/"forceOff")
     private static readonly object _lock = new();
+    private static bool _loadFailed;
 
     /// <summary>Vérifie si l'onboarding a déjà été affiché.</summary>
     public static bool ShowOnboardingAtStartup
@@ -161,6 +144,32 @@ static class ConfigManager
 
     /// <summary>Active ou désactive les notifications.</summary>
     public static void SetNotifications(bool enabled) => SetBool("notificationsEnabled", enabled);
+
+    /// <summary>Indique si les indices automatiques du module Lecons sont actives. Defaut : false.</summary>
+    public static bool LessonAutoHintsEnabled => GetBool("lessonAutoHintsEnabled");
+
+    /// <summary>Active ou desactive les indices automatiques du module Lecons.</summary>
+    public static void SetLessonAutoHints(bool enabled) => SetBool("lessonAutoHintsEnabled", enabled);
+
+    /// <summary>Affiche les stats du mode libre. Defaut : true.</summary>
+    public static bool LessonFreeStatsVisible => GetBoolDefaultTrue("lessonFreeStatsVisible");
+
+    public static void SetLessonFreeStatsVisible(bool visible) => SetBool("lessonFreeStatsVisible", visible);
+
+    /// <summary>Affiche le resume de fin d'exercice. Defaut : true.</summary>
+    public static bool LessonSummaryVisible => GetBoolDefaultTrue("lessonSummaryVisible");
+
+    public static void SetLessonSummaryVisible(bool visible) => SetBool("lessonSummaryVisible", visible);
+
+    /// <summary>Affiche le clavier visuel dans la fenetre Lecons. Defaut : true.</summary>
+    public static bool LessonKeyboardVisible => GetBoolDefaultTrue("lessonKeyboardVisible");
+
+    public static void SetLessonKeyboardVisible(bool visible) => SetBool("lessonKeyboardVisible", visible);
+
+    /// <summary>Affiche les libelles des espaces invisibles. Defaut : true.</summary>
+    public static bool LessonInvisibleMarkersVisible => GetBoolDefaultTrue("lessonInvisibleMarkersVisible");
+
+    public static void SetLessonInvisibleMarkersVisible(bool visible) => SetBool("lessonInvisibleMarkersVisible", visible);
 
     /// <summary>
     /// Raccourcis Ctrl+Shift+Lettre interdits car trop courants dans les applications.
@@ -465,6 +474,15 @@ static class ConfigManager
         }
     }
 
+    private static bool GetBoolDefaultTrue(string key)
+    {
+        lock (_lock)
+        {
+            EnsureLoaded();
+            return !_cache!.TryGetValue(key, out var val) || val.ValueKind != JsonValueKind.False;
+        }
+    }
+
     private static void SetBool(string key, bool value)
     {
         lock (_lock)
@@ -528,6 +546,7 @@ static class ConfigManager
     {
         if (_cache != null) return;
         _cache = new Dictionary<string, JsonElement>();
+        _loadFailed = false;
         try
         {
             if (File.Exists(_configPath))
@@ -557,7 +576,8 @@ static class ConfigManager
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
-            // Config corrompue ou inaccessible — on repart de zéro
+            _loadFailed = true;
+            Log("ConfigManager.EnsureLoaded", ex);
         }
     }
 
@@ -566,6 +586,12 @@ static class ConfigManager
         string tempPath = _configPath + ".tmp";
         try
         {
+            if (_loadFailed && File.Exists(_configPath))
+            {
+                Log("ConfigManager.Save", new IOException("Sauvegarde ignoree: config.json existant non charge."));
+                return;
+            }
+
             var configDir = Path.GetDirectoryName(_configPath);
             if (!string.IsNullOrEmpty(configDir))
                 Directory.CreateDirectory(configDir);
@@ -611,6 +637,7 @@ static class ConfigManager
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Pas critique — on continue sans sauvegarder
+            Log("ConfigManager.Save", ex);
             try
             {
                 if (File.Exists(tempPath))

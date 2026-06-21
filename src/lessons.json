@@ -1,0 +1,665 @@
+{
+  "version": "1.0",
+  "generated": "2026-01-06",
+  "modules": [
+    {
+      "id": "email-web",
+      "title": "Email et Web",
+      "description": "Les bases pour saisir des adresses email et naviguer sur le web",
+      "icon": "📧",
+      "lessons": [
+        {
+          "id": "point",
+          "title": "Point .",
+          "description": "Le point sur la touche point-virgule",
+          "characters": ["."],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez le point",
+              "content": ". . . . ."
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces extensions",
+              "content": ".fr .com .org .net .eu"
+            }
+          ]
+        },
+        {
+          "id": "point-virgule",
+          "title": "Point-virgule ;",
+          "description": "Le point-virgule est maintenant sur Maj + ,",
+          "characters": [";", "."],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez le point-virgule",
+              "content": "; ; ; ; ;"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces phrases courtes",
+              "content": "Il fait beau ; allons-y.\nLe matin, je lis ; le soir, j'écris.\nIl hésite ; elle fonce."
+            }
+          ]
+        },
+        {
+          "id": "arobase",
+          "title": "Arobase @",
+          "description": "La nouvelle position de l'arobase, plus accessible",
+          "characters": ["@", "."],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez l'arobase",
+              "content": "@ @ @ @ @"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces adresses courtes",
+              "content": "a@b.fr\nx@y.eu\nok@go.io"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez des adresses plus longues",
+              "content": "jean@mail.fr\ncontact@azerty.global"
+            }
+          ]
+        },
+        {
+          "id": "croisillon",
+          "title": "Hashtag / croisillon #",
+          "description": "Maj + @ reste la méthode générale ; AltGr + : est plus efficace pour le code",
+          "characters": ["#"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez #",
+              "content": "# # # # #"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces hashtags",
+              "content": "#Paris\n#AZERTY\n#2026\n#Linux"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces exemples de code (AltGr + : est le raccourci ergonomique)",
+              "content": "C#\n#include\ncolor: #fff;"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "majuscules-accentuees",
+      "title": "Majuscules accentuées",
+      "description": "Apprenez à taper É, È, Ç, À avec deux méthodes",
+      "icon": "🔠",
+      "lessons": [
+        {
+          "id": "caps-e-acute",
+          "title": "É majuscule",
+          "description": "Deux méthodes : Verr. Maj. + é ou Circonflexe + é",
+          "characters": ["É"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Méthode 1 : Verr. Maj. + é → É",
+              "content": "É É É É É"
+            },
+            {
+              "type": "practice",
+              "instruction": "Méthode 2 : Circonflexe (^) + é → É (idéal en début de mot)",
+              "content": "É É É É É",
+              "hintMethod": {"deadKey": "dk_circumflex", "baseChar": "é"}
+            },
+            {
+              "type": "practice",
+              "instruction": "Mix : mots et phrases (adaptez la méthode !)",
+              "content": "École\nÉLÉGANT\nL'ÉTAT\nÉmilie\nÉvident"
+            }
+          ]
+        },
+        {
+          "id": "caps-e-grave",
+          "title": "È majuscule",
+          "description": "Deux méthodes : Verr. Maj. + è ou Circonflexe + è",
+          "characters": ["È"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Méthode 1 : Verr. Maj. + è → È",
+              "content": "È È È È È"
+            },
+            {
+              "type": "practice",
+              "instruction": "Méthode 2 : Circonflexe (^) + è → È (idéal en début de mot)",
+              "content": "È È È È È",
+              "hintMethod": {"deadKey": "dk_circumflex", "baseChar": "è"}
+            },
+            {
+              "type": "practice",
+              "instruction": "Mix : mots et phrases (adaptez la méthode !)",
+              "content": "Ève\nCOLLÈGUE\nFRÈRE\nÈre nouvelle\nSYSTÈME"
+            }
+          ]
+        },
+        {
+          "id": "caps-c-cedilla",
+          "title": "Ç majuscule",
+          "description": "Deux méthodes : Verr. Maj. + ç ou Circonflexe + ç",
+          "characters": ["Ç"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Méthode 1 : Verr. Maj. + ç → Ç",
+              "content": "Ç Ç Ç Ç Ç"
+            },
+            {
+              "type": "practice",
+              "instruction": "Méthode 2 : Circonflexe (^) + ç → Ç (idéal en début de mot)",
+              "content": "Ç Ç Ç Ç Ç",
+              "hintMethod": {"deadKey": "dk_circumflex", "baseChar": "ç"}
+            },
+            {
+              "type": "practice",
+              "instruction": "Mix : mots et phrases (adaptez la méthode !)",
+              "content": "Ça va ?\nÇa marche !\nFRANÇAIS\nBALANÇOIRE\nÇa suffit !"
+            }
+          ]
+        },
+        {
+          "id": "caps-a-grave",
+          "title": "À majuscule",
+          "description": "Deux méthodes : Verr. Maj. + à ou Circonflexe + à",
+          "characters": ["À"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Méthode 1 : Verr. Maj. + à → À",
+              "content": "À À À À À"
+            },
+            {
+              "type": "practice",
+              "instruction": "Méthode 2 : Circonflexe (^) + à → À (idéal en début de mot)",
+              "content": "À À À À À",
+              "hintMethod": {"deadKey": "dk_circumflex", "baseChar": "à"}
+            },
+            {
+              "type": "practice",
+              "instruction": "Mix : mots et phrases (adaptez la méthode !)",
+              "content": "À bientôt !\nÀ DEMAIN !\nDÉJÀ LÀ ?\nÀ plus.\nLÀ-BAS"
+            }
+          ]
+        },
+        {
+          "id": "caps-all",
+          "title": "Majuscules accentuées",
+          "description": "Pratiquez toutes les majuscules accentuées ensemble",
+          "characters": ["É", "È", "Ç", "À"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Mix complet : adaptez la méthode selon le contexte",
+              "content": "LES ÉLÈVES VONT À L'ÉCOLE !\nÇA, C'EST ÉVIDENT."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "u-grave-pourcentage",
+      "title": "U accent grave et pourcentage",
+      "description": "Deux caractères qui ont changé de place par rapport à l'AZERTY Windows",
+      "icon": "🔄",
+      "lessons": [
+        {
+          "id": "u-grave",
+          "title": "Lettres ù et Ù",
+          "description": "Deux méthodes : AltGr + U ou Accent aigu + V",
+          "characters": ["ù", "Ù"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Méthode 1 : {ALTGR} + U → ù",
+              "content": "ù ù ù ù ù"
+            },
+            {
+              "type": "practice",
+              "instruction": "Méthode 2 : Accent aigu (´) + V → ù (plus rapide !)",
+              "content": "ù ù ù ù ù",
+              "hintMethod": {"deadKey": "dk_acute", "baseChar": "v"}
+            },
+            {
+              "type": "practice",
+              "instruction": "Ù majuscule : Maj + {ALTGR} + U ou ´ + Maj + V",
+              "content": "Ù Ù Ù Ù Ù"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces mots (choisissez votre méthode)",
+              "content": "où\nlà où\nd'où\nOÙ ?"
+            }
+          ]
+        },
+        {
+          "id": "pourcentage",
+          "title": "Pourcentage %",
+          "description": "Le % est maintenant sur Maj + )",
+          "characters": ["%"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez le pourcentage",
+              "content": "% % % % %"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces valeurs",
+              "content": "50%\n100%\n33%\n75%"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "typographie-francaise",
+      "title": "Typographie française",
+      "description": "Les caractères pour une écriture française soignée",
+      "icon": "🇫🇷",
+      "lessons": [
+        {
+          "id": "ligatures",
+          "title": "Ligatures æ et œ",
+          "description": "Les ligatures françaises e-dans-l'a et e-dans-l'o",
+          "characters": ["æ", "œ", "Æ", "Œ"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez æ et œ",
+              "content": "æ æ æ œ œ œ"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces mots",
+              "content": "cœur\nsœur\nbœuf\nŒuf\nLætitia\nEX ÆQUO"
+            }
+          ]
+        },
+        {
+          "id": "guillemets",
+          "title": "Guillemets « »",
+          "description": "Les vrais guillemets chevrons français",
+          "characters": ["«", "»"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez les guillemets",
+              "content": "« « « » » »"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces citations célèbres",
+              "content": "« Veni, vidi, vici »\n« Je pense, donc je suis »\n« L'enfer, c'est les autres »"
+            }
+          ]
+        },
+        {
+          "id": "tirets",
+          "title": "Tirets cadratins",
+          "description": "Tiret cadratin — et demi-cadratin –",
+          "characters": ["—", "–"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez les tirets",
+              "content": "– – – — — —"
+            },
+            {
+              "type": "practice",
+              "instruction": "Utilisez les tirets",
+              "content": "Paris–Lyon\nIl viendra — je crois — demain.\n— Oui, dit-il."
+            }
+          ]
+        },
+        {
+          "id": "tiret-insecable",
+          "title": "Tiret insécable ‑",
+          "description": "Pour empêcher une coupure de ligne dans les noms composés",
+          "characters": ["‑"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tiret insécable : {ALTGR} + Maj + 6",
+              "content": "‑ ‑ ‑ ‑ ‑"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces exemples",
+              "content": "Jean‑Luc\nSainte‑Anne\nrez‑de‑chaussée"
+            }
+          ]
+        },
+        {
+          "id": "apostrophe-typographique",
+          "title": "Apostrophe typographique '",
+          "description": "La vraie apostrophe française",
+          "characters": ["’"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez l'apostrophe typographique",
+              "content": "’ ’ ’ ’ ’"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces mots",
+              "content": "l’école\nd’abord\nj’aime\nc’est"
+            }
+          ]
+        },
+        {
+          "id": "point-median",
+          "title": "Point médian ·",
+          "description": "Pour l'écriture inclusive",
+          "characters": ["·"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez le point médian",
+              "content": "· · · · ·"
+            },
+            {
+              "type": "practice",
+              "instruction": "Utilisez le point médian",
+              "content": "ami·e·s\nétudiant·e·s\nauteur·rice·s"
+            }
+          ]
+        },
+        {
+          "id": "espaces-insecables",
+          "title": "Espaces insécables",
+          "description": "Espace insécable et espace fine insécable pour la typographie française",
+          "characters": ["\u00A0", "\u202F"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Espace fine insécable : {ALTGR} + Espace (avant ; ! ? et dans « »)",
+              "content": "Bonjour\u202F!\nPourquoi\u202F?\nIl hésite\u202F; elle fonce.\n«\u202FMerci\u202F»"
+            },
+            {
+              "type": "practice",
+              "instruction": "Espace insécable : Maj + {ALTGR} + Espace (avant les deux-points)",
+              "content": "Attention\u00A0: merci.\nRéponse\u00A0: oui.\nHeure\u00A0: 15\u00A0h"
+            },
+            {
+              "type": "practice",
+              "instruction": "Mix : choisissez le bon type d'espace",
+              "content": "Il dit\u00A0: «\u202FOui\u202F!\u202F»\nVraiment\u202F? C'est sûr\u202F!\nRéponse\u00A0: «\u202FNon\u202F; pas encore.\u202F»"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "programmation",
+      "title": "Symboles de programmation",
+      "description": "Les caractères essentiels pour les développeurs",
+      "icon": "💻",
+      "lessons": [
+        {
+          "id": "accolades",
+          "title": "Accolades { }",
+          "description": "Pour les blocs de code",
+          "characters": ["{", "}"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez les accolades",
+              "content": "{ } { } { }"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez du JSON et du code",
+              "content": "{\"nom\": \"Jean\"}\np { color: red; }\n{a, b, c}"
+            }
+          ]
+        },
+        {
+          "id": "backslash-pipe",
+          "title": "Backslash \\ et pipe |",
+          "description": "Barre oblique inversée et barre verticale",
+          "characters": ["\\", "|"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez \\ et |",
+              "content": "\\ \\ | | \\ |"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces exemples",
+              "content": "\\n \\t \\r\nC:\\\\Users\\\\Documents\nls | sort\na || b"
+            }
+          ]
+        },
+        {
+          "id": "crochets",
+          "title": "Crochets [ ]",
+          "description": "Pour les tableaux et indices",
+          "characters": ["[", "]"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez les crochets",
+              "content": "[ ] [ ] [ ]"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces exemples",
+              "content": "array[0]\n[1, 2, 3]\n[link](url)"
+            }
+          ]
+        },
+        {
+          "id": "tilde-backtick",
+          "title": "Tilde ~ et backtick `",
+          "description": "Tilde sur AltGr + N, backtick sur AltGr + L",
+          "characters": ["~", "`"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez ~ (AltGr + N) et ` (AltGr + L)",
+              "content": "~ ~ ~ ` ` `"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces exemples",
+              "content": "~/Documents\n`code`\n```block```"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "langues-etrangeres",
+      "title": "Langues étrangères",
+      "description": "Caractères pour l'espagnol, l'allemand, l'italien et autres",
+      "icon": "🌍",
+      "lessons": [
+        {
+          "id": "espagnol",
+          "title": "Espagnol",
+          "description": "ñ, ¿, ¡ pour écrire en espagnol",
+          "characters": ["ñ", "Ñ", "¿", "¡"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez les caractères espagnols",
+              "content": "ñ Ñ ¿ ¡"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces mots espagnols",
+              "content": "España\nmañana\n¿Qué tal?\n¡Hola!"
+            }
+          ]
+        },
+        {
+          "id": "allemand",
+          "title": "Allemand",
+          "description": "ß, ü, ö, ä pour écrire en allemand",
+          "characters": ["ß", "ü", "ö", "ä", "Ü", "Ö", "Ä"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez les caractères allemands",
+              "content": "ß ü ö ä"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces mots allemands",
+              "content": "Straße\nMünchen\nschön\nÄpfel\nÖsterreich\nÜber"
+            }
+          ]
+        },
+        {
+          "id": "portugais",
+          "title": "Portugais",
+          "description": "ã, õ pour écrire en portugais",
+          "characters": ["ã", "õ", "Ã", "Õ"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez les caractères portugais",
+              "content": "ã õ Ã Õ"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces mots portugais",
+              "content": "São Paulo\ncoração\nnão\nações"
+            }
+          ]
+        },
+        {
+          "id": "nordiques",
+          "title": "Langues nordiques",
+          "description": "ø, å, þ, ð pour le danois, norvégien, suédois, islandais",
+          "characters": ["ø", "å", "Ø", "Å", "þ", "Þ", "ð", "Ð"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez les caractères nordiques",
+              "content": "ø å ð þ Ø Å Ð Þ"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces mots",
+              "content": "København\nÅrhus\nFærøerne\nÞingvellir\nÍsafjörður"
+            }
+          ]
+        },
+        {
+          "id": "latin-etendu",
+          "title": "Latin étendu",
+          "description": "Touche morte Latin étendu sur AltGr + - (touche 6)",
+          "characters": ["ð", "þ", "ɛ", "ŋ", "ʒ"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Touche morte Latin étendu : {ALTGR} + - (touche 6), puis la lettre",
+              "content": "ð þ ɛ ŋ ʒ"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces exemples",
+              "content": "e → ɛ\nn → ŋ\nz → ʒ"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "symboles-specialises",
+      "title": "Symboles spécialisés",
+      "description": "Symboles monétaires, scientifiques et divers",
+      "icon": "🔬",
+      "lessons": [
+        {
+          "id": "monetaires",
+          "title": "Symboles monétaires",
+          "description": "£, ¥, ₩, ₽, ₹, ₿, ¢ et autres devises",
+          "characters": ["£", "¥", "₩", "₽", "₹", "₿", "¢"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez les symboles monétaires",
+              "content": "£ ¥ ₩ ₽ ₹ ₿ ¢"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces montants",
+              "content": "100£\n1000¥\n5000₩\n500₽\n200₹\n0,5₿\n99¢"
+            }
+          ]
+        },
+        {
+          "id": "scientifiques",
+          "title": "Symboles scientifiques",
+          "description": "±, ×, ÷, √, ∞, ≠, ≤, ≥",
+          "characters": ["±", "×", "÷", "√", "∞", "≠", "≤", "≥"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez les symboles scientifiques",
+              "content": "± × ÷ √ ∞ ≠ ≤ ≥"
+            },
+            {
+              "type": "practice",
+              "instruction": "Tapez ces expressions",
+              "content": "5 ± 2\n3 × 4\n10 ÷ 2\n√9\nx ≠ 0\nx ≤ 10"
+            }
+          ]
+        },
+        {
+          "id": "ponctuation-speciale",
+          "title": "Ponctuation spéciale",
+          "description": "Points de suspension, symboles de section",
+          "characters": ["…", "§", "¶", "†", "‡"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez la ponctuation spéciale",
+              "content": "… § ¶ † ‡"
+            },
+            {
+              "type": "practice",
+              "instruction": "Utilisez ces symboles",
+              "content": "Et alors…\nVoir § 12 du contrat.\nCf. note†\n— à suivre…"
+            }
+          ]
+        },
+        {
+          "id": "divers",
+          "title": "Symboles divers",
+          "description": "©, ®, ™, flèches et autres",
+          "characters": ["©", "®", "™", "→", "←", "↑", "↓"],
+          "exercises": [
+            {
+              "type": "practice",
+              "instruction": "Tapez les symboles divers",
+              "content": "© ® ™ → ← ↑ ↓"
+            },
+            {
+              "type": "practice",
+              "instruction": "Utilisez ces symboles",
+              "content": "© 2026\nMarque®\nProduit™\nA → B"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

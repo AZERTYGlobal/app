@@ -582,7 +582,7 @@ sealed class KeyMapper
 
         // Caractère normal — si le layout Windows natif produit le même caractère,
         // laisser passer la touche originale (compatibilité jeux/DirectInput)
-        if (CanPassThrough(scanCode, output, keyDef))
+        if (CanPassThrough(vkCode, scanCode, output, keyDef))
         {
             lock (_passedThroughKeysLock) _passedThroughKeys.Add(scanCode);
             return false;
@@ -596,12 +596,21 @@ sealed class KeyMapper
     /// Vérifie si le layout Windows natif produit le même caractère pour ce scancode.
     /// Si oui, on peut laisser passer la touche originale (compatibilité jeux).
     /// </summary>
-    private bool CanPassThrough(uint scanCode, string output, KeyDefinition keyDef)
+    private bool CanPassThrough(uint vkCode, uint scanCode, string output, KeyDefinition keyDef)
     {
-        // Seulement pour les caractères simples, pas AltGr (qui produit des chars spéciaux)
-        // Pas de pass-through avec Caps Lock : le Smart Caps Lock d'AZERTY Global diffère
-        // du comportement Windows natif (qui traite CapsLock comme Shift sur la rangée numérique)
-        if (output.Length != 1 || IsAltGrDown || _capsLockState) return false;
+        // Seulement pour les caractères simples, pas AltGr (qui produit des chars spéciaux).
+        if (output.Length != 1 || IsAltGrDown) return false;
+
+        char outChar = output[0];
+        char upper = char.ToUpperInvariant(outChar);
+        if (upper >= 'A' && upper <= 'Z' && vkCode == upper)
+            return true;
+        if (outChar == ' ' && vkCode == 0x20) // VK_SPACE
+            return true;
+
+        // Pas de pass-through avec Caps Lock pour les autres touches : le Smart Caps Lock
+        // d'AZERTY Global diffère du comportement Windows natif sur la rangée numérique.
+        if (_capsLockState) return false;
 
         // VK correspondant à ce scancode sur le layout Windows de la fenêtre cible.
         // Le layout du thread app peut différer du foreground (ex: app AZERTY, cible QWERTY).

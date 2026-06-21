@@ -309,7 +309,7 @@ sealed class VirtualKeyboard : IDisposable
         int labelFontSize = Math.Max(9, (int)(geo.Scale * 0.30f));
         int ctxFontSize = Math.Max(10, (int)(geo.Scale * 0.35f));
 
-        _hCharFont = Win32.CreateFontW(charFontSize, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
+        _hCharFont = Win32.CreateFontW(charFontSize, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Consolas");
         _hLabelFont = Win32.CreateFontW(labelFontSize, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
         _hCtxFont = Win32.CreateFontW(ctxFontSize, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
 
@@ -1024,7 +1024,7 @@ sealed class VirtualKeyboard : IDisposable
                     // Texte sombre sur fond clair quand la touche est pressée
                     uint charColor = isPressed ? 0x00201C18 : (isDkOutput ? CLR_DK_CHAR : CLR_CHAR);
                     Win32.SetTextColor(hdc, charColor);
-                    Win32.DrawTextW(hdc, displayChar, displayChar.Length, ref charRect, Win32.DT_CENTER | Win32.DT_VCENTER | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+                    Win32.DrawTextW(hdc, displayChar, displayChar.Length, ref charRect, Win32.DT_CENTER | Win32.DT_VCENTER | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX | Win32.DT_NOCLIP);
                 }
 
                 // Label en bas : quand touche morte active (toujours, même sans correspondance)

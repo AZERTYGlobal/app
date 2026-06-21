@@ -56,6 +56,18 @@ public class ForegroundMonitorMockedTests : IDisposable
     }
 
     [Fact]
+    public void Recompute_UninspectableForegroundProcess_FailsClosed()
+    {
+        var mock = SetupMock("protected.exe");
+        mock.ShouldFailForegroundInspection = true;
+
+        using var fm = new ForegroundMonitor(mock, IntPtr.Zero);
+
+        Assert.Equal(CompatibilityMode.DisabledAntiCheat, fm.CurrentMode);
+        Assert.Null(fm.CurrentProcessName);
+    }
+
+    [Fact]
     public void Recompute_GameFrameworkLoaded_ReturnsNativeCombo()
     {
         var mock = SetupMock("javaw.exe", @"C:\Java\javaw.exe",

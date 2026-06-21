@@ -7,11 +7,13 @@ public class KeyMapperPassThroughLayoutTests : IDisposable
 {
     private const uint SC_E01 = 0x02;
     private const uint SC_D01 = 0x10;
+    private const uint SC_C08 = 0x25;
     private const uint SC_LCONTROL = 0x1D;
 
     private const ushort VK_1 = 0x31;
     private const ushort VK_7 = 0x37;
     private const ushort VK_A = 0x41;
+    private const ushort VK_K = 0x4B;
     private const ushort VK_Q = 0x51;
     private const ushort VK_LCONTROL = 0xA2;
 
@@ -102,7 +104,44 @@ public class KeyMapperPassThroughLayoutTests : IDisposable
         Assert.Equal(VK_A, mock.SendInputCalls[0][0].u.ki.wVk);
     }
 
+    [Fact]
+    public void ProcessKey_NoForegroundHkl_PassesThroughMatchingAsciiLetterForWebShortcuts()
+    {
+        var mock = new MockWin32Api();
+        var mapper = new KeyMapper(LayoutWithD01E01AndC08(), mock);
+
+        bool kHandled = mapper.ProcessKey(VK_K, SC_C08, 0, true);
+
+        Assert.False(kHandled);
+        Assert.Empty(mock.SendInputCalls);
+
+        bool d01Handled = mapper.ProcessKey(VK_Q, SC_D01, 0, true);
+
+        Assert.True(d01Handled);
+        AssertUnicodeEmission(mock, 'a');
+    }
+
+    [Fact]
+    public void ProcessKey_CapsLockActive_PassesThroughMatchingAsciiLetterForWebShortcuts()
+    {
+        var mock = new MockWin32Api();
+        mock.KeyStateScript[0x14] = 0x0001; // Caps Lock actif au demarrage du mapper.
+        var mapper = new KeyMapper(LayoutWithD01E01AndC08(), mock);
+
+        bool kHandled = mapper.ProcessKey(VK_K, SC_C08, 0, true);
+
+        Assert.False(kHandled);
+        Assert.Empty(mock.SendInputCalls);
+    }
+
     private static Layout LayoutWithD01AndE01()
+    {
+        var layout = LayoutWithD01E01AndC08();
+        layout.Keys.Remove(SC_C08);
+        return layout;
+    }
+
+    private static Layout LayoutWithD01E01AndC08()
     {
         var layout = new Layout();
         layout.Keys[SC_D01] = new KeyDefinition
@@ -120,6 +159,15 @@ public class KeyMapperPassThroughLayoutTests : IDisposable
             Scancode = SC_E01,
             Base = "&",
             Shift = "1"
+        };
+        layout.Keys[SC_C08] = new KeyDefinition
+        {
+            Position = "C08",
+            Scancode = SC_C08,
+            Base = "k",
+            Shift = "K",
+            Caps = "K",
+            CapsShift = "k"
         };
         return layout;
     }

@@ -38,17 +38,18 @@ internal sealed class RealWin32Api : IWin32Api
         // Layout natif du thread foreground
         hkl = Win32.GetKeyboardLayout(tid);
 
-        // Nom du process via OpenProcess + GetModuleFileNameExW
-        IntPtr hProc = Win32.OpenProcess(
-            Win32.PROCESS_QUERY_LIMITED_INFORMATION | Win32.PROCESS_VM_READ, false, pid);
+        // Nom du process via droits minimaux : PROCESS_VM_READ échoue plus souvent
+        // sur les process protégés et ferait basculer le monitor en mode indéterminé.
+        IntPtr hProc = Win32.OpenProcess(Win32.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
         if (hProc == IntPtr.Zero) return false;
 
         try
         {
-            var sb = new StringBuilder(1024);
-            uint len = Win32.GetModuleFileNameExW(hProc, IntPtr.Zero, sb, (uint)sb.Capacity);
-            if (len == 0) return false;
-            fullPath = sb.ToString();
+            var sb = new StringBuilder(32768);
+            uint len = (uint)sb.Capacity;
+            if (!Win32.QueryFullProcessImageNameW(hProc, 0, sb, ref len) || len == 0)
+                return false;
+            fullPath = sb.ToString(0, (int)Math.Min(len, (uint)sb.Length));
             processName = System.IO.Path.GetFileName(fullPath);
             return true;
         }
@@ -68,13 +69,19 @@ internal sealed class RealWin32Api : IWin32Api
 
         try
         {
-            // Premier appel pour connaître la taille requise
-            var modules = new IntPtr[1024];
-            uint cb = (uint)(modules.Length * IntPtr.Size);
-            if (!Win32.EnumProcessModulesEx(hProc, modules, cb, out uint needed, Win32.LIST_MODULES_ALL))
-                return false;
+            var modules = new IntPtr[256];
+            uint needed;
+            while (true)
+            {
+                uint cb = (uint)(modules.Length * IntPtr.Size);
+                if (!Win32.EnumProcessModulesEx(hProc, modules, cb, out needed, Win32.LIST_MODULES_ALL))
+                    return false;
+                if (needed <= cb)
+                    break;
+                modules = new IntPtr[Math.Max(modules.Length * 2, (int)((needed + (uint)IntPtr.Size - 1) / (uint)IntPtr.Size))];
+            }
 
-            int count = (int)Math.Min(needed / IntPtr.Size, (uint)modules.Length);
+            int count = (int)(needed / IntPtr.Size);
             var names = new List<string>(count);
             var sb = new StringBuilder(1024);
             for (int i = 0; i < count; i++)

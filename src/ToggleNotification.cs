@@ -99,8 +99,14 @@ internal sealed class ToggleNotification : IDisposable
             y = margin;
         }
 
-        Win32.MoveWindow(_hWnd, x, y, S(BASE_W), S(BASE_H), true);
-        Win32.ShowWindow(_hWnd, Win32.SW_SHOWNOACTIVATE);
+        // Re-affirmer le z-order au moment du toggle. ShowWindow seul peut laisser
+        // une fenetre NOACTIVATE cachee derriere l'application actuellement focus.
+        if (!Win32.SetWindowPos(_hWnd, Win32.HWND_TOPMOST, x, y, S(BASE_W), S(BASE_H),
+            Win32.SWP_NOACTIVATE | Win32.SWP_SHOWWINDOW))
+        {
+            Win32.MoveWindow(_hWnd, x, y, S(BASE_W), S(BASE_H), true);
+            Win32.ShowWindow(_hWnd, Win32.SW_SHOWNOACTIVATE);
+        }
         Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
 
         // Auto-fermeture apres 2s — re-arm si appel rapide consecutif

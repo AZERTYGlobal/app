@@ -12,7 +12,7 @@ AZERTY Global est une disposition clavier française améliorée, alternative à
 
 L'application Windows permet d'utiliser AZERTY Global **sans installation système et sans droits administrateur**. Elle fonctionne en arrière-plan et intercepte les frappes clavier pour appliquer la disposition.
 
-**Version actuelle du code :** 0.11.2 — package Microsoft Store 0.11.2.0.
+**Version actuelle du code :** 0.12.0 — package Microsoft Store 0.12.0.0.
 
 ### Fonctionnalités
 
@@ -43,7 +43,7 @@ pwsh ./scripts/Pack-MSIX.ps1
 pwsh ./scripts/Verify-Release.ps1
 ```
 
-> **Note :** Le linker AOT peut échouer si le chemin contient des espaces. Si c'est le cas, copiez les sources dans un chemin sans espaces (ex : `C:\temp\agp-build`).
+> **Note :** si le linker AOT ne trouve pas `vswhere.exe`, ajoutez temporairement `C:\Program Files (x86)\Microsoft Visual Studio\Installer` au `PATH`.
 
 Le binaire compilé se trouve dans `src/bin/Release/net8.0-windows10.0.17763.0/win-x64/publish/`.
 
@@ -55,7 +55,7 @@ Le projet inclut une suite de tests unitaires xUnit dans `src/AZERTYGlobal.Tests
 dotnet test src/AZERTYGlobal.Tests
 ```
 
-La version 0.11.2 compte 96 tests unitaires.
+La version 0.12.0 compte 119 tests unitaires.
 
 ## Structure du projet
 
@@ -69,6 +69,12 @@ src/                              Code source C#
 ├── CharacterSearch.cs            Recherche de caractères
 ├── VirtualKeyboard.cs            Clavier virtuel interactif
 ├── LearningModule.cs             Module d'apprentissage interactif
+├── LessonsWindow.cs              Fenêtre Leçons avec catalogue et mode libre
+├── LessonCatalog.cs              Chargement du catalogue de leçons
+├── LessonTypingSession.cs        Moteur de saisie des exercices
+├── LessonProgressStore.cs        Progression locale des leçons
+├── LessonHintProvider.cs         Indices pédagogiques et touches mortes
+├── KeyboardRenderer.cs           Rendu clavier partagé
 ├── OnboardingWindow.cs           Fenêtre de première utilisation
 ├── SettingsWindow.cs             Fenêtre des paramètres
 ├── ConfigManager.cs              Gestion de la configuration
@@ -81,6 +87,7 @@ src/                              Code source C#
 ├── AssemblyAttributes.cs         Attributs d'assemblage
 ├── AZERTY Global 2026.json       Disposition clavier (ressource embarquée)
 ├── character-index.json          Index de recherche (ressource embarquée)
+├── lessons.json                  Catalogue de leçons (ressource embarquée)
 ├── favicon-azerty-global.png     Icône (ressource embarquée)
 ├── discord-icon.png              Icône Discord (ressource embarquée)
 ├── Properties/                   Métadonnées du projet

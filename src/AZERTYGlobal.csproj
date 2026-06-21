@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>AZERTY Global</AssemblyName>
     <RootNamespace>AZERTYGlobal</RootNamespace>
-    <Version>0.11.2</Version>
+    <Version>0.12.0</Version>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <Company>AZERTY Global</Company>
     <Product>AZERTY Global</Product>
@@ -50,6 +50,7 @@
   <ItemGroup>
     <!-- Exclure les doublons Proton Drive (fichiers "Name clash") -->
     <Compile Remove="**/*(# Name clash *).cs" />
+    <Compile Remove="**/*(# Edit conflict *).cs" />
     <!-- Exclure le sous-dossier du projet de tests pour éviter la double compilation -->
     <Compile Remove="AZERTYGlobal.Tests/**/*.cs" />
   </ItemGroup>
@@ -61,6 +62,7 @@
     <!-- JSON embarqués dans l'exe comme ressources -->
     <EmbeddedResource Include="AZERTY Global 2026.json" LogicalName="layout.json" />
     <EmbeddedResource Include="character-index.json" LogicalName="character-index.json" />
+    <EmbeddedResource Include="lessons.json" LogicalName="lessons.json" />
     <!-- Logo pour la fenêtre d'accueil -->
     <EmbeddedResource Include="favicon-azerty-global.png" LogicalName="favicon-azerty-global.png" />
     <EmbeddedResource Include="discord-icon.png" LogicalName="discord-icon.png" />

@@ -182,6 +182,8 @@ static class Win32
     public const uint WM_KEYDOWN = 0x0100;
     public const uint WM_KEYUP = 0x0101;
     public const uint WM_CHAR = 0x0102;
+    public const uint WM_SYSCHAR = 0x0106;
+    public const uint WM_SYSDEADCHAR = 0x0107;
     public const uint WM_COMMAND = 0x0111;
     public const uint WM_TIMER = 0x0113;
     public const uint WM_CTLCOLORBTN = 0x0135;
@@ -191,6 +193,8 @@ static class Win32
     public const uint WM_LBUTTONUP = 0x0202;
     public const uint WM_MOUSEWHEEL = 0x020A;
     public const uint WM_MOUSELEAVE = 0x02A3;
+    public const uint WM_ENTERSIZEMOVE = 0x0231;
+    public const uint WM_EXITSIZEMOVE = 0x0232;
     public const uint WM_RBUTTONUP = 0x0205;
     public const uint WM_LBUTTONDBLCLK = 0x0203;
     public const uint WM_ACTIVATE = 0x0006;
@@ -277,6 +281,7 @@ static class Win32
     public const uint DT_BOTTOM = 0x08;
     public const uint DT_WORDBREAK = 0x10;
     public const uint DT_SINGLELINE = 0x20;
+    public const uint DT_NOCLIP = 0x100;
     public const uint DT_RIGHT = 0x02;
     public const uint DT_CALCRECT = 0x400;
     public const uint DT_NOPREFIX = 0x800;
@@ -414,6 +419,15 @@ static class Win32
     [DllImport("gdi32.dll")]
     public static extern bool BitBlt(IntPtr hdcDest, int x, int y, int cx, int cy,
         IntPtr hdcSrc, int x1, int y1, uint rop);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool StretchBlt(IntPtr hdcDest, int x, int y, int cx, int cy,
+        IntPtr hdcSrc, int x1, int y1, int cxSrc, int cySrc, uint rop);
+
+    [DllImport("gdi32.dll")]
+    public static extern int SetStretchBltMode(IntPtr hdc, int mode);
+
+    public const int HALFTONE = 4;
 
     [DllImport("gdi32.dll")]
     public static extern IntPtr CreateBitmap(int w, int h, uint planes, uint bpp, byte[]? bits);
@@ -656,6 +670,12 @@ static class Win32
     public static extern bool EmptyClipboard();
 
     [DllImport("user32.dll")]
+    public static extern bool IsClipboardFormatAvailable(uint format);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetClipboardData(uint uFormat);
+
+    [DllImport("user32.dll")]
     public static extern IntPtr SetClipboardData(uint uFormat, IntPtr hMem);
 
     [DllImport("kernel32.dll")]
@@ -795,6 +815,9 @@ static class Win32
 
     [DllImport("psapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern uint GetModuleFileNameExW(IntPtr hProcess, IntPtr hModule, [Out] System.Text.StringBuilder lpFilename, uint nSize);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool QueryFullProcessImageNameW(IntPtr hProcess, uint dwFlags, [Out] System.Text.StringBuilder lpExeName, ref uint lpdwSize);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, uint dwProcessId);

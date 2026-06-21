@@ -62,10 +62,11 @@ Vous cherchez un symbole ? Tapez son nom et l'application vous montre où il se 
 
 
 🔒 RESPECT DE LA VIE PRIVÉE
-• Aucune télémétrie et aucun envoi réseau
-• Fonctionne hors ligne
-• Les frappes ne sont ni enregistrées, ni stockées, ni transmises
-• Des journaux techniques locaux peuvent être écrits pour diagnostiquer les erreurs et la compatibilité
+• Aucune télémétrie, aucun compte requis, aucun envoi réseau automatique
+• Les frappes ne sont jamais enregistrées, stockées ni transmises
+• Vos préférences, votre progression dans les leçons, les réglages de compatibilité par application et les journaux techniques restent localement sur votre appareil
+• La recherche de caractères copie uniquement le symbole choisi dans votre presse-papiers ; rien n'est transmis
+• Le lien de signalement de bug ne s'ouvre que si vous le choisissez et peut préremplir la version de l'app et de Windows
 
 
 ✅ GRATUIT ET OPEN SOURCE
@@ -74,6 +75,12 @@ Licence EUPL 1.2 — code source disponible sur GitHub.
 Site web : https://azerty.global
 
 ### Nouveautés de cette version (notes de version)
+
+Version 0.12.0 :
+ • Nouveau module Leçons avec catalogue d'exercices, progression locale et mode libre non persistant.
+ • Clavier visuel harmonisé entre le clavier virtuel, l'onboarding et les leçons.
+ • Indices pédagogiques intégrés aux leçons, avec prise en charge des touches mortes.
+ • Correctifs de robustesse pour AltGr, les dispositions Windows non-AZERTY et les raccourcis applicatifs.
 
 Version 0.11.2 :
  • Mise à jour de la phrase de l'exercice 4 dans le mini-onboarding.
@@ -173,11 +180,11 @@ Looking for a symbol? Type its name and the app shows where it is on the keyboar
 
 
 🔒 PRIVACY-FIRST
-• No telemetry
-• No account required
-• Keystrokes are never recorded, stored, or transmitted
-• Technical logs, when needed, stay local on your device
-• External links open only when you choose them
+• No telemetry, no account required and no automatic network transfer
+• Keystrokes are never recorded, stored or transmitted
+• Preferences, lesson progress, per-application compatibility settings and technical logs stay local on your device
+• Character Search only copies the selected symbol to your clipboard; nothing is sent
+• The bug report link opens only when you choose it and may prefill the app and Windows version
 
 
 ✅ FREE AND OPEN SOURCE
@@ -186,6 +193,12 @@ Licensed under EUPL 1.2 — source code available on GitHub.
 Website: https://azerty.global
 
 ### What's new (release notes)
+
+Version 0.12.0:
+ • New Lessons module with exercise catalog, local progress and non-persistent free typing mode.
+ • Visual keyboard harmonized across the virtual keyboard, onboarding and lessons.
+ • Lesson hints with dead-key support.
+ • Robustness fixes for AltGr, non-AZERTY Windows layouts and application shortcuts.
 
 Version 0.11.2:
  • Updated the sentence used in exercise 4 of the mini-onboarding.
@@ -245,6 +258,8 @@ contact@azerty.global
 
 ### Notes pour l'équipe de certification Microsoft
 
+**v0.12.0** : ajout du module Leçons (catalogue embarqué, progression locale, mode libre non persistant), mutualisation du rendu clavier et correctifs de robustesse AltGr / dispositions sous-jacentes non-AZERTY. Bundle 0.12.0.0 produit et vérifié (`Verify-Release.ps1` PASS). Rapport WACK `Archives/wack/2026-06/wack-report-v0.12.0.xml` : `OVERALL_RESULT=PASS`.
+
 **v0.11.2** : correctifs pré-publication Store (injection scancode réelle en mode compatibilité jeux, notification anti-cheat renforcée, journaux locaux durcis). Bundle 0.11.2.0 produit et vérifié (`Verify-Release.ps1` PASS). Rapport WACK `wack-report-v0.11.2.xml` : `OVERALL_RESULT=PASS`.
 
 **v0.11.0** : synchronisation des ressources embarquées avec la disposition actuelle d'AZERTY Global. Bundle 0.11.0.0 produit et vérifié (`Verify-Release.ps1` PASS). Rapport WACK `wack-report-v0.11.0.xml` : `OVERALL_RESULT=PASS`.
@@ -260,7 +275,7 @@ Points importants :
  • L'application est un exécutable .NET 8.0 AOT natif (pas de runtime .NET requis).
  • La capacité runFullTrust est requise car c'est une application Desktop Bridge Win32.
 
-APIs additionnelles introduites v0.9.7 pour la couche compatibilité jeux (toujours présentes en v0.9.8 / v0.10.0 / v0.11.0 / v0.11.1 / v0.11.2) :
+APIs additionnelles introduites v0.9.7 pour la couche compatibilité jeux (toujours présentes en v0.9.8 / v0.10.0 / v0.11.0 / v0.11.1 / v0.11.2 / v0.12.0) :
  • SetWinEventHook(EVENT_SYSTEM_FOREGROUND) — pour détecter le changement d'application au premier plan et adapter le mode d'injection en conséquence.
  • OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ) + EnumProcessModulesEx + GetModuleFileNameExW — pour identifier les frameworks gaming chargés (GLFW, SDL, Unity, etc.) et basculer en mode d'injection compatible. Échoue gracieusement (try/catch) sur les processus protégés par un anti-cheat — comportement attendu et géré.
  • Aucune écriture, aucune injection de DLL ou de code dans les processus externes. Lecture seule des noms de modules pour déterminer le mode d'injection à utiliser.
@@ -268,7 +283,7 @@ APIs additionnelles introduites v0.9.7 pour la couche compatibilité jeux (toujo
 
 ### Note WACK — DPIAwarenessValidation
 
-Le dernier rapport WACK exécuté (`wack-report-v0.11.2.xml`) passe `DPIAwarenessValidation`. Les versions précédentes pouvaient produire un WARNING faux positif lié au scanner WACK sur les binaires .NET 8 Native AOT ; cette note est conservée uniquement si Microsoft le signale à nouveau pendant la certification.
+Le dernier rapport WACK exécuté disponible (`Archives/wack/2026-06/wack-report-v0.12.0.xml`) passe `DPIAwarenessValidation`. Les versions précédentes pouvaient produire un WARNING faux positif lié au scanner WACK sur les binaires .NET 8 Native AOT ; cette note est conservée uniquement si Microsoft le signale à nouveau pendant la certification.
 
 L'application est bel et bien DPI-aware en mode Per-Monitor V2, vérifiable de deux façons :
 
@@ -283,10 +298,9 @@ Le comportement DPI réel est conforme aux exigences ; toutes les fenêtres de l
 
 ### Note WACK — FAIL OPTIONAL « Fichiers exécutables bloqués »
 
-Ce test (`OPTIONAL=TRUE` dans le rapport WACK v0.11.2) FAIL depuis la v0.9.5 (acceptée par Microsoft à la review précédente). Causes :
+Ce test (`OPTIONAL=TRUE` dans le dernier rapport WACK disponible, v0.12.0) FAIL depuis la v0.9.5 (acceptée par Microsoft à la review précédente). Causes :
  • Référence `shell32.dll!ShellExecuteW` — usage légitime pour ouvrir les liens externes (site web, GitHub, Discord, EUPL) depuis le menu tray et la fenêtre À propos.
- • Strings du runtime .NET Native AOT (`CsI`, `cdB`, `CMD`, `MSBuild`) — résidus de noms d'outils dans le binaire, non utilisés à l'exécution.
- • Référence `powershell` dans le `README.md` distribué avec le package.
+ • Strings du runtime .NET Native AOT (`REg`, `cmD`, `MSBuild`) — résidus de noms d'outils dans le binaire, non utilisés à l'exécution.
 
 Tous les tests `OPTIONAL` ne comptent pas dans le verdict global selon la documentation WACK officielle.
 
@@ -307,4 +321,4 @@ Les fichiers suivants sont dans `msix/Assets/` :
 
 ---
 
-*Dernière mise à jour : 2026-06-03 (préparation Store 0.11.2)*
+*Dernière mise à jour : 2026-06-21 (RC Store 0.12.0 vérifiée)*

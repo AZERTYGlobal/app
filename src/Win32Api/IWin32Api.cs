@@ -25,8 +25,8 @@ internal interface IWin32Api
     /// <summary>
     /// Récupère le nom court (ex: "Minecraft.Windows.exe"), le chemin complet, le HKL
     /// du thread foreground et le PID. Encapsule la séquence
-    /// GetForegroundWindow → GetWindowThreadProcessId → OpenProcess → GetModuleFileNameExW.
-    /// Retourne false si pas de fenêtre foreground ou si OpenProcess échoue (process protégé).
+    /// GetForegroundWindow → GetWindowThreadProcessId → OpenProcess → QueryFullProcessImageNameW.
+    /// Retourne false si pas de fenêtre foreground ou si le process foreground ne peut pas être inspecté.
     /// </summary>
     bool TryGetForegroundProcess(out string? processName, out string? fullPath, out IntPtr hkl, out uint pid);
 

@@ -7,7 +7,7 @@ namespace AZERTYGlobal;
 static class Program
 {
     /// <summary>Version affichée partout (tooltip, À propos, etc.).</summary>
-    internal const string Version = "0.11.2";
+    internal const string Version = "0.12.0";
 
     [STAThread]
     static void Main()
@@ -37,16 +37,16 @@ static class Program
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
             var logPath = Path.Combine(ConfigManager.LogDirectory, "error.log");
+            var safeMessage = ConfigManager.SanitizeException(e.ExceptionObject as Exception);
             try { Directory.CreateDirectory(ConfigManager.LogDirectory); } catch { }
             try
             {
                 // Audit sécu 2026-05 SEV-A1-01 : sanitize au lieu de ex.ToString() complet.
-                var safeMessage = ConfigManager.SanitizeException(e.ExceptionObject as Exception);
                 File.AppendAllText(logPath, $"[{DateTime.Now:s}] FATAL: {safeMessage}\n");
             }
             catch { }
             Win32.MessageBoxW(IntPtr.Zero,
-                e.ExceptionObject?.ToString() ?? "Erreur inconnue",
+                "Une erreur fatale est survenue. Le détail technique a été écrit dans error.log.",
                 "Erreur fatale", 0x10); // MB_ICONERROR
         };
 

@@ -48,6 +48,7 @@ internal sealed class MockWin32Api : IWin32Api
     public string? ScriptedFullPath { get; set; }
     public uint ScriptedPid { get; set; } = 1234;
     public string[]? ScriptedModules { get; set; }
+    public bool ShouldFailForegroundInspection { get; set; }
 
     // ── WinEventHook ────────────────────────────────────────────────
     public Win32.WinEventDelegate? CapturedWinEventDelegate { get; private set; }
@@ -96,6 +97,15 @@ internal sealed class MockWin32Api : IWin32Api
 
     public bool TryGetForegroundProcess(out string? processName, out string? fullPath, out IntPtr hkl, out uint pid)
     {
+        if (ShouldFailForegroundInspection)
+        {
+            processName = null;
+            fullPath = null;
+            hkl = CurrentHkl;
+            pid = ScriptedPid;
+            return false;
+        }
+
         processName = ScriptedProcessName;
         fullPath = ScriptedFullPath;
         hkl = CurrentHkl;

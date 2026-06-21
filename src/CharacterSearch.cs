@@ -1067,34 +1067,23 @@ sealed class CharacterSearch : IDisposable
         bool ownershipTransferred = false;
         try
         {
-            int byteCount = (text.Length + 1) * 2; // UTF-16 + null terminator
-            hMem = Win32.GlobalAlloc(GMEM_MOVEABLE, (UIntPtr)byteCount);
+            hMem = AllocateClipboardText(text);
             if (hMem == IntPtr.Zero)
                 return false;
-
-            var ptr = Win32.GlobalLock(hMem);
-            if (ptr == IntPtr.Zero)
-                return false;
-
-            try
-            {
-                Marshal.Copy(text.ToCharArray(), 0, ptr, text.Length);
-                Marshal.WriteInt16(ptr, text.Length * 2, 0); // null terminator
-            }
-            finally
-            {
-                Win32.GlobalUnlock(hMem);
-            }
 
             if (!Win32.OpenClipboard(_hWnd))
                 return false;
 
             try
             {
-                Win32.EmptyClipboard();
+                string? previousText = ReadClipboardText();
+                if (!Win32.EmptyClipboard())
+                    return false;
+
                 if (Win32.SetClipboardData(CF_UNICODETEXT, hMem) == IntPtr.Zero)
                 {
                     ConfigManager.Log("CharSearch clipboard", new ExternalException("SetClipboardData a échoué."));
+                    RestoreClipboardText(previousText);
                     return false;
                 }
 
@@ -1116,6 +1105,68 @@ sealed class CharacterSearch : IDisposable
             if (!ownershipTransferred && hMem != IntPtr.Zero)
                 Win32.GlobalFree(hMem);
         }
+    }
+
+    private static IntPtr AllocateClipboardText(string text)
+    {
+        int byteCount = (text.Length + 1) * 2; // UTF-16 + null terminator
+        IntPtr hMem = Win32.GlobalAlloc(GMEM_MOVEABLE, (UIntPtr)byteCount);
+        if (hMem == IntPtr.Zero)
+            return IntPtr.Zero;
+
+        var ptr = Win32.GlobalLock(hMem);
+        if (ptr == IntPtr.Zero)
+        {
+            Win32.GlobalFree(hMem);
+            return IntPtr.Zero;
+        }
+
+        try
+        {
+            Marshal.Copy(text.ToCharArray(), 0, ptr, text.Length);
+            Marshal.WriteInt16(ptr, text.Length * 2, 0); // null terminator
+            return hMem;
+        }
+        finally
+        {
+            Win32.GlobalUnlock(hMem);
+        }
+    }
+
+    private static string? ReadClipboardText()
+    {
+        if (!Win32.IsClipboardFormatAvailable(CF_UNICODETEXT))
+            return null;
+
+        IntPtr hData = Win32.GetClipboardData(CF_UNICODETEXT);
+        if (hData == IntPtr.Zero)
+            return null;
+
+        IntPtr ptr = Win32.GlobalLock(hData);
+        if (ptr == IntPtr.Zero)
+            return null;
+
+        try
+        {
+            return Marshal.PtrToStringUni(ptr);
+        }
+        finally
+        {
+            Win32.GlobalUnlock(hData);
+        }
+    }
+
+    private static void RestoreClipboardText(string? previousText)
+    {
+        if (previousText == null)
+            return;
+
+        IntPtr hRestore = AllocateClipboardText(previousText);
+        if (hRestore == IntPtr.Zero)
+            return;
+
+        if (Win32.SetClipboardData(CF_UNICODETEXT, hRestore) == IntPtr.Zero)
+            Win32.GlobalFree(hRestore);
     }
 
     // ═══════════════════════════════════════════════════════════════

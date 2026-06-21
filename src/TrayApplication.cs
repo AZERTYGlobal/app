@@ -78,7 +78,7 @@ sealed class TrayApplication : IDisposable
     private SettingsWindow? _settings;
     private AboutWindow? _about;
     private ToggleNotification? _toggleNotification;
-    private LearningModule? _learning; // instance lancee depuis le menu tray (« Exercices »)
+    private LessonsWindow? _lessons;
 
     // Si conflit layout systeme detecte au demarrage, l'onboarding est differe et n'est
     // affiche qu'apres que l'utilisateur a clique « Garder l'app » dans LayoutConflictWindow.
@@ -391,19 +391,9 @@ sealed class TrayApplication : IDisposable
                             _about.Show();
                             break;
                         case IDM_EXERCISES:
-                            // No-op si onboarding visible (LearningModule embed dedans) ou learning
-                            // standalone deja ouvert. Le champ _onboarding reste non-null apres
-                            // fermeture (Close() cache la fenetre, ne nullifie pas le champ),
-                            // donc on doit checker IsVisible et pas != null.
-                            if (_onboarding?.IsVisible == true || _learning != null) break;
                             if (_mapper == null || _hook == null || _layout == null) break;
-                            _learning = new LearningModule(IntPtr.Zero, _mapper, _hook, _layout, replayMode: true);
-                            _learning.OnClosed = _ =>
-                            {
-                                _learning?.Dispose();
-                                _learning = null;
-                            };
-                            _learning.Show();
+                            _lessons ??= new LessonsWindow(_layout, _mapper, _hook);
+                            _lessons.Show();
                             break;
                         case IDM_COMPAT_AUTO:
                             ApplyCompatibilityOverride(null);
@@ -665,7 +655,7 @@ sealed class TrayApplication : IDisposable
             _virtualKeyboard?.IsVisible == true ? $"Masquer le clavier virtuel\tCtrl+Maj+{kbdKey}" : $"Clavier virtuel\tCtrl+Maj+{kbdKey}");
         uint searchFlags = _enabled || _characterSearch?.IsVisible == true ? MF_STRING : MF_STRING | MF_GRAYED;
         Win32.AppendMenuW(hMenu, searchFlags, IDM_SEARCH, $"Rechercher un caractère\tCtrl+Maj+{searchKey}");
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_EXERCISES, "Exercices");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_EXERCISES, "Leçons");
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
 
         // Liens et infos
@@ -852,7 +842,7 @@ sealed class TrayApplication : IDisposable
         _settings?.Dispose(); _settings = null;
         _about?.Dispose(); _about = null;
         _toggleNotification?.Dispose(); _toggleNotification = null;
-        _learning?.Dispose(); _learning = null;
+        _lessons?.Dispose(); _lessons = null;
         _layoutConflictWindow?.Dispose(); _layoutConflictWindow = null;
         Win32.Shell_NotifyIconW(NIM_DELETE, ref _nid);
         if (_hIcon != IntPtr.Zero)

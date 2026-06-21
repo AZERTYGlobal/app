@@ -25,8 +25,10 @@ $publicRepoRoot = Resolve-FirstExistingPath @(
 
 $sourceLayout = Join-Path $siteRoot 'data\AZERTY Global.json'
 $sourceIndex = Join-Path $siteRoot 'tester\character-index.json'
+$sourceLessons = Join-Path $siteRoot 'tester\lessons.json'
 $targetLayout = Join-Path $projectRoot 'src\AZERTY Global 2026.json'
 $targetIndex = Join-Path $projectRoot 'src\character-index.json'
+$targetLessons = Join-Path $projectRoot 'src\lessons.json'
 
 function Show-GitStatus([string]$RepoPath) {
     $status = git -C $RepoPath status --porcelain
@@ -72,11 +74,11 @@ function Copy-Exact([string]$Source, [string]$Destination) {
     }
 }
 
-function Copy-AllowedPublicFile([string]$Source, [string]$Destination) {
+function Copy-AllowedPublicFile([string]$Source, [string]$Destination, [switch]$AllowCreate) {
     if (-not (Test-Path $Source)) {
         throw "Source allowlistee introuvable: $Source"
     }
-    if (-not (Test-Path $Destination)) {
+    if (-not $AllowCreate -and -not (Test-Path $Destination)) {
         throw "Destination allowlistee introuvable: $Destination"
     }
     Copy-Exact $Source $Destination
@@ -218,6 +220,7 @@ assertDeadKeyMethod(character(index, '\u2287'), 'dk_scientific', 'KeyK', 'AltGr'
 
 if (-not (Test-Path $sourceLayout)) { throw "Source layout introuvable: $sourceLayout" }
 if (-not (Test-Path $sourceIndex)) { throw "Source character-index introuvable: $sourceIndex" }
+if (-not (Test-Path $sourceLessons)) { throw "Source lessons introuvable: $sourceLessons" }
 
 if ($SyncPublicRepo) {
     if (-not (Test-Path $publicRepoRoot)) {
@@ -228,6 +231,7 @@ if ($SyncPublicRepo) {
 
 Copy-Exact $sourceLayout $targetLayout
 Copy-Exact $sourceIndex $targetIndex
+Copy-Exact $sourceLessons $targetLessons
 
 Invoke-ResourceValidation $targetLayout $targetIndex
 
@@ -235,6 +239,7 @@ if ($SyncPublicRepo) {
     $publicRootResolved = Resolve-Path $publicRepoRoot
     Copy-AllowedPublicFile $targetLayout (Join-Path $publicRootResolved 'src\AZERTY Global 2026.json')
     Copy-AllowedPublicFile $targetIndex (Join-Path $publicRootResolved 'src\character-index.json')
+    Copy-AllowedPublicFile $targetLessons (Join-Path $publicRootResolved 'src\lessons.json') -AllowCreate
     Copy-AllowedPublicFile $PSCommandPath (Join-Path $publicRootResolved 'scripts\Sync-LayoutResources.ps1')
     Copy-AllowedPublicFile (Join-Path $projectRoot 'src\AZERTYGlobal.Tests\ResourceAlignmentTests.cs') (Join-Path $publicRootResolved 'src\AZERTYGlobal.Tests\ResourceAlignmentTests.cs')
     Copy-AllowedPublicFile (Join-Path $projectRoot 'Changelog.md') (Join-Path $publicRootResolved 'Changelog.md')

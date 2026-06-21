@@ -22,7 +22,7 @@ internal enum CompatibilityMode
     Default,
     /// <summary>Process avec framework gaming détecté — injection combo native + Alt+code fallback.</summary>
     NativeCombo,
-    /// <summary>Process protégé par anti-cheat kernel-level — désactivation totale.</summary>
+    /// <summary>Process protégé ou explicitement désactivé — désactivation totale.</summary>
     DisabledAntiCheat
 }
 
@@ -179,7 +179,17 @@ internal sealed class ForegroundMonitor : IDisposable
 
     private CompatibilityMode ResolveMode(string? processName, string? fullPath, uint pid, bool hasFg)
     {
-        if (!hasFg || string.IsNullOrEmpty(processName))
+        if (!hasFg)
+        {
+            // Si un PID foreground existe mais que son nom/chemin est inaccessible,
+            // on privilégie la sécurité utilisateur : ne pas laisser le hook actif
+            // face à un process potentiellement protégé par anti-cheat.
+            if (pid != 0)
+                return CompatibilityMode.DisabledAntiCheat;
+            return CompatibilityMode.Default;
+        }
+
+        if (string.IsNullOrEmpty(processName))
             return CompatibilityMode.Default;
 
         // Override utilisateur lu en premier (mais l'anti-cheat le surclasse pour la sécurité)

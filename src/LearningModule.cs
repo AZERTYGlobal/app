@@ -302,6 +302,14 @@ sealed class LearningModule : IDisposable
     // Animation de frappe
     private uint _pressedScancode;
 
+    // Le module d'initiation doit rester positionnel, meme si le layout Windows sous-jacent
+    // laisse passer ponctuellement un caractere natif (ex: QWERTY US D01 -> q). RawKeyDown
+    // arrive avant l'emission de caractere : on y capture le texte AZERTY Global attendu.
+    private string? _pendingPhysicalText;
+    private int _pendingPhysicalTextIndex;
+    private long _pendingPhysicalTextTick;
+    private const int PENDING_PHYSICAL_TEXT_TIMEOUT_MS = 1000;
+
     // Highlight du prochain caractère
     private readonly HashSet<uint> _highlightedScancodes = new();
     private readonly HashSet<string> _highlightedLabels = new();
@@ -715,8 +723,8 @@ sealed class LearningModule : IDisposable
         _hFontStatus = Win32.CreateFontW(-S(15), 0, 0, 0, 500, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontButton = Win32.CreateFontW(-S(14), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         // Caractères dans les touches — tailles ajustables via learning-tweaks.json (FontSizeMain/Small/Ctx).
-        _hFontCharMain = Win32.CreateFontW(S(_tweaks.FontSizeMain), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
-        _hFontCharSmall = Win32.CreateFontW(S(_tweaks.FontSizeSmall), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
+        _hFontCharMain = Win32.CreateFontW(S(_tweaks.FontSizeMain), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 4, 0, "Consolas");
+        _hFontCharSmall = Win32.CreateFontW(S(_tweaks.FontSizeSmall), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Consolas");
         _hFontCtx = Win32.CreateFontW(S(_tweaks.FontSizeCtx), 0, 0, 0, 500, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
         _hFontProgress = Win32.CreateFontW(-S(16), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontTransition = Win32.CreateFontW(-S(28), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
@@ -1072,8 +1080,63 @@ sealed class LearningModule : IDisposable
     private void OnRawKeyDown(uint scancode)
     {
         _pressedScancode = scancode;
+        CaptureExpectedTextForPhysicalKey(scancode);
         Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
         Win32.SetTimer(_hWnd, (UIntPtr)TIMER_KEYPRESS, KEYPRESS_DURATION_MS, IntPtr.Zero);
+    }
+
+    private void CaptureExpectedTextForPhysicalKey(uint scancode)
+    {
+        ClearPendingPhysicalText();
+
+        if (!_hasFocus || _completed || _inTransition || _awaitingChoice) return;
+        if (!_layout.Keys.TryGetValue(scancode, out var keyDef)) return;
+
+        string? output = keyDef.GetOutput(_mapper.ShiftDown, _mapper.AltGrDown, _mapper.CapsLockActive);
+        if (string.IsNullOrEmpty(output)) return;
+
+        string? expectedText = null;
+        if (output.StartsWith("dk_", StringComparison.Ordinal))
+        {
+            // Une activation de touche morte seule ne produit pas de WM_CHAR.
+            if (_mapper.ActiveDeadKey != null
+                && _layout.DeadKeys.TryGetValue(_mapper.ActiveDeadKey, out var activeDk))
+            {
+                var isolated = activeDk.GetIsolated();
+                if (isolated != null)
+                {
+                    var newDk = _layout.DeadKeys.GetValueOrDefault(output);
+                    expectedText = newDk?.Apply(isolated) ?? isolated;
+                }
+            }
+        }
+        else if (_mapper.ActiveDeadKey != null
+            && _layout.DeadKeys.TryGetValue(_mapper.ActiveDeadKey, out var dk))
+        {
+            var transformed = dk.Apply(output);
+            if (transformed != null)
+                expectedText = transformed;
+            else if (dk.GetIsolated() is { } isolated)
+                expectedText = isolated + output;
+            else
+                expectedText = output;
+        }
+        else
+        {
+            expectedText = output;
+        }
+
+        if (string.IsNullOrEmpty(expectedText)) return;
+
+        _pendingPhysicalText = expectedText;
+        _pendingPhysicalTextTick = Environment.TickCount64;
+    }
+
+    private void ClearPendingPhysicalText()
+    {
+        _pendingPhysicalText = null;
+        _pendingPhysicalTextIndex = 0;
+        _pendingPhysicalTextTick = 0;
     }
 
     private void OnMouseMove(IntPtr lParam)
@@ -1213,6 +1276,35 @@ sealed class LearningModule : IDisposable
                     OnChar((char)wParam.ToInt32());
                     return IntPtr.Zero;
 
+                case Win32.WM_SYSCHAR:
+                    // Sous un layout sous-jacent sans AltGr natif (ex. QWERTY US), Right Alt
+                    // reste un Alt systeme pour Windows. Les caracteres injectes par le hook
+                    // arrivent alors parfois en WM_SYSCHAR au lieu de WM_CHAR : les traiter
+                    // comme une saisie normale evite le bip DefWindowProc et valide l'exercice.
+                    OnChar((char)wParam.ToInt32());
+                    return IntPtr.Zero;
+
+                case Win32.WM_SYSDEADCHAR:
+                    return IntPtr.Zero;
+
+                case Win32.WM_SYSKEYDOWN:
+                {
+                    int vk = wParam.ToInt32();
+                    if (vk == 0x73) // VK_F4, preserve Alt+F4.
+                    {
+                        Close();
+                        return IntPtr.Zero;
+                    }
+                    if (vk == 0x08) // VK_BACK
+                        OnBackspace();
+                    else if (vk == 0x1B) // VK_ESCAPE
+                        Close();
+                    return IntPtr.Zero;
+                }
+
+                case Win32.WM_SYSKEYUP:
+                    return IntPtr.Zero;
+
                 case Win32.WM_KEYDOWN:
                 {
                     int vk = wParam.ToInt32();
@@ -1343,7 +1435,8 @@ sealed class LearningModule : IDisposable
         var target = _steps[_currentStep].Target;
         if (_cursorPosition >= target.Length) return;
 
-        if (c == target[_cursorPosition])
+        char typed = ResolveTypedCharacter(c);
+        if (typed == target[_cursorPosition])
         {
             _cursorPosition++;
             _currentCharError = false;
@@ -1380,6 +1473,31 @@ sealed class LearningModule : IDisposable
         }
     }
 
+    private char ResolveTypedCharacter(char received)
+    {
+        if (string.IsNullOrEmpty(_pendingPhysicalText))
+            return received;
+
+        if (Environment.TickCount64 - _pendingPhysicalTextTick > PENDING_PHYSICAL_TEXT_TIMEOUT_MS)
+        {
+            ClearPendingPhysicalText();
+            return received;
+        }
+
+        if (_pendingPhysicalTextIndex >= _pendingPhysicalText.Length)
+        {
+            ClearPendingPhysicalText();
+            return received;
+        }
+
+        char expected = _pendingPhysicalText[_pendingPhysicalTextIndex++];
+        if (_pendingPhysicalTextIndex >= _pendingPhysicalText.Length)
+        {
+            ClearPendingPhysicalText();
+        }
+        return expected;
+    }
+
     private void OnBackspace()
     {
         // Backspace volontairement desactive pendant les exercices : le reflexe d'effacer
@@ -1395,6 +1513,7 @@ sealed class LearningModule : IDisposable
         _currentCharError = false;
         _awaitingChoice = false;
         _currentStepSuccessCount = 0; // reset pour le nouvel exercice (1er succes => « Bravo ! » s'affiche)
+        ClearPendingPhysicalText();
 
         if (_currentStep >= _steps.Length)
         {
@@ -1431,6 +1550,7 @@ sealed class LearningModule : IDisposable
         _awaitingChoice = false;
         _cursorPosition = 0;
         _currentCharError = false;
+        ClearPendingPhysicalText();
         _mapper.RequestCapsLockOff(); // forcer Verr.Maj. off au reset (re-incite a l'activation si KeepCapsHighlight)
         UpdateHighlight();
         UpdateControlVisibility();
@@ -2274,7 +2394,8 @@ sealed class LearningModule : IDisposable
     /// Dessine les caractères d'une touche selon sa famille.
     /// Reproduit la logique de tester/keyboard.js : updateLetterKeyDisplay (lettres a-z),
     /// updateAccentedLetterKeyDisplay (é è ç à rangée numérique), updateSymbolKeyDisplay (autres).
-    /// Quand une touche morte est active, affiche le résultat de combinaison (vert) au centre.
+    /// Quand une touche morte est active, affiche le résultat de combinaison (vert) au centre
+    /// de la zone haute et conserve le nom AZERTY de la touche en bas, comme le clavier virtuel.
     /// </summary>
     private void PaintKeyCharacters(IntPtr hdc, int kx, int ky, int kw, int kh,
         KeyDefinition keyDef, in VirtualKeyboard.VisualKey vk, float scale)
@@ -2283,48 +2404,10 @@ sealed class LearningModule : IDisposable
         // Ratio ajustable via learning-tweaks.json (PadRatio, defaut 0.14).
         int pad = Math.Max(4, (int)(scale * _tweaks.PadRatio));
 
-        // ── 1. Touche morte active : afficher le résultat de combinaison ──
+        // ── 1. Touche morte active : afficher le résultat + le nom de touche ──
         if (_mapper.ActiveDeadKey != null && _layout.DeadKeys.TryGetValue(_mapper.ActiveDeadKey, out var dk))
         {
-            // Cherche dans la table de la touche morte le caractère qui combinera avec
-            // ce que l'utilisateur va taper. Pour les lettres, Caps ou Shift active la
-            // majuscule (Smart Caps Lock) — on doit donc chercher avec base.ToUpper() pour
-            // que ^ + A produise Â au lieu de â. Reproduit updateKeyWithDeadKey() web.
-            bool shift = _mapper.ShiftDown;
-            bool caps = _mapper.CapsLockActive;
-            bool isLetterKey = LetterKeyScancodes.Contains(vk.Scancode) && IsLetterChar(keyDef.Base);
-            string? lookupChar;
-            if (isLetterKey && (shift || caps))
-                lookupChar = keyDef.Base?.ToUpperInvariant();
-            else if (!isLetterKey && shift)
-                lookupChar = keyDef.Shift;
-            else
-                lookupChar = keyDef.Base;
-
-            string? result = lookupChar != null ? dk.Apply(lookupChar) : null;
-            if (vk.Scancode == 0x39) result = dk.GetIsolated();
-
-            if (result != null)
-            {
-                var hOldFont = Win32.SelectObject(hdc, _hFontCharMain);
-                Win32.SetTextColor(hdc, CLR_DK_RESULT);
-                var r = new Win32.RECT { left = kx, top = ky, right = kx + kw, bottom = ky + kh };
-                Win32.DrawTextW(hdc, result, result.Length, ref r,
-                    Win32.DT_CENTER | Win32.DT_VCENTER | Win32.DT_SINGLELINE);
-                Win32.SelectObject(hdc, hOldFont);
-            }
-            else
-            {
-                var hOldFont = Win32.SelectObject(hdc, _hFontCharSmall);
-                Win32.SetTextColor(hdc, CLR_CHAR_DIM);
-                var dispChar = GetDisplayChar(keyDef.Base);
-                if (dispChar != null)
-                {
-                    var r = new Win32.RECT { left = kx + pad, top = ky + kh / 2, right = kx + kw / 2, bottom = ky + kh - pad };
-                    Win32.DrawTextW(hdc, dispChar, dispChar.Length, ref r, 0);
-                }
-                Win32.SelectObject(hdc, hOldFont);
-            }
+            PaintActiveDeadKeyCharacters(hdc, kx, ky, kw, kh, keyDef, vk, dk);
             return;
         }
 
@@ -2339,6 +2422,58 @@ sealed class LearningModule : IDisposable
             PaintLetterKey(hdc, kx, ky, kw, kh, keyDef, pad);
         else
             PaintSymbolKey(hdc, kx, ky, kw, kh, keyDef, pad);
+    }
+
+    private void PaintActiveDeadKeyCharacters(IntPtr hdc, int kx, int ky, int kw, int kh,
+        KeyDefinition keyDef, in VirtualKeyboard.VisualKey vk, DeadKeyDefinition dk)
+    {
+        // Même logique que VirtualKeyboard.GetDisplayChar(scancode) en mode touche morte :
+        // la combinaison dépend du caractère réellement tapé, avec Smart Caps Lock.
+        bool shift = _mapper.ShiftDown;
+        bool caps = _mapper.CapsLockActive;
+        bool isLetterKey = LetterKeyScancodes.Contains(vk.Scancode) && IsLetterChar(keyDef.Base);
+        string? lookupChar;
+        if (isLetterKey && (shift || caps))
+            lookupChar = keyDef.Base?.ToUpperInvariant();
+        else if (!isLetterKey && shift)
+            lookupChar = keyDef.Shift;
+        else
+            lookupChar = keyDef.Base;
+
+        string? result = lookupChar != null ? dk.Apply(lookupChar) : null;
+        if (vk.Scancode == 0x39) result = dk.GetIsolated();
+
+        int labelH = Math.Max(S(16), kh / 3);
+        int labelTop = Math.Max(ky, ky + kh - labelH - S(2));
+
+        if (!string.IsNullOrEmpty(result))
+        {
+            var hOldFont = Win32.SelectObject(hdc, _hFontCharMain);
+            Win32.SetTextColor(hdc, CLR_DK_RESULT);
+            var charRect = new Win32.RECT
+            {
+                left = kx,
+                top = ky,
+                right = kx + kw,
+                bottom = Math.Max(ky + S(12), labelTop - S(1))
+            };
+            Win32.DrawTextW(hdc, result, result.Length, ref charRect,
+                Win32.DT_CENTER | Win32.DT_VCENTER | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX | Win32.DT_NOCLIP);
+            Win32.SelectObject(hdc, hOldFont);
+        }
+
+        var hOldLabelFont = Win32.SelectObject(hdc, _hFontCtx);
+        Win32.SetTextColor(hdc, CLR_CHAR_BASE);
+        var labelRect = new Win32.RECT
+        {
+            left = kx,
+            top = labelTop,
+            right = kx + kw,
+            bottom = ky + kh - S(1)
+        };
+        Win32.DrawTextW(hdc, vk.Label, vk.Label.Length, ref labelRect,
+            Win32.DT_CENTER | Win32.DT_VCENTER | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX | Win32.DT_NOCLIP);
+        Win32.SelectObject(hdc, hOldLabelFont);
     }
 
     private static bool IsLetterChar(string? s) => s != null && s.Length == 1 && char.IsLetter(s[0]);
@@ -2642,7 +2777,7 @@ sealed class LearningModule : IDisposable
             bottom = bottom + offsetY
         };
         uint vAlign = alignTop ? 0u : Win32.DT_VCENTER;
-        uint flags = vAlign | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX
+        uint flags = vAlign | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX | Win32.DT_NOCLIP
             | (alignLeft ? Win32.DT_LEFT : Win32.DT_RIGHT);
         Win32.DrawTextW(hdc, text, text.Length, ref r, flags);
         Win32.SelectObject(hdc, hOldFont);
