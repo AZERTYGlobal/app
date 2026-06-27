@@ -76,7 +76,6 @@ internal sealed class LessonProgressStore
                 ? stats.ElapsedSeconds
                 : Math.Min(progress.BestSeconds.Value, stats.ElapsedSeconds);
 
-        MergeErrorMatrix(progress, stats);
         SetLastPositionNoSave(exercise);
         CommitOrRollback(snapshot, "LessonProgressStore.RecordSuccess");
     }
@@ -142,27 +141,6 @@ internal sealed class LessonProgressStore
         LastExerciseIndex = exercise.ExerciseIndex;
     }
 
-    private static void MergeErrorMatrix(LessonExerciseProgress progress, LessonAttemptStats stats)
-    {
-        foreach (var (target, wrongs) in stats.ErrorMatrix)
-        {
-            string targetKey = target.ToString();
-            if (!progress.ErrorMatrix.TryGetValue(targetKey, out var targetWrongs))
-            {
-                targetWrongs = new Dictionary<string, int>(StringComparer.Ordinal);
-                progress.ErrorMatrix[targetKey] = targetWrongs;
-            }
-
-            foreach (var (wrong, count) in wrongs)
-            {
-                string wrongKey = wrong.ToString();
-                targetWrongs[wrongKey] = targetWrongs.TryGetValue(wrongKey, out int existing)
-                    ? existing + count
-                    : count;
-            }
-        }
-    }
-
     private ProgressStoreSnapshot CaptureSnapshot()
     {
         var exercises = new Dictionary<string, LessonExerciseProgress>(StringComparer.Ordinal);
@@ -199,6 +177,7 @@ internal sealed class LessonProgressStore
         _exercises.Clear();
         _loadFailed = false;
         if (!File.Exists(_path)) return;
+        bool legacyErrorMatrixFound = false;
 
         try
         {
@@ -235,23 +214,14 @@ internal sealed class LessonProgressStore
                 if (DateTimeOffset.TryParse(lastCompleted, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto))
                     progress.LastCompletedUtc = dto;
 
-                if (el.TryGetProperty("errorMatrix", out var matrixEl) && matrixEl.ValueKind == JsonValueKind.Object)
-                {
-                    foreach (var target in matrixEl.EnumerateObject())
-                    {
-                        var wrongs = new Dictionary<string, int>(StringComparer.Ordinal);
-                        foreach (var wrong in target.Value.EnumerateObject())
-                        {
-                            if (wrong.Value.ValueKind == JsonValueKind.Number && wrong.Value.TryGetInt32(out int count) && count > 0)
-                                wrongs[wrong.Name] = count;
-                        }
-                        if (wrongs.Count > 0)
-                            progress.ErrorMatrix[target.Name] = wrongs;
-                    }
-                }
+                if (el.TryGetProperty("errorMatrix", out _))
+                    legacyErrorMatrixFound = true;
 
                 _exercises[item.Name] = progress;
             }
+
+            if (legacyErrorMatrixFound)
+                Save("LessonProgressStore.MigrateLegacyErrorMatrix");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -304,15 +274,6 @@ internal sealed class LessonProgressStore
                     else
                         writer.WriteNull("lastCompletedUtc");
                     writer.WriteNumber("hintsUsed", progress.HintsUsed);
-                    writer.WriteStartObject("errorMatrix");
-                    foreach (var (target, wrongs) in progress.ErrorMatrix.OrderBy(pair => pair.Key, StringComparer.Ordinal))
-                    {
-                        writer.WriteStartObject(target);
-                        foreach (var (wrong, count) in wrongs.OrderBy(pair => pair.Key, StringComparer.Ordinal))
-                            writer.WriteNumber(wrong, count);
-                        writer.WriteEndObject();
-                    }
-                    writer.WriteEndObject();
                     writer.WriteEndObject();
                 }
                 writer.WriteEndObject();
@@ -410,7 +371,6 @@ internal sealed class LessonExerciseProgress
     public double? BestSeconds { get; set; }
     public DateTimeOffset? LastCompletedUtc { get; set; }
     public int HintsUsed { get; set; }
-    public Dictionary<string, Dictionary<string, int>> ErrorMatrix { get; } = new(StringComparer.Ordinal);
 
     public LessonExerciseProgress Clone()
     {
@@ -424,10 +384,6 @@ internal sealed class LessonExerciseProgress
             LastCompletedUtc = LastCompletedUtc,
             HintsUsed = HintsUsed
         };
-
-        foreach (var (target, wrongs) in ErrorMatrix)
-            clone.ErrorMatrix[target] = new Dictionary<string, int>(wrongs, StringComparer.Ordinal);
-
         return clone;
     }
 }

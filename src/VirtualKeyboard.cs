@@ -134,11 +134,11 @@ sealed class VirtualKeyboard : IDisposable
     }
 
     // Taille de la fenêtre par défaut
-    private const int DEFAULT_WIDTH = 720;
-    private const int DEFAULT_HEIGHT = 280;
+    private const int DEFAULT_WIDTH = 864;
+    private const int DEFAULT_HEIGHT = 336;
     private const int MIN_WIDTH = 480;
     private const int MIN_HEIGHT = 187; // MIN_WIDTH / ASPECT_RATIO
-    private const float ASPECT_RATIO = 720f / 280f; // ~2.57
+    private const float ASPECT_RATIO = 864f / 336f; // ~2.57
 
     private static readonly VisualKey[] _visualKeys = BuildKeyLayout();
 
@@ -232,6 +232,7 @@ sealed class VirtualKeyboard : IDisposable
     private readonly Dictionary<string, string> _charNames; // char → nom français
 
     private bool _visible;
+    private IntPtr _preferredMonitorWindow;
     private bool _trackingMouse;
     private int _hoveredKeyIndex = -1;
 
@@ -261,6 +262,7 @@ sealed class VirtualKeyboard : IDisposable
     private IntPtr _hCharFont;
     private IntPtr _hLabelFont;
     private IntPtr _hCtxFont;
+    private IntPtr _hBadgeFont;
     private int _cachedCw; // Largeur client quand les polices ont été créées
     private int _cachedCh;
 
@@ -302,16 +304,19 @@ sealed class VirtualKeyboard : IDisposable
         if (_hCharFont != IntPtr.Zero) Win32.DeleteObject(_hCharFont);
         if (_hLabelFont != IntPtr.Zero) Win32.DeleteObject(_hLabelFont);
         if (_hCtxFont != IntPtr.Zero) Win32.DeleteObject(_hCtxFont);
+        if (_hBadgeFont != IntPtr.Zero) Win32.DeleteObject(_hBadgeFont);
 
         var geo = GetKeyboardGeometry(cw, ch);
 
         int charFontSize = Math.Max(14, (int)(geo.Scale * 0.72f));
         int labelFontSize = Math.Max(9, (int)(geo.Scale * 0.30f));
         int ctxFontSize = Math.Max(10, (int)(geo.Scale * 0.35f));
+        int badgeFontSize = Math.Max(11, (int)(geo.Scale * 0.30f));
 
         _hCharFont = Win32.CreateFontW(charFontSize, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Consolas");
         _hLabelFont = Win32.CreateFontW(labelFontSize, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
         _hCtxFont = Win32.CreateFontW(ctxFontSize, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
+        _hBadgeFont = Win32.CreateFontW(-badgeFontSize, 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
 
         _cachedCw = cw;
         _cachedCh = ch;
@@ -345,19 +350,9 @@ sealed class VirtualKeyboard : IDisposable
         int windowW = adjustRect.right - adjustRect.left;
         int windowH = adjustRect.bottom - adjustRect.top;
 
-        // Positionner en bas à droite de l'écran contenant le curseur
-        int posX = 100, posY = 100;
-        if (Win32.GetCursorPos(out var cursorPt))
-        {
-            const uint MONITOR_DEFAULTTONEAREST = 2;
-            var hMon = Win32.MonitorFromPoint(cursorPt, MONITOR_DEFAULTTONEAREST);
-            var mi = new Win32.MONITORINFO { cbSize = Marshal.SizeOf<Win32.MONITORINFO>() };
-            if (Win32.GetMonitorInfo(hMon, ref mi))
-            {
-                posX = mi.rcWork.right - windowW - 10;
-                posY = mi.rcWork.bottom - windowH - 10;
-            }
-        }
+        var workArea = GetActiveMonitorWorkArea();
+        int posX = workArea.left + Math.Max(0, (workArea.right - workArea.left - windowW) / 2);
+        int posY = workArea.top + Math.Max(0, (workArea.bottom - workArea.top - windowH) / 2);
 
         _hWnd = Win32.CreateWindowExW(
             dwExStyle,
@@ -368,6 +363,7 @@ sealed class VirtualKeyboard : IDisposable
             IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
 
         CreateTooltip();
+        ConfigManager.WindowBoundsCleared += OnWindowBoundsCleared;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -513,6 +509,12 @@ sealed class VirtualKeyboard : IDisposable
     // ═══════════════════════════════════════════════════════════════
     // Affichage / masquage
     // ═══════════════════════════════════════════════════════════════
+    public void UsePreferredMonitorWindow(IntPtr hWnd)
+    {
+        if (hWnd != IntPtr.Zero && hWnd != _hWnd)
+            _preferredMonitorWindow = hWnd;
+    }
+
     public void Toggle()
     {
         if (_visible) Hide();
@@ -521,13 +523,112 @@ sealed class VirtualKeyboard : IDisposable
 
     public void Show()
     {
+        if (!TryRestoreSavedBounds())
+            CenterOnActiveMonitor();
+        else
+            _preferredMonitorWindow = IntPtr.Zero;
         Win32.ShowWindow(_hWnd, 8); // SW_SHOWNA (ne prend pas le focus)
         _visible = true;
         Invalidate();
     }
 
+    private void CenterOnActiveMonitor()
+    {
+        if (_hWnd == IntPtr.Zero || !Win32.GetWindowRect(_hWnd, out var winRect))
+            return;
+
+        int windowW = Math.Max(1, winRect.right - winRect.left);
+        int windowH = Math.Max(1, winRect.bottom - winRect.top);
+        var workArea = GetActiveMonitorWorkArea(_preferredMonitorWindow, _hWnd);
+        _preferredMonitorWindow = IntPtr.Zero;
+        int posX = workArea.left + Math.Max(0, (workArea.right - workArea.left - windowW) / 2);
+        int posY = workArea.top + Math.Max(0, (workArea.bottom - workArea.top - windowH) / 2);
+        Win32.MoveWindow(_hWnd, posX, posY, windowW, windowH, false);
+    }
+
+    private bool TryRestoreSavedBounds()
+    {
+        if (_hWnd == IntPtr.Zero) return false;
+        if (!ConfigManager.TryGetWindowBounds(ConfigManager.VirtualKeyboardBoundsKey, out var rect))
+            return false;
+        if (!IsRectVisibleOnScreen(rect))
+            return false;
+
+        Win32.MoveWindow(_hWnd, rect.left, rect.top,
+            rect.right - rect.left, rect.bottom - rect.top, false);
+        return true;
+    }
+
+    private static bool IsRectVisibleOnScreen(Win32.RECT rect)
+    {
+        int width = rect.right - rect.left;
+        int height = rect.bottom - rect.top;
+        if (width < 100 || height < 80) return false;
+
+        var center = new Win32.POINT
+        {
+            x = rect.left + width / 2,
+            y = rect.top + height / 2
+        };
+        var monitor = Win32.MonitorFromPoint(center, 0);
+        if (monitor == IntPtr.Zero) return false;
+
+        var info = new Win32.MONITORINFO { cbSize = Marshal.SizeOf<Win32.MONITORINFO>() };
+        if (!Win32.GetMonitorInfo(monitor, ref info)) return false;
+
+        var work = info.rcWork;
+        return rect.right > work.left + 40 &&
+               rect.left < work.right - 40 &&
+               rect.bottom > work.top + 40 &&
+               rect.top < work.bottom - 40;
+    }
+
+    private void SaveWindowBounds()
+    {
+        if (_hWnd == IntPtr.Zero) return;
+        if (Win32.GetWindowRect(_hWnd, out var rect) && IsRectVisibleOnScreen(rect))
+            ConfigManager.SetWindowBounds(ConfigManager.VirtualKeyboardBoundsKey, rect);
+    }
+
+    private void OnWindowBoundsCleared(string key)
+    {
+        if (key != ConfigManager.VirtualKeyboardBoundsKey || _hWnd == IntPtr.Zero)
+            return;
+        CenterOnActiveMonitor();
+        if (_visible)
+            Invalidate();
+    }
+
+    internal static IntPtr ChooseMonitorReferenceWindow(IntPtr preferredWindow, IntPtr foregroundWindow, IntPtr ignoredWindow)
+    {
+        if (preferredWindow != IntPtr.Zero && preferredWindow != ignoredWindow)
+            return preferredWindow;
+        if (foregroundWindow != IntPtr.Zero && foregroundWindow != ignoredWindow)
+            return foregroundWindow;
+        return IntPtr.Zero;
+    }
+
+    private static Win32.RECT GetActiveMonitorWorkArea(IntPtr preferredWindow = default, IntPtr ignoredWindow = default)
+    {
+        IntPtr foreground = Win32.GetForegroundWindow();
+        IntPtr referenceWindow = ChooseMonitorReferenceWindow(preferredWindow, foreground, ignoredWindow);
+        IntPtr monitor = referenceWindow != IntPtr.Zero
+            ? Win32.MonitorFromWindow(referenceWindow, Win32.MONITOR_DEFAULTTONEAREST)
+            : IntPtr.Zero;
+
+        if (monitor == IntPtr.Zero && Win32.GetCursorPos(out var cursorPt))
+            monitor = Win32.MonitorFromPoint(cursorPt, Win32.MONITOR_DEFAULTTONEAREST);
+
+        var mi = new Win32.MONITORINFO { cbSize = Marshal.SizeOf<Win32.MONITORINFO>() };
+        if (monitor != IntPtr.Zero && Win32.GetMonitorInfo(monitor, ref mi))
+            return mi.rcWork;
+
+        return new Win32.RECT { left = 0, top = 0, right = 1024, bottom = 768 };
+    }
+
     public void Hide()
     {
+        SaveWindowBounds();
         Win32.ShowWindow(_hWnd, 0); // SW_HIDE
         _visible = false;
     }
@@ -660,6 +761,34 @@ sealed class VirtualKeyboard : IDisposable
         };
     }
 
+    private void DrawHighlightStepBadge(IntPtr hdc, int kx, int ky, int kw, int kh, string text)
+    {
+        var (border, _) = GetHighlightColors();
+        int size = Math.Clamp(Math.Min(kw, kh) / 3, 18, 28);
+        int pad = Math.Max(4, size / 5);
+        var rect = new Win32.RECT
+        {
+            left = kx + kw - size - pad,
+            top = ky + pad,
+            right = kx + kw - pad,
+            bottom = ky + pad + size
+        };
+
+        var brush = Win32.CreateSolidBrush(border);
+        var pen = Win32.CreatePen(0, 1, border);
+        var oldBrush = Win32.SelectObject(hdc, brush);
+        var oldPen = Win32.SelectObject(hdc, pen);
+        Win32.RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, size, size);
+        Win32.SelectObject(hdc, oldPen);
+        Win32.SelectObject(hdc, oldBrush);
+        Win32.DeleteObject(pen);
+        Win32.DeleteObject(brush);
+
+        Win32.SelectObject(hdc, _hBadgeFont != IntPtr.Zero ? _hBadgeFont : _hCtxFont);
+        Win32.SetTextColor(hdc, 0x00FFFFFF);
+        Win32.DrawTextW(hdc, text, text.Length, ref rect, Win32.DT_CENTER | Win32.DT_VCENTER | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+    }
+
     /// <summary>Notifie qu'une touche a été pressée (pour animation visuelle).</summary>
     public void NotifyKeyPress(uint scancode)
     {
@@ -693,7 +822,13 @@ sealed class VirtualKeyboard : IDisposable
 
             case Win32.WM_SIZE:
                 UpdateTooltipRect();
+                if (_visible)
+                    SaveWindowBounds();
                 Invalidate();
+                return IntPtr.Zero;
+
+            case Win32.WM_EXITSIZEMOVE:
+                SaveWindowBounds();
                 return IntPtr.Zero;
 
             case Win32.WM_DPICHANGED:
@@ -710,6 +845,8 @@ sealed class VirtualKeyboard : IDisposable
                     Win32.MoveWindow(_hWnd, suggested.left, suggested.top,
                         suggested.right - suggested.left, suggested.bottom - suggested.top, true);
                 }
+                if (_visible)
+                    SaveWindowBounds();
                 Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
                 return IntPtr.Zero;
             }
@@ -1036,6 +1173,9 @@ sealed class VirtualKeyboard : IDisposable
                     Win32.DrawTextW(hdc, vk.Label, vk.Label.Length, ref labelRect, Win32.DT_CENTER | Win32.DT_VCENTER | Win32.DT_SINGLELINE);
                 }
             }
+
+            if (isHighlighted && !vk.IsContextual && (_highlightType == "step1" || _highlightType == "step2"))
+                DrawHighlightStepBadge(hdc, kx, ky, kw, kh, _highlightType == "step1" ? "1" : "2");
         }
 
         // Indication touche morte active — afficher la description (ex: "Accent circonflexe")
@@ -1065,6 +1205,9 @@ sealed class VirtualKeyboard : IDisposable
     private string? GetDisplayChar(uint scancode)
     {
         if (!_layout.Keys.TryGetValue(scancode, out var keyDef))
+            return null;
+
+        if ((_ctrlDown && !_altGrDown) || (_altDown && !_altGrDown))
             return null;
 
         string? output = keyDef.GetOutput(_shiftDown, _altGrDown, _capsLockActive);
@@ -1198,6 +1341,7 @@ sealed class VirtualKeyboard : IDisposable
     // ═══════════════════════════════════════════════════════════════
     public void Dispose()
     {
+        ConfigManager.WindowBoundsCleared -= OnWindowBoundsCleared;
         if (_hTooltip != IntPtr.Zero)
         {
             Win32.DestroyWindow(_hTooltip);
@@ -1207,6 +1351,7 @@ sealed class VirtualKeyboard : IDisposable
         if (_hCharFont != IntPtr.Zero) { Win32.DeleteObject(_hCharFont); _hCharFont = IntPtr.Zero; }
         if (_hLabelFont != IntPtr.Zero) { Win32.DeleteObject(_hLabelFont); _hLabelFont = IntPtr.Zero; }
         if (_hCtxFont != IntPtr.Zero) { Win32.DeleteObject(_hCtxFont); _hCtxFont = IntPtr.Zero; }
+        if (_hBadgeFont != IntPtr.Zero) { Win32.DeleteObject(_hBadgeFont); _hBadgeFont = IntPtr.Zero; }
         if (_hWnd != IntPtr.Zero)
         {
             Win32.DestroyWindow(_hWnd);

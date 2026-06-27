@@ -58,7 +58,7 @@ public class LessonCoreTests
         Assert.Equal(3, session.Stats.ProductiveKeystrokes);
         Assert.Equal(1, session.Stats.ErrorCount);
         Assert.Equal(0, session.Stats.BackspaceCount);
-        Assert.True(session.Stats.ErrorMatrix['a'].ContainsKey('x'));
+        Assert.Equal(new[] { 'a' }, session.Stats.GetHardestCharacters(3));
     }
 
     [Fact]
@@ -143,6 +143,24 @@ public class LessonCoreTests
     }
 
     [Fact]
+    public void TypingSession_FlexibleMode_ReportsBackspaceCorrectionAfterWrongCharacter()
+    {
+        var exercise = new LessonExercise("m", "l", 0, "practice", "Tape", "ab", LessonTypingMode.Flexible);
+        var session = new LessonTypingSession(exercise);
+
+        Assert.False(session.NeedsBackspaceCorrection);
+
+        session.TypeChar('x');
+        Assert.True(session.NeedsBackspaceCorrection);
+
+        session.Backspace();
+        Assert.False(session.NeedsBackspaceCorrection);
+
+        session.TypeChar('a');
+        Assert.False(session.NeedsBackspaceCorrection);
+    }
+
+    [Fact]
     public void TypingSession_ResetExercise_ClearsAttemptStats()
     {
         var clock = new FakeClock();
@@ -219,7 +237,7 @@ public class LessonCoreTests
             Assert.Equal(1, progress.SuccessfulAttempts);
             Assert.Null(progress.BestWpm);
             Assert.Null(progress.LastCompletedUtc);
-            Assert.Empty(progress.ErrorMatrix);
+            Assert.Equal(0, progress.HintsUsed);
         }
         finally
         {
@@ -265,6 +283,74 @@ public class LessonCoreTests
 
             Assert.False(reloaded.IsCompleted(exercise));
             Assert.Empty(reloaded.Exercises);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ProgressStore_DoesNotPersistTypedErrorCharacters()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "azerty-lessons-test-" + Guid.NewGuid() + ".json");
+        try
+        {
+            var exercise = new LessonExercise("module", "lesson", 0, "practice", "Tapez ab", "ab", LessonTypingMode.Strict);
+            var session = new LessonTypingSession(exercise);
+            session.TypeChar('x');
+            session.TypeChar('a');
+            session.TypeChar('b');
+
+            var store = new LessonProgressStore(path);
+            store.RecordSuccess(exercise, session.Stats);
+
+            string json = File.ReadAllText(path);
+            Assert.DoesNotContain("errorMatrix", json);
+            Assert.DoesNotContain("\"x\"", json);
+            Assert.True(store.IsCompleted(exercise));
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ProgressStore_RemovesLegacyErrorMatrixOnLoad()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "azerty-lessons-test-" + Guid.NewGuid() + ".json");
+        try
+        {
+            var exercise = new LessonExercise("module", "lesson", 0, "practice", "Tapez ab", "ab", LessonTypingMode.Strict);
+            string json = "{\n" +
+                "  \"version\": 1,\n" +
+                "  \"lastModuleId\": \"module\",\n" +
+                "  \"lastLessonId\": \"lesson\",\n" +
+                "  \"lastExerciseIndex\": 0,\n" +
+                "  \"onboardingSyncedMaxStep\": 0,\n" +
+                "  \"exercises\": {\n" +
+                $"    \"{exercise.StableKey}\": {{\n" +
+                $"      \"hash\": \"{exercise.Hash}\",\n" +
+                "      \"completed\": true,\n" +
+                "      \"successfulAttempts\": 1,\n" +
+                "      \"bestWpm\": null,\n" +
+                "      \"bestAccuracyPercent\": null,\n" +
+                "      \"bestSeconds\": null,\n" +
+                "      \"lastCompletedUtc\": null,\n" +
+                "      \"hintsUsed\": 0,\n" +
+                "      \"errorMatrix\": { \"a\": { \"x\": 1 } }\n" +
+                "    }\n" +
+                "  }\n" +
+                "}\n";
+            File.WriteAllText(path, json);
+
+            var store = new LessonProgressStore(path);
+
+            string cleaned = File.ReadAllText(path);
+            Assert.True(store.IsCompleted(exercise));
+            Assert.DoesNotContain("errorMatrix", cleaned);
+            Assert.DoesNotContain("\"x\"", cleaned);
         }
         finally
         {

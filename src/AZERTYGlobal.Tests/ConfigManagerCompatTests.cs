@@ -112,6 +112,37 @@ public class ConfigManagerCompatTests : IDisposable
     }
 
     [Fact]
+    public void WindowBounds_PersistAndClear()
+    {
+        var rect = new Win32.RECT { left = 10, top = 20, right = 610, bottom = 420 };
+        string? clearedKey = null;
+        void Handler(string key) => clearedKey = key;
+
+        ConfigManager.WindowBoundsCleared += Handler;
+        try
+        {
+            Assert.False(ConfigManager.TryGetWindowBounds(ConfigManager.VirtualKeyboardBoundsKey, out _));
+
+            ConfigManager.SetWindowBounds(ConfigManager.VirtualKeyboardBoundsKey, rect);
+
+            Assert.True(ConfigManager.TryGetWindowBounds(ConfigManager.VirtualKeyboardBoundsKey, out var saved));
+            Assert.Equal(rect.left, saved.left);
+            Assert.Equal(rect.top, saved.top);
+            Assert.Equal(rect.right, saved.right);
+            Assert.Equal(rect.bottom, saved.bottom);
+
+            ConfigManager.ClearWindowBounds(ConfigManager.VirtualKeyboardBoundsKey);
+
+            Assert.False(ConfigManager.TryGetWindowBounds(ConfigManager.VirtualKeyboardBoundsKey, out _));
+            Assert.Equal(ConfigManager.VirtualKeyboardBoundsKey, clearedKey);
+        }
+        finally
+        {
+            ConfigManager.WindowBoundsCleared -= Handler;
+        }
+    }
+
+    [Fact]
     public void LogCompatEvent_ConcurrentWrites_ProducesCompleteLines()
     {
         const int count = 100;

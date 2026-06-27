@@ -14,6 +14,9 @@ namespace AZERTYGlobal;
 static class ConfigManager
 {
     private static string _configPath = GetConfigPath();
+    public const string VirtualKeyboardBoundsKey = "virtualKeyboardBounds";
+    public const string LessonsWindowBoundsKey = "lessonsWindowBounds";
+    public static event Action<string>? WindowBoundsCleared;
 
     /// <summary>
     /// Hook de test : redirige config.json vers un fichier temporaire.
@@ -319,6 +322,52 @@ static class ConfigManager
     public static bool CompatibilityDebugLog => GetBool("compatibilityDebugLog");
 
     public static void SetCompatibilityDebugLog(bool enabled) => SetBool("compatibilityDebugLog", enabled);
+
+    public static bool TryGetWindowBounds(string key, out Win32.RECT rect)
+    {
+        rect = default;
+        var value = GetString(key);
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        var parts = value.Split(',');
+        if (parts.Length != 4) return false;
+        if (!int.TryParse(parts[0], out int left) ||
+            !int.TryParse(parts[1], out int top) ||
+            !int.TryParse(parts[2], out int width) ||
+            !int.TryParse(parts[3], out int height))
+            return false;
+
+        if (width < 100 || height < 80) return false;
+        rect = new Win32.RECT
+        {
+            left = left,
+            top = top,
+            right = left + width,
+            bottom = top + height
+        };
+        return true;
+    }
+
+    public static void SetWindowBounds(string key, Win32.RECT rect)
+    {
+        int width = rect.right - rect.left;
+        int height = rect.bottom - rect.top;
+        if (width < 100 || height < 80) return;
+        SetString(key, $"{rect.left},{rect.top},{width},{height}");
+    }
+
+    public static void ClearWindowBounds(string key)
+    {
+        bool changed;
+        lock (_lock)
+        {
+            EnsureLoaded();
+            changed = _cache!.Remove(key);
+            if (changed)
+                Save();
+        }
+        WindowBoundsCleared?.Invoke(key);
+    }
 
     // ═══════════════════════════════════════════════════════════════
     // Logging centralisé

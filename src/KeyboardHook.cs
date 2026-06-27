@@ -33,6 +33,7 @@ sealed class KeyboardHook : IDisposable
     private readonly Win32.LowLevelKeyboardProc _proc;
     private readonly KeyMapper _mapper;
     private bool _enabled = true;
+    private bool _passThroughAll;
 
     // VK codes des raccourcis configurables (lus depuis config.json)
     private uint _vkSearch;
@@ -57,6 +58,12 @@ sealed class KeyboardHook : IDisposable
     {
         get => _enabled;
         set => _enabled = value;
+    }
+
+    public bool PassThroughAll
+    {
+        get => _passThroughAll;
+        set => _passThroughAll = value;
     }
 
     public KeyboardHook(KeyMapper mapper)
@@ -104,6 +111,9 @@ sealed class KeyboardHook : IDisposable
             if (hookStruct.dwExtraInfo == INJECTED_FLAG)
                 return Win32.CallNextHookEx(_hookId, nCode, wParam, lParam);
 
+            if (_passThroughAll)
+                return Win32.CallNextHookEx(_hookId, nCode, wParam, lParam);
+
             int msg = wParam.ToInt32();
             bool isKeyDown = msg == (int)Win32.WM_KEYDOWN || msg == (int)Win32.WM_SYSKEYDOWN;
             bool isKeyUp = msg == (int)Win32.WM_KEYUP || msg == (int)Win32.WM_SYSKEYUP;
@@ -141,14 +151,14 @@ sealed class KeyboardHook : IDisposable
                 }
 
                 // Détecter Ctrl+Shift+<touche> → ouvrir/fermer la recherche de caractère
-                if (_vkSearch != 0 && hookStruct.vkCode == _vkSearch && isKeyDown && _mapper.IsToggleShortcut())
+                if (_vkSearch != 0 && _mapper.MatchesShortcutKey(_vkSearch, hookStruct.vkCode, hookStruct.scanCode) && isKeyDown && _mapper.IsToggleShortcut())
                 {
                     SearchRequested?.Invoke();
                     return (IntPtr)1;
                 }
 
                 // Détecter Ctrl+Shift+<touche> → ouvrir/fermer le clavier virtuel
-                if (_vkVirtualKeyboard != 0 && hookStruct.vkCode == _vkVirtualKeyboard && isKeyDown && _mapper.IsToggleShortcut())
+                if (_vkVirtualKeyboard != 0 && _mapper.MatchesShortcutKey(_vkVirtualKeyboard, hookStruct.vkCode, hookStruct.scanCode) && isKeyDown && _mapper.IsToggleShortcut())
                 {
                     VirtualKeyboardRequested?.Invoke();
                     return (IntPtr)1;

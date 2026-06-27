@@ -97,12 +97,19 @@ sealed class OnboardingWindow : IDisposable
     // n'est mis a true qu'a la complete reussite des 6 exercices). Etat B (essaye non complete)
     // sert a afficher « Suivant » a cote de « Essayer maintenant » sur l'etape 1.
     private bool _learningModuleAttempted;
+    private bool _inputPaused;
     private LearningModule? _learningModule;
 
     // Références passées par TrayApplication pour le LearningModule
     public KeyMapper? Mapper { get; set; }
     public KeyboardHook? Hook { get; set; }
     public Layout? AppLayout { get; set; }
+
+    public void SetInputPaused(bool paused)
+    {
+        _inputPaused = paused;
+        _learningModule?.SetInputPaused(paused);
+    }
 
     // Y du contenu (après le header) — recalculé à chaque OnPaint
     private int _contentY;
@@ -617,6 +624,9 @@ sealed class OnboardingWindow : IDisposable
     {
         try
         {
+        if (_inputPaused && IsPausedInputMessage(msg))
+            return IntPtr.Zero;
+
         switch (msg)
         {
             case Win32.WM_PAINT:
@@ -771,6 +781,13 @@ sealed class OnboardingWindow : IDisposable
             "AZERTY Global \u2014 Erreur", 0x10);
     }
 
+    private static bool IsPausedInputMessage(uint msg)
+    {
+        return msg is Win32.WM_KEYDOWN or Win32.WM_KEYUP or Win32.WM_SYSKEYDOWN or Win32.WM_SYSKEYUP
+            or Win32.WM_CHAR or Win32.WM_SYSCHAR or Win32.WM_SYSDEADCHAR
+            or Win32.WM_COMMAND or Win32.WM_PASTE or Win32.WM_CUT or Win32.WM_CLEAR or Win32.WM_UNDO;
+    }
+
     private void OpenLink(string url)
     {
         Win32.ShellExecuteW(IntPtr.Zero, "open", url, null, null, 1);
@@ -790,6 +807,7 @@ sealed class OnboardingWindow : IDisposable
         _learningModule?.Dispose();
         ConfigManager.LogCrashTraceDebug("LaunchLearningModule: about to create new LearningModule");
         _learningModule = new LearningModule(_hWnd, Mapper, Hook, AppLayout);
+        _learningModule.SetInputPaused(_inputPaused);
         _learningModuleAttempted = true; // declenche l'apparition du bouton « Suivant » sur l'etape 1
         UpdateStepVisibility();          // rafraichit la disposition des boutons AVANT le Show du LM
         Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
@@ -815,6 +833,9 @@ sealed class OnboardingWindow : IDisposable
     // ═══════════════════════════════════════════════════════════════
     private IntPtr LinkSubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, IntPtr dwRefData)
     {
+        if (_inputPaused && IsPausedInputMessage(msg))
+            return IntPtr.Zero;
+
         switch (msg)
         {
             case Win32.WM_MOUSEMOVE:
@@ -861,6 +882,9 @@ sealed class OnboardingWindow : IDisposable
     // tabulables et le WM_KEYDOWN principal n'est jamais appelé.
     private IntPtr ButtonArrowSubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, IntPtr dwRefData)
     {
+        if (_inputPaused && IsPausedInputMessage(msg))
+            return IntPtr.Zero;
+
         if (msg == Win32.WM_KEYDOWN)
         {
             int vk = wParam.ToInt32();

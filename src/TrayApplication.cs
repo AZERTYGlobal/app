@@ -28,6 +28,13 @@ sealed class TrayApplication : IDisposable
     private const int IDM_FEEDBACK = 1014;
     private const int IDM_ABOUT = 1016;
     private const int IDM_EXERCISES = 1023;
+    private const int IDM_GUIDE_CHANGES = 1024;
+    private const int IDM_GUIDE_PDF = 1025;
+    private const int IDM_CARDS = 1026;
+    private const int IDM_PAUSE = 1027;
+    private const int IDM_PRIVACY = 1028;
+    private const int IDM_DISCORD = 1029;
+    private const int IDM_RELEASE_NOTES = 1030;
     private const int IDM_QUIT = 1005;
     // Sous-menu compatibilité jeu (v0.9.7)
     private const int IDM_COMPAT_AUTO = 1020;
@@ -79,12 +86,14 @@ sealed class TrayApplication : IDisposable
     private AboutWindow? _about;
     private ToggleNotification? _toggleNotification;
     private LessonsWindow? _lessons;
+    private IntPtr _lastForegroundBeforeTrayMenu;
 
     // Si conflit layout systeme detecte au demarrage, l'onboarding est differe et n'est
     // affiche qu'apres que l'utilisateur a clique « Garder l'app » dans LayoutConflictWindow.
     // Sinon, ce flag reste a false et l'onboarding s'affiche normalement.
     private bool _pendingOnboardingShow;
     private bool _enabled = true;
+    private DateTimeOffset? _pauseUntilUtc;
 
     // Compatibilité jeux (v0.9.7) : couche de détection foreground + désactivation auto anti-cheat
     private readonly IWin32Api _win32Api = new RealWin32Api();
@@ -287,9 +296,33 @@ sealed class TrayApplication : IDisposable
     private const uint TIMER_REHOOK_3 = 9003;
     private const uint TIMER_SINGLECLICK = 9010;
     private const uint TIMER_LAYOUT_CHECK = 9020;
+    private const uint TIMER_PAUSE = 9030;
 
     // Message TaskbarCreated (Explorer restart / chargement tardif au boot)
     private readonly uint _wmTaskbarCreated = Win32.RegisterWindowMessageW("TaskbarCreated");
+
+    private bool IsPaused => _pauseUntilUtc.HasValue;
+    private bool ShouldBlockHookCompletely => IsPaused || _autoDisabledForAntiCheat;
+    private bool ShouldProcessHook => _enabled && !IsPaused && !_autoDisabledForAntiCheat;
+
+    private void ApplyHookState(bool syncWhenActive = false)
+    {
+        if (_hook == null) return;
+        _hook.PassThroughAll = ShouldBlockHookCompletely;
+        _hook.Enabled = ShouldProcessHook;
+        ApplyWindowInputState();
+        if (syncWhenActive && ShouldProcessHook)
+            _mapper?.SyncState();
+    }
+
+    private void ApplyWindowInputState()
+    {
+        bool paused = ShouldBlockHookCompletely;
+        _characterSearch?.SetInputPaused(paused);
+        _lessons?.SetInputPaused(paused);
+        _settings?.SetInputPaused(paused);
+        _onboarding?.SetInputPaused(paused);
+    }
 
     /// <summary>Boucle de messages principale.</summary>
     public void Run()
@@ -328,20 +361,24 @@ sealed class TrayApplication : IDisposable
                     else if (mouseMsg == Win32.WM_LBUTTONDBLCLK)
                     {
                         Win32.KillTimer(_hWnd, (UIntPtr)TIMER_SINGLECLICK);
-                        if (_enabled) _virtualKeyboard?.Toggle();
+                        if (ShouldProcessHook) _virtualKeyboard?.Toggle();
                     }
                     return IntPtr.Zero;
 
                 case WM_APP_SEARCH:
-                    if (_enabled)
+                    if (ShouldProcessHook)
                         _characterSearch?.Toggle();
+                    else if (IsPaused)
+                        ShowBalloon("AZERTY Global", "est en pause — reprends depuis le menu tray.");
                     else
                         ShowBalloon("AZERTY Global", "est désactivé — Ctrl+Maj+Verr.Maj pour réactiver.");
                     return IntPtr.Zero;
 
                 case WM_APP_VKBD:
-                    if (_enabled)
+                    if (ShouldProcessHook)
                         _virtualKeyboard?.Toggle();
+                    else if (IsPaused)
+                        ShowBalloon("AZERTY Global", "est en pause — reprends depuis le menu tray.");
                     else
                         ShowBalloon("AZERTY Global", "est désactivé — Ctrl+Maj+Verr.Maj pour réactiver.");
                     return IntPtr.Zero;
@@ -350,12 +387,21 @@ sealed class TrayApplication : IDisposable
                     switch (wParam.ToInt32() & 0xFFFF)
                     {
                         case IDM_TOGGLE: OnToggle(); break;
+                        case IDM_PAUSE:
+                            if (IsPaused)
+                                StopPause(expired: false);
+                            else
+                                ShowPauseDialogAndStart();
+                            break;
                         case IDM_KEYBOARD:
-                            if (_enabled || _virtualKeyboard?.IsVisible == true)
+                            if (ShouldProcessHook || _virtualKeyboard?.IsVisible == true)
+                            {
+                                _virtualKeyboard?.UsePreferredMonitorWindow(_lastForegroundBeforeTrayMenu);
                                 _virtualKeyboard?.Toggle();
+                            }
                             break;
                         case IDM_SEARCH:
-                            if (_enabled || _characterSearch?.IsVisible == true)
+                            if (ShouldProcessHook || _characterSearch?.IsVisible == true)
                                 _characterSearch?.Toggle();
                             break;
                         case IDM_SETTINGS:
@@ -364,8 +410,15 @@ sealed class TrayApplication : IDisposable
                                 _settings = new SettingsWindow();
                                 _settings.ShortcutChanged = () => _hook?.ReloadShortcuts();
                             }
+                            ApplyWindowInputState();
                             _settings.Show();
                             break;
+                        case IDM_GUIDE_CHANGES: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/guide", null, null, 1); break;
+                        case IDM_RELEASE_NOTES: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/nouveautes", null, null, 1); break;
+                        case IDM_GUIDE_PDF: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/assets/Prise_en_main_AZERTY_Global.pdf", null, null, 1); break;
+                        case IDM_CARDS: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/guide#cartes", null, null, 1); break;
+                        case IDM_PRIVACY: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/mentions-legales#confidentialite-securite", null, null, 1); break;
+                        case IDM_DISCORD: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://discord.gg/nYknqshJz3", null, null, 1); break;
                         case IDM_SITE: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global", null, null, 1); break;
                         case IDM_FEEDBACK: Win32.ShellExecuteW(IntPtr.Zero, "open", "https://azerty.global/feedback", null, null, 1); break;
                         case IDM_BUG: OnReportBug(); break;
@@ -383,6 +436,7 @@ sealed class TrayApplication : IDisposable
                                 _onboarding.Hook = _hook;
                                 _onboarding.AppLayout = _layout;
                             }
+                            ApplyWindowInputState();
                             _onboarding.Show();
                             break;
                         case IDM_ABOUT:
@@ -393,6 +447,7 @@ sealed class TrayApplication : IDisposable
                         case IDM_EXERCISES:
                             if (_mapper == null || _hook == null || _layout == null) break;
                             _lessons ??= new LessonsWindow(_layout, _mapper, _hook);
+                            ApplyWindowInputState();
                             _lessons.Show();
                             break;
                         case IDM_COMPAT_AUTO:
@@ -414,6 +469,7 @@ sealed class TrayApplication : IDisposable
                             }
                             ConfigManager.LogCrashTraceDebug($"IDM_RESET_ONBOARDING: Mapper={(_onboarding.Mapper != null)}, Hook={(_onboarding.Hook != null)}, AppLayout={(_onboarding.AppLayout != null)}");
                             _onboarding.ResetState();
+                            ApplyWindowInputState();
                             ConfigManager.LogCrashTraceDebug("IDM_RESET_ONBOARDING: ResetState done, calling Show");
                             _onboarding.Show();
                             ConfigManager.LogCrashTraceDebug("IDM_RESET_ONBOARDING: Show returned");
@@ -439,6 +495,13 @@ sealed class TrayApplication : IDisposable
                     {
                         Win32.KillTimer(_hWnd, (UIntPtr)TIMER_LAYOUT_CHECK);
                         CheckForegroundLayout();
+                    }
+                    else if (timerId == TIMER_PAUSE)
+                    {
+                        if (_pauseUntilUtc.HasValue && DateTimeOffset.UtcNow >= _pauseUntilUtc.Value)
+                            StopPause(expired: true);
+                        else
+                            UpdateTooltip();
                     }
                     else if (timerId == ForegroundMonitor.TIMER_FOREGROUND_DEBOUNCE)
                     {
@@ -488,7 +551,8 @@ sealed class TrayApplication : IDisposable
             newHook.SearchRequested += () => Win32.PostMessageW(_hWnd, WM_APP_SEARCH, IntPtr.Zero, IntPtr.Zero);
             newHook.VirtualKeyboardRequested += () => Win32.PostMessageW(_hWnd, WM_APP_VKBD, IntPtr.Zero, IntPtr.Zero);
             newHook.LayoutMayHaveChanged += OnLayoutMayHaveChanged;
-            newHook.Enabled = _enabled && !_autoDisabledForAntiCheat;
+            newHook.PassThroughAll = ShouldBlockHookCompletely;
+            newHook.Enabled = ShouldProcessHook;
             newHook.Install();
             _hook = newHook;
             oldHook.Dispose();
@@ -636,6 +700,7 @@ sealed class TrayApplication : IDisposable
         _onboarding.Mapper = _mapper;
         _onboarding.Hook = _hook;
         _onboarding.AppLayout = _layout;
+        ApplyWindowInputState();
         _onboarding.Show();
     }
 
@@ -650,25 +715,39 @@ sealed class TrayApplication : IDisposable
         // Actions fréquentes
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_TOGGLE,
             _enabled ? "Désactiver\tCtrl+Maj+Verr.Maj" : "Activer\tCtrl+Maj+Verr.Maj");
-        uint kbdFlags = _enabled || _virtualKeyboard?.IsVisible == true ? MF_STRING : MF_STRING | MF_GRAYED;
+        uint pauseFlags = _enabled || IsPaused ? MF_STRING : MF_STRING | MF_GRAYED;
+        Win32.AppendMenuW(hMenu, pauseFlags, IDM_PAUSE,
+            IsPaused ? "Reprendre maintenant" : "Mettre en pause...");
+        uint kbdFlags = ShouldProcessHook || _virtualKeyboard?.IsVisible == true ? MF_STRING : MF_STRING | MF_GRAYED;
         Win32.AppendMenuW(hMenu, kbdFlags, IDM_KEYBOARD,
             _virtualKeyboard?.IsVisible == true ? $"Masquer le clavier virtuel\tCtrl+Maj+{kbdKey}" : $"Clavier virtuel\tCtrl+Maj+{kbdKey}");
-        uint searchFlags = _enabled || _characterSearch?.IsVisible == true ? MF_STRING : MF_STRING | MF_GRAYED;
+        uint searchFlags = ShouldProcessHook || _characterSearch?.IsVisible == true ? MF_STRING : MF_STRING | MF_GRAYED;
         Win32.AppendMenuW(hMenu, searchFlags, IDM_SEARCH, $"Rechercher un caractère\tCtrl+Maj+{searchKey}");
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_EXERCISES, "Leçons");
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
 
-        // Liens et infos
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_ONBOARDING, "Fenêtre de bienvenue");
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_SITE, "Visiter le site web");
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_FEEDBACK, "Donner son avis");
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_BUG, "Signaler un bug");
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_SUPPORT, "❤️ Soutenir le projet");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_PRIVACY, "Confidentialité && sécurité");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_DISCORD, "Rejoindre la communauté Discord");
+
+        // Ressources et liens externes
+        var hResourcesMenu = Win32.CreatePopupMenu();
+        Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_GUIDE_CHANGES, "Les 5 changements");
+        Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_RELEASE_NOTES, "Nouveautés de la version");
+        Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_GUIDE_PDF, "Guide utilisateur imprimable (PDF)");
+        Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_CARDS, "Cartes du clavier");
+        Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_SITE, "Site web");
+        Win32.AppendMenuW(hMenu, MF_STRING | MF_POPUP, (nuint)hResourcesMenu, "Ressources");
+
+        var hFeedbackMenu = Win32.CreatePopupMenu();
+        Win32.AppendMenuW(hFeedbackMenu, MF_STRING, IDM_FEEDBACK, "Donner son avis");
+        Win32.AppendMenuW(hFeedbackMenu, MF_STRING, IDM_BUG, "Signaler un bug");
+        Win32.AppendMenuW(hFeedbackMenu, MF_STRING, IDM_SUPPORT, "Soutenir le projet");
+        Win32.AppendMenuW(hMenu, MF_STRING | MF_POPUP, (nuint)hFeedbackMenu, "Retours & soutien");
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
 
         // Configuration
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_SETTINGS, "⚙️ Paramètres");
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_ABOUT, "À propos");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_SETTINGS, "Paramètres");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_ONBOARDING, "Revoir la fenêtre de bienvenue");
 
         // Sous-menu compatibilite du process foreground (conditionnel — n'apparait que si fg detecte).
         // Le separateur qui suit est aussi conditionnel pour eviter un separateur orphelin.
@@ -680,6 +759,8 @@ sealed class TrayApplication : IDisposable
         if (!string.IsNullOrEmpty(fgProc) && !fgIsOwnApp)
         {
             var hSubMenu = Win32.CreatePopupMenu();
+            Win32.AppendMenuW(hSubMenu, MF_STRING | MF_GRAYED, 0, $"Application active : {fgProc}");
+            Win32.AppendMenuW(hSubMenu, MF_SEPARATOR, 0, null);
             Win32.AppendMenuW(hSubMenu, MF_STRING, IDM_COMPAT_AUTO, "Auto (détection automatique)");
             Win32.AppendMenuW(hSubMenu, MF_STRING, IDM_COMPAT_FORCE_ON, "Forcer compatibilité jeu");
             Win32.AppendMenuW(hSubMenu, MF_STRING, IDM_COMPAT_FORCE_OFF, "Forcer désactivation");
@@ -694,8 +775,9 @@ sealed class TrayApplication : IDisposable
             };
             Win32.CheckMenuRadioItem(hSubMenu, IDM_COMPAT_AUTO, IDM_COMPAT_FORCE_OFF, activeId, Win32.MF_BYCOMMAND);
 
-            Win32.AppendMenuW(hMenu, MF_STRING | MF_POPUP, (nuint)hSubMenu, $"Compatibilité « {fgProc} »");
+            Win32.AppendMenuW(hMenu, MF_STRING | MF_POPUP, (nuint)hSubMenu, "Compatibilité des applications");
         }
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_ABOUT, "À propos");
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
 
 #if DEBUG
@@ -704,6 +786,9 @@ sealed class TrayApplication : IDisposable
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_QUIT, "Quitter");
 
         Win32.GetCursorPos(out var pt);
+        _lastForegroundBeforeTrayMenu = Win32.GetForegroundWindow();
+        if (_lastForegroundBeforeTrayMenu == _hWnd)
+            _lastForegroundBeforeTrayMenu = IntPtr.Zero;
         Win32.SetForegroundWindow(_hWnd);
         Win32.TrackPopupMenuEx(hMenu, TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, pt.x, pt.y, _hWnd, IntPtr.Zero);
         Win32.PostMessageW(_hWnd, 0, IntPtr.Zero, IntPtr.Zero); // WM_NULL — fermeture propre du menu
@@ -732,11 +817,15 @@ sealed class TrayApplication : IDisposable
         if (_enabled)
             _mapper?.ClearPassedThroughKeys();
 
+        if (IsPaused)
+        {
+            _pauseUntilUtc = null;
+            Win32.KillTimer(_hWnd, (UIntPtr)TIMER_PAUSE);
+        }
+
         _enabled = !_enabled;
 
-        // Hook effectivement actif uniquement si volonté utilisateur ET pas de désactivation
-        // auto anti-cheat en cours. La désactivation auto surclasse toujours le toggle manuel.
-        _hook.Enabled = _enabled && !_autoDisabledForAntiCheat;
+        ApplyHookState(syncWhenActive: _enabled);
 
         // Si l'utilisateur désactive manuellement pendant qu'on est en désactivation auto,
         // annuler le « rétablir auto à la sortie du jeu » : il a explicitement choisi off.
@@ -774,6 +863,63 @@ sealed class TrayApplication : IDisposable
             if (_toggleNotification == null) _toggleNotification = new ToggleNotification();
             _toggleNotification.Show(_enabled);
         }
+    }
+
+    private void ShowPauseDialogAndStart()
+    {
+        if (!_enabled)
+            return;
+
+        var duration = PauseDurationDialog.Show(_hWnd);
+        if (duration.HasValue)
+            StartPause(duration.Value);
+    }
+
+    private void StartPause(TimeSpan duration)
+    {
+        int totalMinutes = Math.Clamp((int)Math.Round(duration.TotalMinutes), 1, 1439);
+        _pauseUntilUtc = DateTimeOffset.UtcNow.AddMinutes(totalMinutes);
+        _mapper?.ClearPassedThroughKeys();
+        Win32.SetTimer(_hWnd, (UIntPtr)TIMER_PAUSE, 1000, IntPtr.Zero);
+        ApplyHookState();
+        UpdateIcon();
+        UpdateTooltip();
+        ShowBalloon("AZERTY Global", $"en pause pour {FormatDuration(totalMinutes)}.");
+    }
+
+    private void StopPause(bool expired)
+    {
+        bool wasPaused = IsPaused;
+        _pauseUntilUtc = null;
+        Win32.KillTimer(_hWnd, (UIntPtr)TIMER_PAUSE);
+        ApplyHookState(syncWhenActive: true);
+        UpdateIcon();
+        UpdateTooltip();
+
+        if (wasPaused)
+            ShowBalloon("AZERTY Global", expired ? "pause terminée." : "pause arrêtée.");
+    }
+
+    private static string FormatDuration(int totalMinutes)
+    {
+        int hours = totalMinutes / 60;
+        int minutes = totalMinutes % 60;
+        return hours > 0 ? $"{hours} h {minutes:00}" : $"{minutes} min";
+    }
+
+    private string FormatPauseRemaining()
+    {
+        if (!_pauseUntilUtc.HasValue)
+            return "00:00";
+
+        var remaining = _pauseUntilUtc.Value - DateTimeOffset.UtcNow;
+        if (remaining < TimeSpan.Zero)
+            remaining = TimeSpan.Zero;
+
+        int totalHours = (int)remaining.TotalHours;
+        if (totalHours > 0)
+            return $"{totalHours}:{remaining.Minutes:00}:{remaining.Seconds:00}";
+        return $"{remaining.Minutes:00}:{remaining.Seconds:00}";
     }
 
     private bool _lastCapsState;
@@ -833,6 +979,7 @@ sealed class TrayApplication : IDisposable
         if (_cleaned) return;
         _cleaned = true;
 
+        Win32.KillTimer(_hWnd, (UIntPtr)TIMER_PAUSE);
         _mapper?.ClearPassedThroughKeys();
         _foregroundMonitor?.Dispose(); _foregroundMonitor = null;
         _hook?.Dispose(); _hook = null;
@@ -860,7 +1007,7 @@ sealed class TrayApplication : IDisposable
         var oldIcon = _hIcon;
 
         // Déterminer le texte et le style de l'icône selon l'état
-        bool active = _enabled && !_autoDisabledForAntiCheat;
+        bool active = ShouldProcessHook;
         bool capsLock = _mapper?.CapsLockActive == true && active;
         string iconText = "AG";
 
@@ -876,8 +1023,12 @@ sealed class TrayApplication : IDisposable
     private void UpdateTooltip()
     {
         var parts = new List<string> { "AZERTY Global v" + Program.Version };
-        if (!_enabled)
-            parts.Add("Inactif");
+        if (_autoDisabledForAntiCheat)
+            parts.Add("Suspendu pour compatibilité");
+        else if (IsPaused)
+            parts.Add($"En pause {FormatPauseRemaining()}");
+        else if (!_enabled)
+            parts.Add("Désactivé");
         else
         {
             parts.Add("Actif");
@@ -968,14 +1119,15 @@ sealed class TrayApplication : IDisposable
         if (mode == CompatibilityMode.DisabledAntiCheat && !_autoDisabledForAntiCheat)
         {
             // Entrée dans un process anti-cheat : désactivation auto
-            if (_enabled && _hook.Enabled)
+            if (_enabled && ShouldProcessHook)
             {
                 _wasEnabledBeforeAutoDisable = true;
                 _mapper.ClearPassedThroughKeys(); // émet keyup synthétiques avant désactivation
-                _hook.Enabled = false;
             }
             _autoDisabledForAntiCheat = true;
+            ApplyHookState();
             UpdateIcon();
+            UpdateTooltip();
             ShowSecurityBalloon("AZERTY Global",
                 $"désactivé temporairement pour {procName}\n(anti-cheat : injection de frappes interdite).");
             // Audit sécu 2026-05 SEV-A1-02 : anonymisation du process name dans le log.
@@ -988,12 +1140,16 @@ sealed class TrayApplication : IDisposable
             _autoDisabledForAntiCheat = false;
             if (_wasEnabledBeforeAutoDisable && _enabled)
             {
-                _hook.Enabled = true;
-                _mapper.SyncState();
+                ApplyHookState(syncWhenActive: true);
                 ShowBalloon("AZERTY Global", "est de nouveau actif.");
+            }
+            else
+            {
+                ApplyHookState();
             }
             _wasEnabledBeforeAutoDisable = false;
             UpdateIcon();
+            UpdateTooltip();
         }
     }
 

@@ -16,7 +16,7 @@
 
 **Validation RC Store**
 
-- Bundle Store 0.12.0.0 produit le 2026-06-21 (`msix/AZERTYGlobal-0.12.0.0.msixbundle`) pour x64 + ARM64.
+- Bundle Store 0.12.0.0 reconstruit le 2026-06-26 (`msix/AZERTYGlobal-0.12.0.0.msixbundle`) pour x64 + ARM64, après suppression de toute persistance de frappe dans le module Leçons.
 - `scripts/Verify-Release.ps1` PASS : hashes des exécutables publiés identiques aux exécutables embarqués dans le bundle.
 - WACK 0.12.0 PASS (`Archives/wack/2026-06/wack-report-v0.12.0.xml`) ; `DPIAwarenessValidation` PASS, optional `Blocked executables` non bloquant conservé.
 
@@ -311,4 +311,4 @@ Refonte majeure de la couche d'injection pour résoudre les problèmes de compat
 
 ---
 
-*Dernière mise à jour : 2026-06-21 (v0.12.0 — RC Store vérifiée)*
+*Dernière mise à jour : 2026-06-26 (v0.12.0 — RC Store vérifiée)*

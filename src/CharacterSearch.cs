@@ -43,12 +43,12 @@ sealed class CharacterSearch : IDisposable
     private const uint CLR_HINT_LIGHT = 0x00606060;    // Exemples (gris discret)
 
     // ── Dimensions (base 96 DPI) ─────────────────────────────────
-    private const int BASE_WIN_W = 360;
-    private const int BASE_WIN_H_MIN = 60;      // Hauteur minimale (juste le champ de recherche)
+    private const int BASE_WIN_W = 520;
+    private const int BASE_WIN_H_MIN = 68;      // Hauteur minimale (juste le champ de recherche)
     private const int BASE_WIN_H_MAX = 420;
-    private const int BASE_SEARCH_H = 20;
-    private const int BASE_CHAR_COL_W = 40;
-    private const int BASE_NAME_COL_W = 180;
+    private const int BASE_SEARCH_H = 28;
+    private const int BASE_CHAR_COL_W = 48;
+    private const int BASE_NAME_COL_W = 280;
     private const int BASE_ROW_PAD = 8;
     private const int BASE_FOOTER_H = 42;
     private const int MAX_RESULTS = 20;
@@ -109,6 +109,7 @@ sealed class CharacterSearch : IDisposable
     private float _dpiScale = 1.0f;
     private bool _showCopiedFeedback;
     private string _copiedChar = "";
+    private bool _inputPaused;
     private IntPtr _hEditBgBrush;
     private IntPtr _hClassBgBrush; // Brush de fond passé à WNDCLASSEXW
 
@@ -186,6 +187,13 @@ sealed class CharacterSearch : IDisposable
     public event Action<MethodData?>? SelectionChanged;
 
     public bool IsVisible => _hWnd != IntPtr.Zero && Win32.IsWindowVisible(_hWnd);
+
+    public void SetInputPaused(bool paused)
+    {
+        _inputPaused = paused;
+        if (paused)
+            SelectionChanged?.Invoke(null);
+    }
 
     /// <summary>Retourne un dictionnaire caractère → nom français (pour le clavier virtuel).</summary>
     public Dictionary<string, string> GetCharacterNames()
@@ -706,12 +714,12 @@ sealed class CharacterSearch : IDisposable
 
     private void CreateFonts()
     {
-        _hFontChar = Win32.CreateFontW(Scale(24), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
-        _hFontName = Win32.CreateFontW(Scale(20), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
-        _hFontMethod = Win32.CreateFontW(Scale(18), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI Semibold");
-        _hFontFooter = Win32.CreateFontW(Scale(16), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
-        _hFontPlaceholder = Win32.CreateFontW(-Scale(16), 0, 0, 0, 400, 1, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
-        _hFontEdit = Win32.CreateFontW(-Scale(16), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
+        _hFontChar = Win32.CreateFontW(-Scale(24), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI Symbol");
+        _hFontName = Win32.CreateFontW(-Scale(15), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontMethod = Win32.CreateFontW(-Scale(18), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontFooter = Win32.CreateFontW(-Scale(16), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontPlaceholder = Win32.CreateFontW(-Scale(16), 0, 0, 0, 400, 1, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
+        _hFontEdit = Win32.CreateFontW(-Scale(18), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
     }
 
     private void DestroyFonts()
@@ -921,6 +929,10 @@ sealed class CharacterSearch : IDisposable
     /// <summary>Subclass de l'Edit pour intercepter les touches spéciales.</summary>
     private IntPtr EditSubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, IntPtr dwRefData)
     {
+        if (_inputPaused && (msg == Win32.WM_KEYDOWN || msg == Win32.WM_CHAR ||
+            msg == Win32.WM_PASTE || msg == Win32.WM_CUT || msg == Win32.WM_CLEAR || msg == Win32.WM_UNDO))
+            return IntPtr.Zero;
+
         if (msg == Win32.WM_KEYDOWN)
         {
             int vk = wParam.ToInt32();
@@ -1316,10 +1328,10 @@ sealed class CharacterSearch : IDisposable
                 // Aucun résultat
                 Win32.SetTextColor(hdcMem, CLR_FOOTER);
                 Win32.SelectObject(hdcMem, hFontName);
-                var noResultRect = new Win32.RECT { left = 0, top = y + Scale(20), right = cw, bottom = y + Scale(60) };
+                var noResultRect = new Win32.RECT { left = 0, top = y + Scale(4), right = cw, bottom = ch };
                 var noResultText = "Aucun résultat";
                 Win32.DrawTextW(hdcMem, noResultText, noResultText.Length, ref noResultRect,
-                    Win32.DT_CENTER | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+                    Win32.DT_CENTER | Win32.DT_VCENTER | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
             }
             else
             {
@@ -1372,7 +1384,7 @@ sealed class CharacterSearch : IDisposable
     {
         int x = left;
         int lineY = top;
-        int lineH = Scale(18);
+        int lineH = Scale(21);
 
         var displayLines = method.Split('\n');
 

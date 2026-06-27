@@ -18,6 +18,7 @@ internal sealed class LessonsWindow : IDisposable
     private const int WMSZ_BOTTOM = 6;
     private const int WMSZ_BOTTOMLEFT = 7;
     private const int WMSZ_BOTTOMRIGHT = 8;
+    private const uint CS_DBLCLKS = 0x0008;
     private const uint TIMER_LINE_ADVANCE = 8301;
     private const uint TIMER_AUTO_HINT = 8302;
     private const uint TIMER_KEYPRESS = 8303;
@@ -31,6 +32,7 @@ internal sealed class LessonsWindow : IDisposable
     private const uint HINT_FLASH_MS = 1000;
     private const uint FREE_STATS_REFRESH_MS = 1000;
     private const int PENDING_PHYSICAL_TEXT_TIMEOUT_MS = 1000;
+    private const int FREE_PREVIEW_MAX_CHARS = 220;
 
     private const uint CLR_BG = 0x00201C18;
     private const uint CLR_PANEL = 0x00282018;
@@ -53,6 +55,8 @@ internal sealed class LessonsWindow : IDisposable
 
     private enum WindowMode { Lessons, Free }
 
+    private readonly record struct FreeVisualLine(int Start, int Length, int Width);
+
     private readonly Layout _layout;
     private readonly KeyMapper _mapper;
     private readonly KeyboardHook _hook;
@@ -61,6 +65,7 @@ internal sealed class LessonsWindow : IDisposable
     private readonly LessonHintProvider _hints;
     private readonly Win32.WNDPROC _wndProcDelegate;
     private readonly List<(Win32.RECT Rect, Action Action)> _clickActions = new();
+    private readonly List<(Win32.RECT Rect, Action Action)> _doubleClickActions = new();
     private readonly List<(Win32.RECT Rect, string Tooltip, bool PreferAbove, bool Compact)> _hoverAreas = new();
 
     private IntPtr _hWnd;
@@ -103,6 +108,7 @@ internal sealed class LessonsWindow : IDisposable
     private LessonAttemptStats? _lastCompletedStats;
     private char? _hintCharacter;
     private LessonHintMethod? _hintMethod;
+    private bool _hintBackspace;
     private bool _hintButtonActive;
     private int _consecutiveErrors;
     private uint _pressedScancode;
@@ -120,6 +126,8 @@ internal sealed class LessonsWindow : IDisposable
     private int _freeChars;
     private int _freeBackspaces;
     private string _freePreview = "";
+    private int _freeCursorIndex;
+    private Win32.RECT _freePreviewRect;
 
     public LessonsWindow(Layout layout, KeyMapper mapper, KeyboardHook hook)
     {
@@ -140,6 +148,7 @@ internal sealed class LessonsWindow : IDisposable
 
         CreateFonts();
         CreateWindow();
+        ConfigManager.WindowBoundsCleared += OnWindowBoundsCleared;
         PickInitialSelection();
         StartCurrentSession(savePosition: false);
 
@@ -148,9 +157,18 @@ internal sealed class LessonsWindow : IDisposable
     }
 
     public bool IsVisible => _visible;
+    private bool _inputPaused;
+
+    public void SetInputPaused(bool paused)
+    {
+        _inputPaused = paused;
+    }
 
     public void Show()
     {
+        if (!RestoreSavedBoundsIfVisible())
+            CenterOnActiveMonitor();
+        UpdateRenderScaleFromCurrentClient(force: true);
         _progress.SyncOnboardingProgress(_catalog, ConfigManager.LearningMaxStepCompleted);
         _mapper.RequestCapsLockOff();
         _mapper.SyncState();
@@ -243,7 +261,8 @@ internal sealed class LessonsWindow : IDisposable
             hInstance = hInstance,
             hCursor = Win32.LoadCursorW(IntPtr.Zero, (IntPtr)32512),
             hbrBackground = _hBgBrush,
-            lpszClassName = WND_CLASS_NAME
+            lpszClassName = WND_CLASS_NAME,
+            style = CS_DBLCLKS
         };
         Win32.RegisterClassExW(ref wc);
 
@@ -263,7 +282,83 @@ internal sealed class LessonsWindow : IDisposable
         _hWnd = Win32.CreateWindowExW(0, WND_CLASS_NAME, "AZERTY Global — Leçons",
             style, x, y, winW, winH, IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
         CaptureBaseWindowMetrics();
+        RestoreSavedBoundsIfVisible();
+        UpdateRenderScaleFromCurrentClient(force: true);
         Win32.EnableDarkTitleBar(_hWnd);
+    }
+
+    private bool RestoreSavedBoundsIfVisible()
+    {
+        if (_hWnd == IntPtr.Zero) return false;
+        if (!ConfigManager.TryGetWindowBounds(ConfigManager.LessonsWindowBoundsKey, out var rect))
+            return false;
+        if (!IsRectVisibleOnScreen(rect))
+            return false;
+
+        Win32.MoveWindow(_hWnd, rect.left, rect.top,
+            rect.right - rect.left, rect.bottom - rect.top, false);
+        return true;
+    }
+
+    private void CenterOnActiveMonitor()
+    {
+        if (_hWnd == IntPtr.Zero || !Win32.GetWindowRect(_hWnd, out var rect))
+            return;
+
+        int winW = Math.Max(1, rect.right - rect.left);
+        int winH = Math.Max(1, rect.bottom - rect.top);
+        Win32.GetCursorPos(out var cursor);
+        var monitor = Win32.MonitorFromPoint(cursor, Win32.MONITOR_DEFAULTTONEAREST);
+        var monInfo = new Win32.MONITORINFO { cbSize = Marshal.SizeOf<Win32.MONITORINFO>() };
+        if (!Win32.GetMonitorInfo(monitor, ref monInfo))
+            return;
+
+        int screenW = monInfo.rcWork.right - monInfo.rcWork.left;
+        int screenH = monInfo.rcWork.bottom - monInfo.rcWork.top;
+        int x = monInfo.rcWork.left + Math.Max(0, (screenW - winW) / 2);
+        int y = monInfo.rcWork.top + Math.Max(0, (screenH - winH) / 2);
+        Win32.MoveWindow(_hWnd, x, y, winW, winH, false);
+    }
+
+    private static bool IsRectVisibleOnScreen(Win32.RECT rect)
+    {
+        int width = rect.right - rect.left;
+        int height = rect.bottom - rect.top;
+        if (width < 100 || height < 80) return false;
+
+        var center = new Win32.POINT
+        {
+            x = rect.left + width / 2,
+            y = rect.top + height / 2
+        };
+        var monitor = Win32.MonitorFromPoint(center, 0);
+        if (monitor == IntPtr.Zero) return false;
+
+        var info = new Win32.MONITORINFO { cbSize = Marshal.SizeOf<Win32.MONITORINFO>() };
+        if (!Win32.GetMonitorInfo(monitor, ref info)) return false;
+
+        var work = info.rcWork;
+        return rect.right > work.left + 40 &&
+               rect.left < work.right - 40 &&
+               rect.bottom > work.top + 40 &&
+               rect.top < work.bottom - 40;
+    }
+
+    private void SaveWindowBounds()
+    {
+        if (_hWnd == IntPtr.Zero) return;
+        if (Win32.GetWindowRect(_hWnd, out var rect) && IsRectVisibleOnScreen(rect))
+            ConfigManager.SetWindowBounds(ConfigManager.LessonsWindowBoundsKey, rect);
+    }
+
+    private void OnWindowBoundsCleared(string key)
+    {
+        if (key != ConfigManager.LessonsWindowBoundsKey || _hWnd == IntPtr.Zero)
+            return;
+        CenterOnActiveMonitor();
+        UpdateRenderScaleFromCurrentClient(force: true);
+        if (_visible)
+            Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
     }
 
     private void CaptureBaseWindowMetrics()
@@ -371,6 +466,7 @@ internal sealed class LessonsWindow : IDisposable
         _liveResizing = false;
         DisposeResizeSnapshot();
         UpdateRenderScaleFromCurrentClient(force: true);
+        SaveWindowBounds();
         Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
     }
 
@@ -501,6 +597,7 @@ internal sealed class LessonsWindow : IDisposable
         _lastCompletedStats = null;
         _hintCharacter = null;
         _hintMethod = null;
+        _hintBackspace = false;
         _hintButtonActive = false;
         _consecutiveErrors = 0;
         ClearPendingPhysicalText();
@@ -534,7 +631,11 @@ internal sealed class LessonsWindow : IDisposable
                     return (IntPtr)1;
                 case Win32.WM_SIZE:
                     if (!_liveResizing)
+                    {
                         UpdateRenderScaleFromCurrentClient();
+                        if (_visible)
+                            SaveWindowBounds();
+                    }
                     Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
                     return IntPtr.Zero;
                 case Win32.WM_GETMINMAXINFO:
@@ -556,6 +657,9 @@ internal sealed class LessonsWindow : IDisposable
                 case Win32.WM_LBUTTONUP:
                     OnClick(lParam);
                     return IntPtr.Zero;
+                case Win32.WM_LBUTTONDBLCLK:
+                    OnDoubleClick(lParam);
+                    return IntPtr.Zero;
                 case Win32.WM_MOUSEMOVE:
                     OnMouseMove(lParam);
                     return IntPtr.Zero;
@@ -563,12 +667,18 @@ internal sealed class LessonsWindow : IDisposable
                     OnMouseLeave();
                     return IntPtr.Zero;
                 case Win32.WM_KEYDOWN:
+                    if (_inputPaused)
+                        return IntPtr.Zero;
                     OnKeyDown(wParam.ToInt32());
                     return IntPtr.Zero;
                 case Win32.WM_CHAR:
+                    if (_inputPaused)
+                        return IntPtr.Zero;
                     OnChar((char)wParam.ToInt32());
                     return IntPtr.Zero;
                 case Win32.WM_SYSCHAR:
+                    if (_inputPaused)
+                        return IntPtr.Zero;
                     OnChar((char)wParam.ToInt32());
                     return IntPtr.Zero;
                 case Win32.WM_SYSDEADCHAR:
@@ -578,6 +688,8 @@ internal sealed class LessonsWindow : IDisposable
                     int vk = wParam.ToInt32();
                     if (vk == 0x73) // VK_F4, preserve Alt+F4.
                         return Win32.DefWindowProcW(hWnd, msg, wParam, lParam);
+                    if (_inputPaused)
+                        return IntPtr.Zero;
                     OnKeyDown(vk);
                     return IntPtr.Zero;
                 }
@@ -649,6 +761,7 @@ internal sealed class LessonsWindow : IDisposable
         GdiHelpers.FillSolidRect(hdc, rc, CLR_BG);
         Win32.SetBkMode(hdc, Win32.TRANSPARENT);
         _clickActions.Clear();
+        _doubleClickActions.Clear();
         _hoverAreas.Clear();
 
         DrawHeader(hdc, rc);
@@ -821,6 +934,7 @@ internal sealed class LessonsWindow : IDisposable
         var keyboardRect = new Win32.RECT { left = rect.left + pad, top = rect.bottom - S(315), right = rect.right - pad, bottom = rect.bottom - S(16) };
         if (_showSummary && _lastCompletedStats != null)
         {
+            MoveKeyboardCloserToInput(ref keyboardRect, y + S(116));
             DrawCompletedExerciseControls(hdc, rect, y);
             if (ConfigManager.LessonSummaryVisible)
                 DrawSummary(hdc, rect, keyboardRect, y, _lastCompletedStats);
@@ -982,15 +1096,21 @@ internal sealed class LessonsWindow : IDisposable
 
     private void DrawSummary(IntPtr hdc, Win32.RECT rect, Win32.RECT keyboardRect, int minTop, LessonAttemptStats stats)
     {
-        int bottom = ConfigManager.LessonKeyboardVisible ? keyboardRect.top - S(10) : rect.bottom - S(22);
-        int cardH = S(110);
-        int top = Math.Max(minTop + S(46), bottom - cardH);
+        int maxBottom = ConfigManager.LessonKeyboardVisible ? keyboardRect.top - S(10) : rect.bottom - S(22);
+        int cardH = S(132);
+        int top = Math.Max(minTop + S(40), maxBottom - cardH);
+        int minCardH = S(92);
+        if (maxBottom - top < minCardH)
+            top = Math.Max(rect.top + S(8), maxBottom - minCardH);
+        if (maxBottom <= top)
+            return;
+
         var summaryRect = new Win32.RECT
         {
             left = rect.left + S(18),
             top = top,
             right = rect.right - S(18),
-            bottom = Math.Max(top + S(86), bottom)
+            bottom = maxBottom
         };
 
         DrawRoundedBox(hdc, summaryRect, CLR_PANEL_2, CLR_BORDER, S(8));
@@ -1000,7 +1120,7 @@ internal sealed class LessonsWindow : IDisposable
         DrawText(hdc, _hFontSubtitle, "Exercice réussi", new Win32.RECT { left = x, top = yy, right = summaryRect.right - S(12), bottom = yy + S(24) },
             CLR_TEXT, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_END_ELLIPSIS);
 
-        int metricY = summaryRect.top + S(44);
+        int metricY = summaryRect.top + S(48);
         int contentRight = summaryRect.right - S(18);
         int gap = S(28);
         int metricW = Math.Max(S(80), (contentRight - x - gap * 2) / 3);
@@ -1012,8 +1132,13 @@ internal sealed class LessonsWindow : IDisposable
         string detailText = hard.Count == 0
             ? $"Temps : {stats.ElapsedSeconds:0}s    Aucun caractère difficile sur cette tentative."
             : $"Temps : {stats.ElapsedSeconds:0}s    À retravailler : " + string.Join("   ", hard.Select(ch => FormatVisibleCharacter(ch.ToString())));
-        DrawText(hdc, _hFontSmall, detailText, new Win32.RECT { left = x, top = summaryRect.bottom - S(30), right = summaryRect.right - S(18), bottom = summaryRect.bottom - S(8) },
-            CLR_MUTED, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_END_ELLIPSIS);
+        int detailTop = metricY + S(52);
+        int detailBottom = summaryRect.bottom - S(10);
+        if (detailBottom > detailTop + S(12))
+        {
+            DrawText(hdc, _hFontSmall, detailText, new Win32.RECT { left = x, top = detailTop, right = summaryRect.right - S(18), bottom = detailBottom },
+                CLR_MUTED, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_END_ELLIPSIS);
+        }
     }
 
     private void DrawSummaryTextMetric(IntPtr hdc, int x, int y, int width, string label, string value, uint valueColor)
@@ -1049,8 +1174,9 @@ internal sealed class LessonsWindow : IDisposable
         x += size + gap;
         DrawIconButton(hdc, new Win32.RECT { left = x, top = y, right = x + size, bottom = y + size }, "↻", "Recommencer", false, () => StartCurrentSession(savePosition: true));
         x += size + gap;
-        string hintTooltip = _hintMethod == null ? "Indice" : FormatHintButtonText();
-        DrawIconButton(hdc, new Win32.RECT { left = x, top = y, right = x + size, bottom = y + size }, "💡", hintTooltip, _hintButtonActive, ShowHint);
+        string hintTooltip = (!_hintBackspace && _hintMethod == null) ? "Indice" : FormatHintButtonText();
+        DrawIconButton(hdc, new Win32.RECT { left = x, top = y, right = x + size, bottom = y + size }, "💡", hintTooltip,
+            _hintButtonActive || ConfigManager.LessonAutoHintsEnabled, ShowHint, ToggleAutoHints);
     }
 
     private void DrawKeyboard(IntPtr hdc, Win32.RECT rect, KeyboardRenderProfile profile)
@@ -1060,7 +1186,7 @@ internal sealed class LessonsWindow : IDisposable
             Shift = _mapper.ShiftDown,
             AltGr = _mapper.AltGrDown,
             Ctrl = _mapper.CtrlDown,
-            Alt = false,
+            Alt = _mapper.AltDown,
             CapsLock = _mapper.CapsLockActive,
             ActiveDeadKey = _mapper.ActiveDeadKey,
             PressedScancode = _pressedScancode,
@@ -1112,12 +1238,321 @@ internal sealed class LessonsWindow : IDisposable
         }
 
         var preview = new Win32.RECT { left = rect.left + pad, top = y, right = rect.right - pad, bottom = y + S(140) };
+        _freePreviewRect = preview;
         GdiHelpers.DrawPanel(hdc, preview, CLR_PANEL_2, CLR_BORDER, 0, 0);
-        DrawText(hdc, _hFontMono, _freePreview.Length == 0 ? "..." : _freePreview, new Win32.RECT { left = preview.left + S(12), top = preview.top + S(12), right = preview.right - S(12), bottom = preview.bottom - S(12) },
-            _freePreview.Length == 0 ? CLR_MUTED : CLR_TEXT, Win32.DT_LEFT | Win32.DT_WORDBREAK);
+        DrawFreePreviewText(hdc, preview);
 
         if (ConfigManager.LessonKeyboardVisible)
             DrawKeyboard(hdc, new Win32.RECT { left = rect.left + pad, top = rect.bottom - S(315), right = rect.right - pad, bottom = rect.bottom - S(16) }, KeyboardRenderProfile.Full);
+    }
+
+    private void DrawFreePreviewText(IntPtr hdc, Win32.RECT preview)
+    {
+        var lines = BuildFreeVisualLines(hdc, preview);
+        int firstVisibleLine = GetFreeFirstVisibleLine(lines, preview);
+        int left = FreeTextLeft(preview);
+        int y = FreeTextTop(preview);
+        int lineH = FreeLineHeight();
+
+        if (_freePreview.Length == 0)
+        {
+            DrawText(hdc, _hFontMono, "...", new Win32.RECT { left = left, top = y, right = preview.right - S(12), bottom = y + lineH },
+                CLR_MUTED, Win32.DT_LEFT | Win32.DT_SINGLELINE);
+        }
+        else
+        {
+            for (int i = firstVisibleLine; i < lines.Count; i++)
+            {
+                if (y + lineH > preview.bottom - S(8))
+                    break;
+
+                var line = lines[i];
+                string text = _freePreview.Substring(line.Start, line.Length);
+                DrawText(hdc, _hFontMono, text, new Win32.RECT { left = left, top = y, right = preview.right - S(12), bottom = y + lineH },
+                    CLR_TEXT, Win32.DT_LEFT | Win32.DT_SINGLELINE);
+                y += lineH;
+            }
+        }
+
+        DrawFreeCaret(hdc, preview, lines);
+    }
+
+    private void DrawFreeCaret(IntPtr hdc, Win32.RECT preview, IReadOnlyList<FreeVisualLine> lines)
+    {
+        int lineIndex = FindFreeLineIndex(lines, _freeCursorIndex);
+        int firstVisibleLine = GetFreeFirstVisibleLine(lines, preview);
+        var line = lines[lineIndex];
+        int offset = Math.Clamp(_freeCursorIndex - line.Start, 0, line.Length);
+        string prefix = offset == 0 ? "" : _freePreview.Substring(line.Start, offset);
+        int x = FreeTextLeft(preview) + GdiHelpers.MeasureSingleLineWidth(hdc, _hFontMono, prefix);
+        int top = FreeTextTop(preview) + (lineIndex - firstVisibleLine) * FreeLineHeight() + S(4);
+        int width = Math.Max(1, S(1));
+        var caret = new Win32.RECT { left = x, top = top, right = x + width, bottom = top + S(18) };
+        GdiHelpers.FillSolidRect(hdc, caret, CLR_CURRENT);
+    }
+
+    private List<FreeVisualLine> BuildFreeVisualLines(IntPtr hdc, Win32.RECT preview)
+    {
+        var lines = new List<FreeVisualLine>();
+        int maxWidth = Math.Max(1, preview.right - preview.left - S(24));
+        string text = _freePreview;
+
+        if (text.Length == 0)
+        {
+            lines.Add(new FreeVisualLine(0, 0, 0));
+            return lines;
+        }
+
+        int start = 0;
+        int width = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            char ch = text[i];
+            if (ch == '\n')
+            {
+                lines.Add(new FreeVisualLine(start, i - start, width));
+                start = i + 1;
+                width = 0;
+                continue;
+            }
+
+            int charWidth = MeasureFreeCharWidth(hdc, ch);
+            if (i > start && width + charWidth > maxWidth)
+            {
+                lines.Add(new FreeVisualLine(start, i - start, width));
+                start = i;
+                width = 0;
+            }
+
+            width += charWidth;
+        }
+
+        lines.Add(new FreeVisualLine(start, text.Length - start, width));
+        return lines;
+    }
+
+    private int FindFreeLineIndex(IReadOnlyList<FreeVisualLine> lines, int cursorIndex)
+    {
+        int cursor = Math.Clamp(cursorIndex, 0, _freePreview.Length);
+        for (int i = 0; i < lines.Count; i++)
+        {
+            var line = lines[i];
+            int lineEnd = line.Start + line.Length;
+            if (cursor == line.Start ||
+                (cursor > line.Start && cursor < lineEnd) ||
+                (cursor == lineEnd && (i == lines.Count - 1 || lines[i + 1].Start > cursor)))
+                return i;
+        }
+        return Math.Max(0, lines.Count - 1);
+    }
+
+    private int GetFreeVisibleLineCapacity(Win32.RECT preview)
+    {
+        int availableH = Math.Max(1, preview.bottom - S(8) - FreeTextTop(preview));
+        return Math.Max(1, availableH / Math.Max(1, FreeLineHeight()));
+    }
+
+    private int GetFreeFirstVisibleLine(IReadOnlyList<FreeVisualLine> lines, Win32.RECT preview)
+    {
+        int visibleLineCount = GetFreeVisibleLineCapacity(preview);
+        int cursorLine = FindFreeLineIndex(lines, _freeCursorIndex);
+        int maxFirstLine = Math.Max(0, lines.Count - visibleLineCount);
+        if (cursorLine < visibleLineCount)
+            return 0;
+        return Math.Clamp(cursorLine - visibleLineCount + 1, 0, maxFirstLine);
+    }
+
+    private int FindFreeIndexAtX(IntPtr hdc, FreeVisualLine line, int x)
+    {
+        if (line.Length <= 0)
+            return line.Start;
+
+        int width = 0;
+        for (int i = 0; i < line.Length; i++)
+        {
+            int charWidth = MeasureFreeCharWidth(hdc, _freePreview[line.Start + i]);
+            if (x < width + charWidth / 2)
+                return line.Start + i;
+            width += charWidth;
+        }
+        return line.Start + line.Length;
+    }
+
+    private void SetFreeCursorFromPoint(int x, int y)
+    {
+        var hdc = Win32.GetDC(_hWnd);
+        try
+        {
+            var lines = BuildFreeVisualLines(hdc, _freePreviewRect);
+            int firstVisibleLine = GetFreeFirstVisibleLine(lines, _freePreviewRect);
+            int visibleLineIndex = Math.Clamp((y - FreeTextTop(_freePreviewRect)) / FreeLineHeight(), 0, GetFreeVisibleLineCapacity(_freePreviewRect) - 1);
+            int lineIndex = Math.Clamp(firstVisibleLine + visibleLineIndex, 0, lines.Count - 1);
+            int relativeX = Math.Max(0, x - FreeTextLeft(_freePreviewRect));
+            _freeCursorIndex = FindFreeIndexAtX(hdc, lines[lineIndex], relativeX);
+            EnsureFreeCursorInRange();
+        }
+        finally
+        {
+            Win32.ReleaseDC(_hWnd, hdc);
+        }
+        Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+    }
+
+    private bool MoveFreeCursorVertical(int direction)
+    {
+        if (_freePreviewRect.right <= _freePreviewRect.left)
+            return false;
+
+        var hdc = Win32.GetDC(_hWnd);
+        try
+        {
+            var lines = BuildFreeVisualLines(hdc, _freePreviewRect);
+            int currentLineIndex = FindFreeLineIndex(lines, _freeCursorIndex);
+            int targetLineIndex = Math.Clamp(currentLineIndex + direction, 0, lines.Count - 1);
+            if (targetLineIndex == currentLineIndex)
+                return true;
+
+            var currentLine = lines[currentLineIndex];
+            int offset = Math.Clamp(_freeCursorIndex - currentLine.Start, 0, currentLine.Length);
+            string prefix = offset == 0 ? "" : _freePreview.Substring(currentLine.Start, offset);
+            int x = GdiHelpers.MeasureSingleLineWidth(hdc, _hFontMono, prefix);
+            _freeCursorIndex = FindFreeIndexAtX(hdc, lines[targetLineIndex], x);
+            EnsureFreeCursorInRange();
+        }
+        finally
+        {
+            Win32.ReleaseDC(_hWnd, hdc);
+        }
+
+        Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+        return true;
+    }
+
+    private int MeasureFreeCharWidth(IntPtr hdc, char ch)
+        => GdiHelpers.MeasureSingleLineWidth(hdc, _hFontMono, ch.ToString());
+
+    private int FreeTextLeft(Win32.RECT preview) => preview.left + S(12);
+    private int FreeTextTop(Win32.RECT preview) => preview.top + S(12);
+    private int FreeLineHeight() => S(26);
+
+    private static bool IsPointInRect(Win32.RECT rect, int x, int y)
+        => rect.right > rect.left && rect.bottom > rect.top &&
+           x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+
+    private void EnsureFreeCursorInRange()
+    {
+        _freeCursorIndex = Math.Clamp(_freeCursorIndex, 0, _freePreview.Length);
+    }
+
+    private bool MoveFreeCursorToLineBoundary(bool toEnd)
+    {
+        if (_freePreviewRect.right <= _freePreviewRect.left)
+        {
+            _freeCursorIndex = toEnd ? _freePreview.Length : 0;
+            Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+            return true;
+        }
+
+        var hdc = Win32.GetDC(_hWnd);
+        try
+        {
+            var lines = BuildFreeVisualLines(hdc, _freePreviewRect);
+            var line = lines[FindFreeLineIndex(lines, _freeCursorIndex)];
+            _freeCursorIndex = toEnd ? line.Start + line.Length : line.Start;
+            EnsureFreeCursorInRange();
+        }
+        finally
+        {
+            Win32.ReleaseDC(_hWnd, hdc);
+        }
+
+        Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+        return true;
+    }
+
+    private bool HandleFreeModeKeyDown(int vk)
+    {
+        EnsureFreeCursorInRange();
+        switch (vk)
+        {
+            case 0x25: // Left
+                if (_freeCursorIndex > 0)
+                    _freeCursorIndex--;
+                Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+                return true;
+
+            case 0x27: // Right
+                if (_freeCursorIndex < _freePreview.Length)
+                    _freeCursorIndex++;
+                Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+                return true;
+
+            case 0x26: // Up
+                return MoveFreeCursorVertical(-1);
+
+            case 0x28: // Down
+                return MoveFreeCursorVertical(1);
+
+            case 0x24: // Home
+                return MoveFreeCursorToLineBoundary(toEnd: false);
+
+            case 0x23: // End
+                return MoveFreeCursorToLineBoundary(toEnd: true);
+
+            case 0x08: // Backspace
+                if (_freeCursorIndex > 0 && _freePreview.Length > 0)
+                {
+                    _freePreview = _freePreview.Remove(_freeCursorIndex - 1, 1);
+                    _freeCursorIndex--;
+                    _freeBackspaces++;
+                    ArmFreeStatsTimerIfNeeded();
+                }
+                Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+                return true;
+
+            case 0x2E: // Delete
+                if (_freeCursorIndex < _freePreview.Length)
+                {
+                    _freePreview = _freePreview.Remove(_freeCursorIndex, 1);
+                    _freeBackspaces++;
+                    ArmFreeStatsTimerIfNeeded();
+                }
+                Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    private void InsertFreeCharacter(char c)
+    {
+        EnsureFreeCursorInRange();
+        _freeStartedAt ??= DateTimeOffset.UtcNow;
+        _freeChars++;
+        _freePreview = _freePreview.Insert(_freeCursorIndex, c.ToString());
+        _freeCursorIndex++;
+        TrimFreePreviewAroundCursor();
+        ArmFreeStatsTimerIfNeeded();
+        Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+    }
+
+    private void TrimFreePreviewAroundCursor()
+    {
+        if (_freePreview.Length <= FREE_PREVIEW_MAX_CHARS)
+            return;
+
+        int overflow = _freePreview.Length - FREE_PREVIEW_MAX_CHARS;
+        if (_freeCursorIndex >= _freePreview.Length - overflow)
+        {
+            _freePreview = _freePreview[overflow..];
+            _freeCursorIndex -= overflow;
+        }
+        else
+        {
+            _freePreview = _freePreview.Remove(Math.Max(0, _freePreview.Length - overflow), overflow);
+        }
+        EnsureFreeCursorInRange();
     }
 
     private string BuildFreeStatsText()
@@ -1137,6 +1572,7 @@ internal sealed class LessonsWindow : IDisposable
         _freeChars = 0;
         _freeBackspaces = 0;
         _freePreview = "";
+        _freeCursorIndex = 0;
         Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
     }
 
@@ -1149,13 +1585,15 @@ internal sealed class LessonsWindow : IDisposable
         AddClick(rect, action);
     }
 
-    private void DrawIconButton(IntPtr hdc, Win32.RECT rect, string icon, string tooltip, bool active, Action action)
+    private void DrawIconButton(IntPtr hdc, Win32.RECT rect, string icon, string tooltip, bool active, Action action, Action? doubleClickAction = null)
     {
         uint fill = active ? CLR_ACCENT : CLR_BUTTON_HOT;
         uint border = active ? CLR_ACCENT : CLR_BORDER;
         DrawRoundedBox(hdc, rect, fill, border, S(6));
         DrawText(hdc, icon == "💡" ? _hFontEmoji : _hFontIcon, icon, rect, CLR_TEXT, Win32.DT_CENTER | Win32.DT_VCENTER | Win32.DT_SINGLELINE | Win32.DT_END_ELLIPSIS);
         AddClick(rect, action);
+        if (doubleClickAction != null)
+            AddDoubleClick(rect, doubleClickAction);
         AddHover(rect, tooltip, preferAbove: true, compact: true);
     }
 
@@ -1239,6 +1677,11 @@ internal sealed class LessonsWindow : IDisposable
         _clickActions.Add((rect, action));
     }
 
+    private void AddDoubleClick(Win32.RECT rect, Action action)
+    {
+        _doubleClickActions.Add((rect, action));
+    }
+
     private void AddHover(Win32.RECT rect, string tooltip, bool preferAbove = false, bool compact = false)
     {
         _hoverAreas.Add((rect, tooltip, preferAbove, compact));
@@ -1256,7 +1699,27 @@ internal sealed class LessonsWindow : IDisposable
                 return;
             }
         }
+        if (_mode == WindowMode.Free && IsPointInRect(_freePreviewRect, x, y))
+        {
+            SetFreeCursorFromPoint(x, y);
+            Win32.SetFocus(_hWnd);
+            return;
+        }
         Win32.SetFocus(_hWnd);
+    }
+
+    private void OnDoubleClick(IntPtr lParam)
+    {
+        int x = unchecked((short)((long)lParam & 0xFFFF));
+        int y = unchecked((short)(((long)lParam >> 16) & 0xFFFF));
+        foreach (var (rect, action) in _doubleClickActions)
+        {
+            if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom)
+            {
+                action();
+                return;
+            }
+        }
     }
 
     private void OnMouseMove(IntPtr lParam)
@@ -1369,16 +1832,9 @@ internal sealed class LessonsWindow : IDisposable
                 return;
         }
         if (_settingsOpen) return;
-        if (_mode == WindowMode.Lessons && vk == 0x25)
-        {
-            PreviousExercise();
+        if (_mode == WindowMode.Free && HandleFreeModeKeyDown(vk))
             return;
-        }
-        if (_mode == WindowMode.Lessons && vk == 0x27)
-        {
-            NextExercise();
-            return;
-        }
+
         if (_mode == WindowMode.Lessons && vk == 0x08)
         {
             var result = _session.Backspace();
@@ -1390,13 +1846,6 @@ internal sealed class LessonsWindow : IDisposable
             Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
             return;
         }
-        if (_mode == WindowMode.Free && vk == 0x08)
-        {
-            _freeBackspaces++;
-            if (_freePreview.Length > 0) _freePreview = _freePreview[..^1];
-            ArmFreeStatsTimerIfNeeded();
-            Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
-        }
     }
 
     private void OnChar(char c)
@@ -1406,13 +1855,7 @@ internal sealed class LessonsWindow : IDisposable
         if (char.IsControl(c)) return;
         if (_mode == WindowMode.Free)
         {
-            _freeStartedAt ??= DateTimeOffset.UtcNow;
-            _freeChars++;
-            _freePreview += c;
-            if (_freePreview.Length > 220)
-                _freePreview = _freePreview[^220..];
-            ArmFreeStatsTimerIfNeeded();
-            Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+            InsertFreeCharacter(c);
             return;
         }
 
@@ -1515,6 +1958,24 @@ internal sealed class LessonsWindow : IDisposable
 
     private void ShowHintCore(bool automatic)
     {
+        if (_session.NeedsBackspaceCorrection)
+        {
+            Win32.KillTimer(_hWnd, (UIntPtr)TIMER_AUTO_HINT);
+            if (_hintBackspace)
+            {
+                ArmHintTimers(clearAfterDuration: !automatic);
+                Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+                return;
+            }
+            _hintBackspace = true;
+            _hintCharacter = null;
+            _hintMethod = null;
+            _session.RecordHint();
+            ArmHintTimers(clearAfterDuration: !automatic);
+            Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+            return;
+        }
+
         char? next = _session.GetNextExpectedCharacter();
         if (!next.HasValue) return;
         Win32.KillTimer(_hWnd, (UIntPtr)TIMER_AUTO_HINT);
@@ -1526,6 +1987,7 @@ internal sealed class LessonsWindow : IDisposable
         }
         var method = _hints.GetRecommendedMethod(next.Value);
         if (method == null) return;
+        _hintBackspace = false;
         _hintCharacter = next.Value;
         _hintMethod = method;
         _session.RecordHint();
@@ -1539,6 +2001,7 @@ internal sealed class LessonsWindow : IDisposable
         Win32.KillTimer(_hWnd, (UIntPtr)TIMER_HINT_FLASH_CLEAR);
         _hintCharacter = null;
         _hintMethod = null;
+        _hintBackspace = false;
         _hintButtonActive = false;
     }
 
@@ -1560,6 +2023,12 @@ internal sealed class LessonsWindow : IDisposable
 
     private void ApplyHintHighlight(KeyboardRenderState state)
     {
+        if (_hintBackspace)
+        {
+            state.HighlightedScancodes.Add(0x0E);
+            return;
+        }
+
         if (_hintMethod == null) return;
 
         if (!string.IsNullOrEmpty(_hintMethod.DeadKeyToken))
@@ -1758,6 +2227,9 @@ internal sealed class LessonsWindow : IDisposable
 
     private string FormatHintButtonText()
     {
+        if (_hintBackspace)
+            return "Retour arrière -> corriger";
+
         if (_hintMethod == null || !_hintCharacter.HasValue)
             return "Indice";
 
@@ -1866,6 +2338,7 @@ internal sealed class LessonsWindow : IDisposable
 
     private void OnRawKeyDown(uint scancode)
     {
+        if (_inputPaused) return;
         if (!_visible || _settingsOpen) return;
         _pressedScancode = scancode;
         CaptureExpectedTextForPhysicalKey(scancode);
@@ -1953,6 +2426,7 @@ internal sealed class LessonsWindow : IDisposable
 
     private void Hide()
     {
+        SaveWindowBounds();
         _visible = false;
         _settingsOpen = false;
         Win32.KillTimer(_hWnd, (UIntPtr)TIMER_AUTO_HINT);
@@ -1960,6 +2434,7 @@ internal sealed class LessonsWindow : IDisposable
         Win32.KillTimer(_hWnd, (UIntPtr)TIMER_HINT_CLEAR);
         Win32.KillTimer(_hWnd, (UIntPtr)TIMER_HINT_FLASH_CLEAR);
         _freePreview = "";
+        _freeCursorIndex = 0;
         _freeChars = 0;
         _freeBackspaces = 0;
         _freeStartedAt = null;
@@ -1969,6 +2444,7 @@ internal sealed class LessonsWindow : IDisposable
 
     public void Dispose()
     {
+        ConfigManager.WindowBoundsCleared -= OnWindowBoundsCleared;
         _mapper.StateChanged -= OnMapperStateChanged;
         _hook.RawKeyDown -= OnRawKeyDown;
         if (_hWnd != IntPtr.Zero)

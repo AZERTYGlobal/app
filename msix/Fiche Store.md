@@ -63,7 +63,7 @@ Vous cherchez un symbole ? Tapez son nom et l'application vous montre où il se 
 
 🔒 RESPECT DE LA VIE PRIVÉE
 • Aucune télémétrie, aucun compte requis, aucun envoi réseau automatique
-• Les frappes ne sont jamais enregistrées, stockées ni transmises
+• Les frappes ne sont jamais journalisées, stockées durablement ni transmises
 • Vos préférences, votre progression dans les leçons, les réglages de compatibilité par application et les journaux techniques restent localement sur votre appareil
 • La recherche de caractères copie uniquement le symbole choisi dans votre presse-papiers ; rien n'est transmis
 • Le lien de signalement de bug ne s'ouvre que si vous le choisissez et peut préremplir la version de l'app et de Windows
@@ -181,7 +181,7 @@ Looking for a symbol? Type its name and the app shows where it is on the keyboar
 
 🔒 PRIVACY-FIRST
 • No telemetry, no account required and no automatic network transfer
-• Keystrokes are never recorded, stored or transmitted
+• Keystrokes are never logged, persistently stored or transmitted
 • Preferences, lesson progress, per-application compatibility settings and technical logs stay local on your device
 • Character Search only copies the selected symbol to your clipboard; nothing is sent
 • The bug report link opens only when you choose it and may prefill the app and Windows version
@@ -258,7 +258,7 @@ contact@azerty.global
 
 ### Notes pour l'équipe de certification Microsoft
 
-**v0.12.0** : ajout du module Leçons (catalogue embarqué, progression locale, mode libre non persistant), mutualisation du rendu clavier et correctifs de robustesse AltGr / dispositions sous-jacentes non-AZERTY. Bundle 0.12.0.0 produit et vérifié (`Verify-Release.ps1` PASS). Rapport WACK `Archives/wack/2026-06/wack-report-v0.12.0.xml` : `OVERALL_RESULT=PASS`.
+**v0.12.0** : ajout du module Leçons (catalogue embarqué, progression locale sans caractères tapés persistés, mode libre non persistant), mutualisation du rendu clavier et correctifs de robustesse AltGr / dispositions sous-jacentes non-AZERTY. Bundle 0.12.0.0 reconstruit et vérifié le 2026-06-26 (`Verify-Release.ps1` PASS). Rapport WACK `Archives/wack/2026-06/wack-report-v0.12.0.xml` : `OVERALL_RESULT=PASS` (2026-06-26).
 
 **v0.11.2** : correctifs pré-publication Store (injection scancode réelle en mode compatibilité jeux, notification anti-cheat renforcée, journaux locaux durcis). Bundle 0.11.2.0 produit et vérifié (`Verify-Release.ps1` PASS). Rapport WACK `wack-report-v0.11.2.xml` : `OVERALL_RESULT=PASS`.
 
@@ -271,7 +271,7 @@ Cette application utilise un hook clavier bas niveau (WH_KEYBOARD_LL via SetWind
 Points importants :
  • Le hook ne s'injecte dans aucun processus externe — tout le traitement se fait dans le processus de l'application.
  • L'application affiche un écran de consentement (OnboardingWindow) au premier lancement, conformément à la politique Store 10.2.8 sur la transparence des logiciels qui modifient le comportement du système.
- • Aucune frappe n'est enregistrée, stockée ou transmise. L'application ne transmet aucune donnée : elle fonctionne hors ligne ; seuls des journaux techniques locaux peuvent être écrits pour diagnostiquer les erreurs et la compatibilité.
+ • Aucune frappe n'est journalisée, stockée durablement ou transmise. L'application n'effectue aucun envoi réseau automatique : le remapping, la recherche et les leçons fonctionnent localement ; seuls des journaux techniques locaux peuvent être écrits pour diagnostiquer les erreurs et la compatibilité.
  • L'application est un exécutable .NET 8.0 AOT natif (pas de runtime .NET requis).
  • La capacité runFullTrust est requise car c'est une application Desktop Bridge Win32.
 
@@ -321,4 +321,4 @@ Les fichiers suivants sont dans `msix/Assets/` :
 
 ---
 
-*Dernière mise à jour : 2026-06-21 (RC Store 0.12.0 vérifiée)*
+*Dernière mise à jour : 2026-06-26 (RC Store 0.12.0 vérifiée)*

@@ -24,7 +24,7 @@ internal sealed class LessonAttemptStats
     private readonly Func<DateTimeOffset> _clock;
     private DateTimeOffset? _startedAt;
     private DateTimeOffset? _completedAt;
-    private readonly Dictionary<char, Dictionary<char, int>> _errorMatrix = new();
+    private readonly Dictionary<char, int> _errorCountsByExpected = new();
 
     public LessonAttemptStats(Func<DateTimeOffset>? clock = null)
     {
@@ -38,7 +38,7 @@ internal sealed class LessonAttemptStats
     public int HintCount { get; private set; }
     public DateTimeOffset? StartedAt => _startedAt;
     public DateTimeOffset? CompletedAt => _completedAt;
-    public IReadOnlyDictionary<char, Dictionary<char, int>> ErrorMatrix => _errorMatrix;
+    public IReadOnlyDictionary<char, int> ErrorCountsByExpected => _errorCountsByExpected;
 
     public void RecordChar(char actual, char? expected)
     {
@@ -53,12 +53,8 @@ internal sealed class LessonAttemptStats
         ErrorCount++;
         if (expected.HasValue)
         {
-            if (!_errorMatrix.TryGetValue(expected.Value, out var wrongs))
-            {
-                wrongs = new Dictionary<char, int>();
-                _errorMatrix[expected.Value] = wrongs;
-            }
-            wrongs[actual] = wrongs.TryGetValue(actual, out int count) ? count + 1 : 1;
+            _errorCountsByExpected[expected.Value] =
+                _errorCountsByExpected.TryGetValue(expected.Value, out int count) ? count + 1 : 1;
         }
     }
 
@@ -108,8 +104,8 @@ internal sealed class LessonAttemptStats
 
     public IReadOnlyList<char> GetHardestCharacters(int maxCount)
     {
-        return _errorMatrix
-            .OrderByDescending(pair => pair.Value.Values.Sum())
+        return _errorCountsByExpected
+            .OrderByDescending(pair => pair.Value)
             .ThenBy(pair => pair.Key)
             .Take(maxCount)
             .Select(pair => pair.Key)
@@ -146,6 +142,11 @@ internal sealed class LessonTypingSession
     public string CurrentLine => _lines[Math.Min(LineIndex, _lines.Length - 1)];
     public string TypedLine => _typedLine;
     public int TotalLines => _lines.Length;
+    public bool NeedsBackspaceCorrection =>
+        Mode != LessonTypingMode.Strict &&
+        _typedLine.Length > 0 &&
+        _flexibleCorrectStates.Count >= _typedLine.Length &&
+        !_flexibleCorrectStates[_typedLine.Length - 1];
 
     public LessonInputResult TypeChar(char c)
     {

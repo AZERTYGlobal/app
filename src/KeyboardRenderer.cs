@@ -469,6 +469,9 @@ internal static class KeyboardRenderer
         int kh = rect.bottom - rect.top;
         int pad = Math.Clamp(kw / 10, 4, 14);
 
+        if ((state.Ctrl && !state.AltGr) || (state.Alt && !state.AltGr))
+            return;
+
         if (state.ActiveDeadKey != null)
         {
             DrawActiveDeadKeyCharacter(hdc, rect, key, keyDef, layout, state, hFontMain, hFontTiny);

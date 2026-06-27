@@ -311,7 +311,59 @@ sealed class KeyMapper
     }
 
     /// <summary>Vérifie si Ctrl+Shift sont enfoncés (pour le raccourci toggle).</summary>
-    public bool IsToggleShortcut() => IsShiftDown && (_leftCtrlDown || _rightCtrlDown);
+    public bool IsToggleShortcut() => IsShiftDown && IsCtrlDown && !IsAltGrDown && !_leftAltDown;
+
+    /// <summary>
+    /// Verifie si l'evenement correspond a un raccourci configure.
+    /// Les lettres/chiffres sont interpretes par position AZERTY Global afin que
+    /// Ctrl+Maj+Q reste sur C01 meme si la disposition Windows active est QWERTY.
+    /// </summary>
+    public bool MatchesShortcutKey(uint shortcutVk, uint eventVk, uint scanCode)
+    {
+        if (shortcutVk == 0)
+            return false;
+
+        if (TryGetLayoutShortcutScancode(shortcutVk, out var expectedScancode))
+            return scanCode == expectedScancode;
+
+        return eventVk == shortcutVk;
+    }
+
+    private bool TryGetLayoutShortcutScancode(uint vk, out uint scancode)
+    {
+        scancode = 0;
+        char? target = VkToShortcutCharacter(vk);
+        if (!target.HasValue)
+            return false;
+
+        foreach (var pair in _layout.Keys)
+        {
+            if (MatchesShortcutCharacter(pair.Value.Base, target.Value) ||
+                MatchesShortcutCharacter(pair.Value.Shift, target.Value))
+            {
+                scancode = pair.Key;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static char? VkToShortcutCharacter(uint vk)
+    {
+        if (vk >= 0x30 && vk <= 0x39)
+            return (char)vk;
+        if (vk >= 0x41 && vk <= 0x5A)
+            return char.ToLowerInvariant((char)vk);
+        return null;
+    }
+
+    private static bool MatchesShortcutCharacter(string? value, char target)
+    {
+        return !string.IsNullOrEmpty(value) &&
+            value.Length == 1 &&
+            char.ToLowerInvariant(value[0]) == char.ToLowerInvariant(target);
+    }
 
     /// <summary>Gère le raccourci Ctrl+Shift+CapsLock (toggle on/off du remapping).</summary>
     public void HandleToggleShortcut()

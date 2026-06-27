@@ -283,6 +283,7 @@ sealed class LearningModule : IDisposable
     // des "blinks" focus rapides causes par MoveWindow / ShowWindow / repaint forces.
     private bool _hasFocus = true;
     private bool _focusLostConfirmed;
+    private bool _inputPaused;
 
     // État
     private int _currentStep;
@@ -1005,7 +1006,8 @@ sealed class LearningModule : IDisposable
         // si l'exo le requiert (ex1, ex2). Sans ca, un Verr.Maj. herite du contexte
         // exterieur (avant le clic Essayer maintenant) brise la pedagogie de l'exo 1
         // (« Activez Verr. Maj. puis tapez sur la lettre é »).
-        _mapper.RequestCapsLockOff();
+        if (!_inputPaused)
+            _mapper.RequestCapsLockOff();
         Win32.EnableWindow(_hWndOnboarding, false);
         Win32.ShowWindow(_hWnd, 1);
         ConfigManager.LogCrashTraceDebug("LM.Show: ShowWindow done");
@@ -1021,6 +1023,28 @@ sealed class LearningModule : IDisposable
         _refocusAttempts = 0;
         Win32.SetTimer(_hWnd, (UIntPtr)TIMER_REFOCUS, 80, IntPtr.Zero);
         ConfigManager.LogCrashTraceDebug("LM.Show: focus done — exit");
+    }
+
+    public void SetInputPaused(bool paused)
+    {
+        if (_inputPaused == paused) return;
+        _inputPaused = paused;
+
+        if (paused)
+        {
+            _pressedScancode = 0;
+            Win32.KillTimer(_hWnd, (UIntPtr)TIMER_REFOCUS);
+            Win32.KillTimer(_hWnd, (UIntPtr)TIMER_FOCUS_LOST_CONFIRM);
+            if (_hWnd != IntPtr.Zero)
+                Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+        }
+    }
+
+    private static bool IsPausedInputMessage(uint msg)
+    {
+        return msg is Win32.WM_KEYDOWN or Win32.WM_KEYUP or Win32.WM_SYSKEYDOWN or Win32.WM_SYSKEYUP
+            or Win32.WM_CHAR or Win32.WM_SYSCHAR or Win32.WM_SYSDEADCHAR
+            or Win32.WM_COMMAND or Win32.WM_PASTE or Win32.WM_CUT or Win32.WM_CLEAR or Win32.WM_UNDO;
     }
 
     private int _refocusAttempts;
@@ -1194,6 +1218,9 @@ sealed class LearningModule : IDisposable
     {
         try
         {
+            if (_inputPaused && IsPausedInputMessage(msg))
+                return IntPtr.Zero;
+
             switch (msg)
             {
                 case Win32.WM_PAINT:

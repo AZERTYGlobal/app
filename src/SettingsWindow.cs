@@ -28,9 +28,11 @@ sealed class SettingsWindow : IDisposable
     private const int IDC_CHK_NOTIFICATIONS = 3104;
     private const int IDC_CHK_ONBOARDING = 3105;
     private const int IDC_LINK_RESET = 3107;
+    private const int IDC_RESET_VIRTUAL_KEYBOARD_WINDOW = 3108;
+    private const int IDC_RESET_LESSONS_WINDOW = 3109;
 
     private const int BASE_WIN_W = 240;
-    private const int BASE_WIN_H = 304;
+    private const int BASE_WIN_H = 392;
 
     private const uint CLR_BG = 0x00DDDDDD;
     private const uint CLR_TITLE = 0x00201C18;
@@ -75,6 +77,9 @@ sealed class SettingsWindow : IDisposable
         public Win32.RECT AutoStartRect;
         public Win32.RECT NotificationsRect;
         public Win32.RECT OnboardingRect;
+        public Win32.RECT WindowsPanel;
+        public Win32.RECT ResetVirtualKeyboardWindowRect;
+        public Win32.RECT ResetLessonsWindowRect;
         // GuideRect et CloseButtonRect retirés — la croix système suffit
     }
 
@@ -84,6 +89,8 @@ sealed class SettingsWindow : IDisposable
     private IntPtr _hWndChkAutoStart;
     private IntPtr _hWndChkNotifications;
     private IntPtr _hWndChkOnboarding;
+    private IntPtr _hWndResetVirtualKeyboardWindow;
+    private IntPtr _hWndResetLessonsWindow;
     private IntPtr _hWndLinkReset;
     private IntPtr _hWndValidation;
 
@@ -101,6 +108,7 @@ sealed class SettingsWindow : IDisposable
     private IntPtr _gdipLogo;
 
     private bool _visible;
+    private bool _inputPaused;
     private bool _keyboardValid = true;
     private bool _searchValid = true;
     private uint _keyboardVk;
@@ -211,6 +219,8 @@ sealed class SettingsWindow : IDisposable
         Win32.SendMessageW(_hWndChkAutoStart, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
         Win32.SendMessageW(_hWndChkNotifications, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
         Win32.SendMessageW(_hWndChkOnboarding, Win32.WM_SETFONT, _hFontBold, (IntPtr)1);
+        Win32.SendMessageW(_hWndResetVirtualKeyboardWindow, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
+        Win32.SendMessageW(_hWndResetLessonsWindow, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
         Win32.SendMessageW(_hWndLinkReset, Win32.WM_SETFONT, _hFontLink, (IntPtr)1);
         Win32.SendMessageW(_hWndValidation, Win32.WM_SETFONT, _hFontSmall, (IntPtr)1);
     }
@@ -304,6 +314,16 @@ sealed class SettingsWindow : IDisposable
             _hWnd, (IntPtr)IDC_CHK_ONBOARDING, hInstance, IntPtr.Zero);
         if (ConfigManager.ShowOnboardingAtStartup)
             Win32.SendMessageW(_hWndChkOnboarding, BM_SETCHECK, (IntPtr)BST_CHECKED, IntPtr.Zero);
+
+        _hWndResetVirtualKeyboardWindow = Win32.CreateWindowExW(0, "BUTTON", "Réinitialiser clavier virtuel",
+            Win32.WS_CHILD | Win32.WS_VISIBLE | Win32.WS_TABSTOP,
+            0, 0, 0, 0,
+            _hWnd, (IntPtr)IDC_RESET_VIRTUAL_KEYBOARD_WINDOW, hInstance, IntPtr.Zero);
+
+        _hWndResetLessonsWindow = Win32.CreateWindowExW(0, "BUTTON", "Réinitialiser module Leçons",
+            Win32.WS_CHILD | Win32.WS_VISIBLE | Win32.WS_TABSTOP,
+            0, 0, 0, 0,
+            _hWnd, (IntPtr)IDC_RESET_LESSONS_WINDOW, hInstance, IntPtr.Zero);
     }
 
     private void ResizeWindow()
@@ -357,6 +377,14 @@ sealed class SettingsWindow : IDisposable
             layout.OnboardingRect.left, layout.OnboardingRect.top,
             layout.OnboardingRect.right - layout.OnboardingRect.left,
             layout.OnboardingRect.bottom - layout.OnboardingRect.top, true);
+        Win32.MoveWindow(_hWndResetVirtualKeyboardWindow,
+            layout.ResetVirtualKeyboardWindowRect.left, layout.ResetVirtualKeyboardWindowRect.top,
+            layout.ResetVirtualKeyboardWindowRect.right - layout.ResetVirtualKeyboardWindowRect.left,
+            layout.ResetVirtualKeyboardWindowRect.bottom - layout.ResetVirtualKeyboardWindowRect.top, true);
+        Win32.MoveWindow(_hWndResetLessonsWindow,
+            layout.ResetLessonsWindowRect.left, layout.ResetLessonsWindowRect.top,
+            layout.ResetLessonsWindowRect.right - layout.ResetLessonsWindowRect.left,
+            layout.ResetLessonsWindowRect.bottom - layout.ResetLessonsWindowRect.top, true);
     }
 
     private LayoutInfo GetLayout(int winW, int winH)
@@ -417,9 +445,17 @@ sealed class SettingsWindow : IDisposable
             var onboardingRect = Rect(labelX, notificationsRect.bottom + checkboxGap,
                 contentWidth - panelPadX * 2, checkboxHeight);
 
-            int panelBottom = onboardingRect.bottom + S(12);
+            int windowsTitleTop = onboardingRect.bottom + S(18);
+            int buttonHeight = S(28);
+            var resetVirtualKeyboardWindowRect = Rect(labelX, windowsTitleTop + panelTitleHeight + S(9),
+                contentWidth - panelPadX * 2, buttonHeight);
+            var resetLessonsWindowRect = Rect(labelX, resetVirtualKeyboardWindowRect.bottom + S(7),
+                contentWidth - panelPadX * 2, buttonHeight);
+
+            int panelBottom = resetLessonsWindowRect.bottom + S(12);
             var shortcutsPanel = Rect(margin, shortcutsPanelTop, contentWidth, panelBottom - shortcutsPanelTop);
             var preferencesPanel = Rect(margin, prefsTitleTop, contentWidth, panelBottom - prefsTitleTop);
+            var windowsPanel = Rect(margin, windowsTitleTop, contentWidth, panelBottom - windowsTitleTop);
 
             return new LayoutInfo
             {
@@ -445,6 +481,9 @@ sealed class SettingsWindow : IDisposable
                 AutoStartRect = autoStartRect,
                 NotificationsRect = notificationsRect,
                 OnboardingRect = onboardingRect,
+                WindowsPanel = windowsPanel,
+                ResetVirtualKeyboardWindowRect = resetVirtualKeyboardWindowRect,
+                ResetLessonsWindowRect = resetLessonsWindowRect,
             };
         }
         finally
@@ -488,6 +527,20 @@ sealed class SettingsWindow : IDisposable
         _visible = true;
     }
 
+    public void SetInputPaused(bool paused)
+    {
+        if (_inputPaused == paused) return;
+        _inputPaused = paused;
+
+        if (paused && _focusedShortcut != IntPtr.Zero)
+        {
+            CancelShortcutCapture(_focusedShortcut);
+            _focusedShortcut = IntPtr.Zero;
+            if (_hWnd != IntPtr.Zero)
+                Win32.SetFocus(_hWnd);
+        }
+    }
+
     public void Close()
     {
         bool autoStart = Win32.SendMessageW(_hWndChkAutoStart, BM_GETCHECK, IntPtr.Zero, IntPtr.Zero) == (IntPtr)BST_CHECKED;
@@ -510,6 +563,9 @@ sealed class SettingsWindow : IDisposable
     {
         try
         {
+        if (_inputPaused && IsPausedInputMessage(msg))
+            return IntPtr.Zero;
+
         switch (msg)
         {
             case Win32.WM_PAINT:
@@ -560,6 +616,22 @@ sealed class SettingsWindow : IDisposable
                             ShortcutChanged?.Invoke();
                         }
                         break;
+                    case IDC_RESET_VIRTUAL_KEYBOARD_WINDOW:
+                        if (code == 0)
+                        {
+                            ConfigManager.ClearWindowBounds(ConfigManager.VirtualKeyboardBoundsKey);
+                            SetValidationMessage("Fenêtre clavier virtuel réinitialisée ✓");
+                            Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
+                        }
+                        break;
+                    case IDC_RESET_LESSONS_WINDOW:
+                        if (code == 0)
+                        {
+                            ConfigManager.ClearWindowBounds(ConfigManager.LessonsWindowBoundsKey);
+                            SetValidationMessage("Fenêtre Leçons réinitialisée ✓");
+                            Win32.InvalidateRect(_hWnd, IntPtr.Zero, true);
+                        }
+                        break;
                 }
                 return IntPtr.Zero;
             }
@@ -588,7 +660,8 @@ sealed class SettingsWindow : IDisposable
             {
                 IntPtr hdcButton = wParam;
                 IntPtr hCtrl = lParam;
-                if (hCtrl == _hWndChkAutoStart || hCtrl == _hWndChkNotifications || hCtrl == _hWndChkOnboarding)
+                if (hCtrl == _hWndChkAutoStart || hCtrl == _hWndChkNotifications || hCtrl == _hWndChkOnboarding ||
+                    hCtrl == _hWndResetVirtualKeyboardWindow || hCtrl == _hWndResetLessonsWindow)
                 {
                     Win32.SetBkMode(hdcButton, 1);
                     Win32.SetTextColor(hdcButton, CLR_TEXT);
@@ -705,6 +778,13 @@ sealed class SettingsWindow : IDisposable
         return vk is 0x10 or 0x11 or 0x12 or 0x14 or 0x5B or 0x5C or 0xA0 or 0xA1 or 0xA2 or 0xA3 or 0xA4 or 0xA5;
     }
 
+    private static bool IsPausedInputMessage(uint msg)
+    {
+        return msg is Win32.WM_KEYDOWN or Win32.WM_KEYUP or Win32.WM_SYSKEYDOWN or Win32.WM_SYSKEYUP
+            or Win32.WM_CHAR or Win32.WM_SYSCHAR or Win32.WM_SYSDEADCHAR
+            or Win32.WM_COMMAND or Win32.WM_PASTE or Win32.WM_CUT or Win32.WM_CLEAR or Win32.WM_UNDO;
+    }
+
     private void CancelShortcutCapture(IntPtr hWndShortcut)
     {
         if (hWndShortcut == _hWndEditKeyboard)
@@ -766,6 +846,9 @@ sealed class SettingsWindow : IDisposable
 
     private IntPtr ShortcutSubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, IntPtr dwRefData)
     {
+        if (_inputPaused && IsPausedInputMessage(msg))
+            return IntPtr.Zero;
+
         switch (msg)
         {
             case Win32.WM_GETDLGCODE:
@@ -894,6 +977,7 @@ sealed class SettingsWindow : IDisposable
         GdiHelpers.DrawPanel(hdc, layout.ShortcutsPanel, CLR_PANEL_BG, CLR_PANEL_BORDER, 0, 0);
         PaintShortcutPanel(hdc, layout);
         PaintPreferencesPanel(hdc, layout);
+        PaintWindowsPanel(hdc, layout);
 
         if (gfx != IntPtr.Zero)
             Win32.GdipDeleteGraphics(gfx);
@@ -996,6 +1080,26 @@ sealed class SettingsWindow : IDisposable
             bottom = titleY + S(20)
         };
         Win32.DrawTextW(hdc, "Préférences", -1, ref titleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
+    }
+
+    private void PaintWindowsPanel(IntPtr hdc, LayoutInfo layout)
+    {
+        int dividerY = layout.WindowsPanel.top - S(8);
+        GdiHelpers.FillSolidRect(hdc, Rect(layout.ShortcutsPanel.left + S(12), dividerY,
+            layout.ShortcutsPanel.right - layout.ShortcutsPanel.left - S(24), 1), CLR_SEPARATOR);
+
+        int titleX = layout.WindowsPanel.left + S(12);
+        int titleY = layout.WindowsPanel.top;
+        Win32.SelectObject(hdc, _hFontPanelTitle);
+        Win32.SetTextColor(hdc, CLR_LINK);
+        var titleRect = new Win32.RECT
+        {
+            left = titleX,
+            top = titleY,
+            right = layout.WindowsPanel.right - S(12),
+            bottom = titleY + S(20)
+        };
+        Win32.DrawTextW(hdc, "Fenêtres", -1, ref titleRect, Win32.DT_LEFT | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
     }
 
     private void DrawShortcutRow(IntPtr hdc, int labelX, int labelWidth, int rowY,
