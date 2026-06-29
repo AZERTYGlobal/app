@@ -93,6 +93,7 @@ internal sealed class LessonsWindow : IDisposable
     private IntPtr _hFontIcon;
     private IntPtr _hFontEmoji;
     private IntPtr _hFontKeyboard;
+    private IntPtr _hFontKeyboardDeadKey;
     private IntPtr _hFontKeyboardSmall;
     private IntPtr _hFontKeyboardTiny;
     private IntPtr _hFontKeyboardContext;
@@ -203,11 +204,12 @@ internal sealed class LessonsWindow : IDisposable
         _hFontSidebarModule = Win32.CreateFontW(-S(15), 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontSidebarLesson = Win32.CreateFontW(-S(14), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontMono = Win32.CreateFontW(-S(18), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Consolas");
-        _hFontLessonLine = Win32.CreateFontW(-S(14), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Consolas");
+        _hFontLessonLine = Win32.CreateFontW(-S(17), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Consolas");
         _hFontButton = Win32.CreateFontW(-S(12), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         _hFontIcon = Win32.CreateFontW(-S(18), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI Symbol");
         _hFontEmoji = Win32.CreateFontW(-S(17), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI Emoji");
         _hFontKeyboard = Win32.CreateFontW(S(28), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 4, 0, "Consolas");
+        _hFontKeyboardDeadKey = Win32.CreateFontW(S(24), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 4, 0, "Consolas");
         _hFontKeyboardSmall = Win32.CreateFontW(S(20), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Consolas");
         _hFontKeyboardTiny = Win32.CreateFontW(S(16), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
         _hFontKeyboardContext = Win32.CreateFontW(S(20), 0, 0, 0, 500, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
@@ -239,6 +241,7 @@ internal sealed class LessonsWindow : IDisposable
         DeleteObject(ref _hFontIcon);
         DeleteObject(ref _hFontEmoji);
         DeleteObject(ref _hFontKeyboard);
+        DeleteObject(ref _hFontKeyboardDeadKey);
         DeleteObject(ref _hFontKeyboardSmall);
         DeleteObject(ref _hFontKeyboardTiny);
         DeleteObject(ref _hFontKeyboardContext);
@@ -980,17 +983,17 @@ internal sealed class LessonsWindow : IDisposable
         DrawLessonIconButtons(hdc, new Win32.RECT { left = lineInfo.right - iconAreaW, top = lineInfo.top - S(12), right = lineInfo.right, bottom = lineInfo.top + S(20) });
         y += S(24);
 
-        var targetBox = new Win32.RECT { left = rect.left + S(18), top = y, right = rect.right - S(18), bottom = y + S(44) };
+        var targetBox = new Win32.RECT { left = rect.left + S(18), top = y, right = rect.right - S(18), bottom = y + S(52) };
         GdiHelpers.DrawPanel(hdc, targetBox, CLR_PANEL_2, CLR_BORDER, 0, 0);
         int lineScroll = CalculateLessonLineScrollOffset(hdc, targetBox);
         DrawTargetCharacters(hdc, targetBox, _session.GetCurrentLineSnapshot(), lineScroll);
-        y += S(48);
+        y += S(56);
 
-        var typedBox = new Win32.RECT { left = rect.left + S(18), top = y, right = rect.right - S(18), bottom = y + S(40) };
+        var typedBox = new Win32.RECT { left = rect.left + S(18), top = y, right = rect.right - S(18), bottom = y + S(48) };
         GdiHelpers.DrawPanel(hdc, typedBox, CLR_PANEL, CLR_BORDER, 0, 0);
         DrawTypedCharacters(hdc, typedBox, _session.GetTypedLineSnapshot(), lineScroll);
 
-        y += S(44);
+        y += S(52);
     }
 
     private int CalculateLessonLineScrollOffset(IntPtr hdc, Win32.RECT box)
@@ -1018,13 +1021,13 @@ internal sealed class LessonsWindow : IDisposable
     private int MeasureLessonCharacterWidth(IntPtr hdc, char ch)
     {
         string display = FormatVisibleCharacter(ch.ToString());
-        return Math.Max(S(10), GdiHelpers.MeasureSingleLineWidth(hdc, _hFontLessonLine, display) + S(3));
+        return Math.Max(S(12), GdiHelpers.MeasureSingleLineWidth(hdc, _hFontLessonLine, display) + S(4));
     }
 
     private void DrawTargetCharacters(IntPtr hdc, Win32.RECT box, IReadOnlyList<LessonCharacterSnapshot> characters, int scrollOffset)
     {
         int x = box.left + S(10) - scrollOffset;
-        int baselineY = box.top + S(7);
+        int baselineY = box.top + S(8);
 
         foreach (var item in characters)
         {
@@ -1036,7 +1039,7 @@ internal sealed class LessonsWindow : IDisposable
     private void DrawTypedCharacters(IntPtr hdc, Win32.RECT box, IReadOnlyList<LessonTypedCharacterSnapshot> characters, int scrollOffset)
     {
         int x = box.left + S(10) - scrollOffset;
-        int baselineY = box.top + S(5);
+        int baselineY = box.top + S(7);
 
         foreach (var item in characters)
         {
@@ -1046,7 +1049,7 @@ internal sealed class LessonsWindow : IDisposable
 
         if (!_session.IsLineComplete && !_session.IsExerciseComplete && x <= box.right - S(12))
         {
-            var caret = new Win32.RECT { left = x + S(2), top = baselineY + S(4), right = x + S(5), bottom = baselineY + S(28) };
+            var caret = new Win32.RECT { left = x + S(2), top = baselineY + S(4), right = x + S(5), bottom = baselineY + S(34) };
             GdiHelpers.FillSolidRect(hdc, caret, CLR_CURRENT);
         }
     }
@@ -1070,7 +1073,7 @@ internal sealed class LessonsWindow : IDisposable
             left = Math.Max(x, innerLeft),
             top = y,
             right = Math.Min(x + width, innerRight),
-            bottom = y + S(30)
+            bottom = y + S(36)
         };
         if (charRect.right <= charRect.left)
             return false;
@@ -1087,7 +1090,7 @@ internal sealed class LessonsWindow : IDisposable
         DrawText(hdc, _hFontLessonLine, display, charRect, textColor, Win32.DT_CENTER | Win32.DT_VCENTER | Win32.DT_SINGLELINE);
         if (underline)
         {
-            int underlineY = Math.Min(charRect.bottom - S(3), y + S(28));
+            int underlineY = Math.Min(charRect.bottom - S(3), y + S(34));
             GdiHelpers.FillSolidRect(hdc, new Win32.RECT { left = charRect.left + S(2), top = underlineY, right = charRect.right - S(2), bottom = underlineY + S(2) }, CLR_CURRENT);
         }
         x += width;
@@ -1195,16 +1198,23 @@ internal sealed class LessonsWindow : IDisposable
         };
         if (profile == KeyboardRenderProfile.Lesson)
         {
-            _hints.AddRequiredCharacters(CurrentLesson.Characters, state.LessonVisibleCharacters);
-            _hints.AddRequiredCharacters(CurrentExercise.Content, state.LessonVisibleCharacters);
-            if (_hintCharacter.HasValue)
+            if (_mode == WindowMode.Lessons)
             {
-                state.LessonVisibleCharacters.Add(_hintCharacter.Value.ToString());
-                _hints.AddRequiredDeadKey(_hintCharacter.Value, state.LessonVisibleCharacters);
+                _hints.AddRequiredCharacters(CurrentLesson.Characters, state.LessonVisibleCharacters);
+                _hints.AddRequiredCharacters(CurrentExercise.Content, state.LessonVisibleCharacters);
+                if (_hintCharacter.HasValue)
+                {
+                    state.LessonVisibleCharacters.Add(_hintCharacter.Value.ToString());
+                    _hints.AddRequiredDeadKey(_hintCharacter.Value, state.LessonVisibleCharacters);
+                }
+                ApplyHintHighlight(state);
             }
-            ApplyHintHighlight(state);
+            else if (_mode == WindowMode.Free)
+            {
+                _hints.AddRequiredCharacters(_freePreview, state.LessonVisibleCharacters);
+            }
         }
-        KeyboardRenderer.Draw(hdc, rect, _layout, profile, state, _hFontKeyboard, _hFontKeyboardSmall, _hFontKeyboardTiny, _hFontKeyboardContext);
+        KeyboardRenderer.Draw(hdc, rect, _layout, profile, state, _hFontKeyboard, _hFontKeyboardDeadKey, _hFontKeyboardSmall, _hFontKeyboardTiny, _hFontKeyboardContext);
         AddKeyboardHoverAreas(rect, profile, state);
     }
 
@@ -1243,7 +1253,7 @@ internal sealed class LessonsWindow : IDisposable
         DrawFreePreviewText(hdc, preview);
 
         if (ConfigManager.LessonKeyboardVisible)
-            DrawKeyboard(hdc, new Win32.RECT { left = rect.left + pad, top = rect.bottom - S(315), right = rect.right - pad, bottom = rect.bottom - S(16) }, KeyboardRenderProfile.Full);
+            DrawKeyboard(hdc, new Win32.RECT { left = rect.left + pad, top = rect.bottom - S(315), right = rect.right - pad, bottom = rect.bottom - S(16) }, KeyboardRenderProfile.Lesson);
     }
 
     private void DrawFreePreviewText(IntPtr hdc, Win32.RECT preview)

@@ -149,7 +149,7 @@ Assert-MatchIfExists $publicationPath ("Package Store : {0}" -f [regex]::Escape(
 Assert-MatchIfExists $todoPath ("Version actuelle : {0}" -f [regex]::Escape($version)) 'TO-DO'
 Assert-Match $changelogPath ("## Version {0}" -f [regex]::Escape($version)) 'Changelog'
 Assert-MatchIfExists $contextAppPath ("> \*\*Version actuelle\*\* : {0}" -f [regex]::Escape($version)) 'Contexte app'
-Assert-MatchIfExists $contextProjectPath ("\*\*Application Microsoft Store\*\* v{0}" -f [regex]::Escape($version)) 'Contexte projet'
+Assert-MatchIfExists $contextProjectPath ("\*\*Application Microsoft Store(?: / MSIX)?\*\* v{0}" -f [regex]::Escape($version)) 'Contexte projet'
 
 # --- Vérification des fichiers publiés ---
 

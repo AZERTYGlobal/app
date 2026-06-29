@@ -1,6 +1,8 @@
 # Changelog — Application AZERTY Global
 
-## Version 0.12.0 — 19 juin 2026
+## Version 1.0.0 — 29 juin 2026
+
+Version stable de lancement Microsoft Store. Cette version reprend la RC interne `0.12.0`, validée le 2026-06-26, puis reconstruite et publiée en `1.0.0` le 2026-06-29. Le MSIX hors Store signé AMCF reste un livrable séparé.
 
 **Module Leçons**
 
@@ -14,11 +16,13 @@
 - Le pass-through des lettres identiques reste actif même avec Verr. Maj. afin de préserver les raccourcis applicatifs comme `K` sur YouTube.
 - Les échecs de sauvegarde de `config.json` sont maintenant journalisés.
 
-**Validation RC Store**
+**Validation Store 1.0.0**
 
-- Bundle Store 0.12.0.0 reconstruit le 2026-06-26 (`msix/AZERTYGlobal-0.12.0.0.msixbundle`) pour x64 + ARM64, après suppression de toute persistance de frappe dans le module Leçons.
+- Bundle Store 1.0.0.0 reconstruit le 2026-06-29 (`msix/AZERTYGlobal-1.0.0.0.msixbundle`) pour x64 + ARM64.
 - `scripts/Verify-Release.ps1` PASS : hashes des exécutables publiés identiques aux exécutables embarqués dans le bundle.
-- WACK 0.12.0 PASS (`Archives/wack/2026-06/wack-report-v0.12.0.xml`) ; `DPIAwarenessValidation` PASS, optional `Blocked executables` non bloquant conservé.
+- WACK 1.0.0 PASS ; `DPIAwarenessValidation` PASS, optional `Blocked executables` non bloquant conservé.
+- Package accepté et publié par Microsoft le 2026-06-29.
+- SHA-256 du bundle Store : `E6BC370052CDFF26F8F3C6BD2526C338A749B67A2F48BE24B175C71C672C9855`.
 
 ## Version 0.11.2 — 3 juin 2026
 
@@ -311,4 +315,4 @@ Refonte majeure de la couche d'injection pour résoudre les problèmes de compat
 
 ---
 
-*Dernière mise à jour : 2026-06-26 (v0.12.0 — RC Store vérifiée)*
+*Dernière mise à jour : 2026-06-29 (v1.0.0 — publication Microsoft Store)*

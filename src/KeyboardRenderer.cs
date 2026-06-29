@@ -147,6 +147,7 @@ internal static class KeyboardRenderer
         KeyboardRenderProfile profile,
         KeyboardRenderState state,
         IntPtr hFontMain,
+        IntPtr hFontDeadKey,
         IntPtr hFontSmall,
         IntPtr hFontTiny,
         IntPtr hFontContext)
@@ -167,7 +168,7 @@ internal static class KeyboardRenderer
         foreach (var key in visualKeys)
         {
             var rect = ToRect(key, originX, originY, scale);
-            DrawKey(hdc, rect, key, layout, profile, state, hFontMain, hFontSmall, hFontTiny, hFontContext);
+            DrawKey(hdc, rect, key, layout, profile, state, hFontMain, hFontDeadKey, hFontSmall, hFontTiny, hFontContext);
         }
 
         if (state.ActiveDeadKey != null)
@@ -335,6 +336,7 @@ internal static class KeyboardRenderer
         KeyboardRenderProfile profile,
         KeyboardRenderState state,
         IntPtr hFontMain,
+        IntPtr hFontDeadKey,
         IntPtr hFontSmall,
         IntPtr hFontTiny,
         IntPtr hFontContext)
@@ -403,7 +405,7 @@ internal static class KeyboardRenderer
         }
 
         var filtered = FilterKeyForProfile(def, key.Scancode, profile, state);
-        DrawKeyCharacters(hdc, rect, key, filtered, layout, state, hFontMain, hFontSmall, hFontTiny);
+        DrawKeyCharacters(hdc, rect, key, filtered, layout, state, hFontMain, hFontDeadKey, hFontSmall, hFontTiny);
     }
 
     private static void DrawRectKey(IntPtr hdc, Win32.RECT rect, IntPtr brush)
@@ -460,6 +462,7 @@ internal static class KeyboardRenderer
         Layout layout,
         KeyboardRenderState state,
         IntPtr hFontMain,
+        IntPtr hFontDeadKey,
         IntPtr hFontSmall,
         IntPtr hFontTiny)
     {
@@ -474,7 +477,7 @@ internal static class KeyboardRenderer
 
         if (state.ActiveDeadKey != null)
         {
-            DrawActiveDeadKeyCharacter(hdc, rect, key, keyDef, layout, state, hFontMain, hFontTiny);
+            DrawActiveDeadKeyCharacter(hdc, rect, key, keyDef, layout, state, hFontDeadKey, hFontTiny);
             return;
         }
 

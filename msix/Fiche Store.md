@@ -76,11 +76,12 @@ Site web : https://azerty.global
 
 ### Nouveautés de cette version (notes de version)
 
-Version 0.12.0 :
+Version 1.0.0 :
  • Nouveau module Leçons avec catalogue d'exercices, progression locale et mode libre non persistant.
  • Clavier visuel harmonisé entre le clavier virtuel, l'onboarding et les leçons.
  • Indices pédagogiques intégrés aux leçons, avec prise en charge des touches mortes.
  • Correctifs de robustesse pour AltGr, les dispositions Windows non-AZERTY et les raccourcis applicatifs.
+ • Première version stable publiée sur le Microsoft Store.
 
 Version 0.11.2 :
  • Mise à jour de la phrase de l'exercice 4 dans le mini-onboarding.
@@ -194,11 +195,12 @@ Website: https://azerty.global
 
 ### What's new (release notes)
 
-Version 0.12.0:
+Version 1.0.0:
  • New Lessons module with exercise catalog, local progress and non-persistent free typing mode.
  • Visual keyboard harmonized across the virtual keyboard, onboarding and lessons.
  • Lesson hints with dead-key support.
  • Robustness fixes for AltGr, non-AZERTY Windows layouts and application shortcuts.
+ • First stable release prepared for dual distribution: Microsoft Store and AMCF-signed off-Store MSIX.
 
 Version 0.11.2:
  • Updated the sentence used in exercise 4 of the mini-onboarding.
@@ -258,7 +260,9 @@ contact@azerty.global
 
 ### Notes pour l'équipe de certification Microsoft
 
-**v0.12.0** : ajout du module Leçons (catalogue embarqué, progression locale sans caractères tapés persistés, mode libre non persistant), mutualisation du rendu clavier et correctifs de robustesse AltGr / dispositions sous-jacentes non-AZERTY. Bundle 0.12.0.0 reconstruit et vérifié le 2026-06-26 (`Verify-Release.ps1` PASS). Rapport WACK `Archives/wack/2026-06/wack-report-v0.12.0.xml` : `OVERALL_RESULT=PASS` (2026-06-26).
+**v1.0.0** : version stable issue de la RC `0.12.0`, avec module Leçons (catalogue embarqué, progression locale sans caractères tapés persistés, mode libre non persistant), mutualisation du rendu clavier et correctifs de robustesse AltGr / dispositions sous-jacentes non-AZERTY. Bundle 1.0.0.0 reconstruit et vérifié le 2026-06-28 (`Verify-Release.ps1` PASS). Rapport WACK `Archives/wack/2026-06/wack-report-v1.0.0.xml` : `OVERALL_RESULT=PASS` (2026-06-28). Package accepté et publié par Microsoft le 2026-06-29.
+
+**RC v0.12.0** : bundle 0.12.0.0 reconstruit et vérifié le 2026-06-26 (`Verify-Release.ps1` PASS). Rapport WACK `Archives/wack/2026-06/wack-report-v0.12.0.xml` : `OVERALL_RESULT=PASS` (2026-06-26).
 
 **v0.11.2** : correctifs pré-publication Store (injection scancode réelle en mode compatibilité jeux, notification anti-cheat renforcée, journaux locaux durcis). Bundle 0.11.2.0 produit et vérifié (`Verify-Release.ps1` PASS). Rapport WACK `wack-report-v0.11.2.xml` : `OVERALL_RESULT=PASS`.
 
@@ -275,7 +279,7 @@ Points importants :
  • L'application est un exécutable .NET 8.0 AOT natif (pas de runtime .NET requis).
  • La capacité runFullTrust est requise car c'est une application Desktop Bridge Win32.
 
-APIs additionnelles introduites v0.9.7 pour la couche compatibilité jeux (toujours présentes en v0.9.8 / v0.10.0 / v0.11.0 / v0.11.1 / v0.11.2 / v0.12.0) :
+APIs additionnelles introduites v0.9.7 pour la couche compatibilité jeux (toujours présentes en v0.9.8 / v0.10.0 / v0.11.0 / v0.11.1 / v0.11.2 / v1.0.0) :
  • SetWinEventHook(EVENT_SYSTEM_FOREGROUND) — pour détecter le changement d'application au premier plan et adapter le mode d'injection en conséquence.
  • OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ) + EnumProcessModulesEx + GetModuleFileNameExW — pour identifier les frameworks gaming chargés (GLFW, SDL, Unity, etc.) et basculer en mode d'injection compatible. Échoue gracieusement (try/catch) sur les processus protégés par un anti-cheat — comportement attendu et géré.
  • Aucune écriture, aucune injection de DLL ou de code dans les processus externes. Lecture seule des noms de modules pour déterminer le mode d'injection à utiliser.
@@ -283,7 +287,7 @@ APIs additionnelles introduites v0.9.7 pour la couche compatibilité jeux (toujo
 
 ### Note WACK — DPIAwarenessValidation
 
-Le dernier rapport WACK exécuté disponible (`Archives/wack/2026-06/wack-report-v0.12.0.xml`) passe `DPIAwarenessValidation`. Les versions précédentes pouvaient produire un WARNING faux positif lié au scanner WACK sur les binaires .NET 8 Native AOT ; cette note est conservée uniquement si Microsoft le signale à nouveau pendant la certification.
+Le dernier rapport WACK exécuté disponible pour v1.0.0 (`Archives/wack/2026-06/wack-report-v1.0.0.xml`) passe `DPIAwarenessValidation`. Les versions précédentes pouvaient produire un WARNING faux positif lié au scanner WACK sur les binaires .NET 8 Native AOT ; cette note est conservée uniquement si Microsoft le signale à nouveau pendant la certification.
 
 L'application est bel et bien DPI-aware en mode Per-Monitor V2, vérifiable de deux façons :
 
@@ -298,7 +302,7 @@ Le comportement DPI réel est conforme aux exigences ; toutes les fenêtres de l
 
 ### Note WACK — FAIL OPTIONAL « Fichiers exécutables bloqués »
 
-Ce test (`OPTIONAL=TRUE` dans le dernier rapport WACK disponible, v0.12.0) FAIL depuis la v0.9.5 (acceptée par Microsoft à la review précédente). Causes :
+Ce test (`OPTIONAL=TRUE` dans le dernier rapport WACK disponible, v1.0.0) FAIL depuis la v0.9.5 (acceptée par Microsoft à la review précédente). Causes :
  • Référence `shell32.dll!ShellExecuteW` — usage légitime pour ouvrir les liens externes (site web, GitHub, Discord, EUPL) depuis le menu tray et la fenêtre À propos.
  • Strings du runtime .NET Native AOT (`REg`, `cmD`, `MSBuild`) — résidus de noms d'outils dans le binaire, non utilisés à l'exécution.
 
@@ -315,10 +319,10 @@ Les fichiers suivants sont dans `msix/Assets/` :
 4. `Screenshot4.png` — Onboarding / aperçu fonctionnalités
 
 > ⚠️ Le Store demande des captures d'écran d'au moins 1366×768 px.
-> Screenshot1 (1600×900) et Screenshot2 (1920×1080) sont au format 16:9 standard.
-> Screenshot3 (1707×960) et Screenshot4 (1500×1057) ont des ratios non standards
+> Dimensions vérifiées le 2026-06-28 : Screenshot1 (1600×900), Screenshot2 (1902×1194), Screenshot3 (1707×960), Screenshot4 (1500×1057).
+> Screenshot1 est au format 16:9 standard ; Screenshot2, Screenshot3 et Screenshot4 ont des ratios non standards
 > susceptibles de générer des bandes noires en affichage Store — à éventuellement re-capturer.
 
 ---
 
-*Dernière mise à jour : 2026-06-26 (RC Store 0.12.0 vérifiée)*
+*Dernière mise à jour : 2026-06-29 (v1.0.0 — publication Microsoft Store)*

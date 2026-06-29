@@ -1,11 +1,12 @@
 # Packaging MSIX - AZERTY Global
 
-> Objectif : packager l'application AZERTY Global pour le Microsoft Store et la distribution hors Store.
+> Objectif : packager l'application AZERTY Global pour le Microsoft Store et la distribution hors Store signée AMCF.
 
 ## Prerequis
 
 - Windows 10/11 SDK (fournit `MakeAppx.exe` et `SignTool.exe`)
 - Compte developpeur Microsoft Partner Center
+- Microsoft Artifact Signing operationnel au nom de l'AMCF pour le canal hors Store signe
 - Exe AOT publie (`AZERTY Global.exe`)
 
 ## Structure du package
@@ -111,13 +112,28 @@ Corriger les problemes signales avant soumission. Les nouvelles APIs v0.9.7 (`PS
 4. Ajouter une note de certification expliquant l'usage de `WH_KEYBOARD_LL` + APIs v0.9.7 (`PSAPI`, `SetWinEventHook`) — voir section "Notes pour l'equipe de certification Microsoft" de `Fiche Store.md`
 5. Soumettre
 
+### 8. Signer le canal hors Store AMCF
+
+Le bundle Microsoft Store et le bundle hors Store signe AMCF sont deux artefacts de release distincts.
+
+- Store : uploader uniquement le bundle versionne attendu par Partner Center.
+- Hors Store : signer une copie du bundle avec Microsoft Artifact Signing au nom de l'AMCF, puis publier cette copie pour les environnements ou le Store est bloque.
+- Ne jamais uploader dans Partner Center un bundle signe localement pour test ou un artefact hors Store sans verification explicite.
+
+Commande type a adapter avec le vrai `metadata.json` local :
+
+```powershell
+signtool.exe sign /v /debug /fd SHA256 /tr "http://timestamp.acs.microsoft.com" /td SHA256 /dlib "<ArtifactSigningClient>\bin\x64\Azure.CodeSigning.Dlib.dll" /dmdf "metadata.json" "msix\AZERTYGlobal-<version>.msixbundle"
+```
+
 ## Notes importantes
 
 - Le dernier segment de version doit rester a `0` pour le Store (ex: `0.9.5.0`)
 - Microsoft re-signe automatiquement le package soumis
+- Le canal hors Store est signe au nom de l'AMCF via Microsoft Artifact Signing
 - L'app utilise `runFullTrust` via Desktop Bridge
 - L'onboarding sert de dialogue de consentement explicite
 
 ---
 
-*Derniere mise a jour : 2026-05-02 (v0.9.7 — bundle dual x64+arm64 + Verify-Release + WACK)*
+*Derniere mise a jour : 2026-06-29 (v1.0.0 — publication Microsoft Store ; MSIX AMCF a produire)*

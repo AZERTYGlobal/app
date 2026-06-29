@@ -14,7 +14,7 @@ AZERTY Global est une disposition clavier française améliorée, alternative à
 
 L'application Windows permet d'utiliser AZERTY Global **sans installation système et sans droits administrateur**. Elle fonctionne en arrière-plan et intercepte les frappes clavier pour appliquer la disposition.
 
-**Version actuelle du code :** 0.12.0 — package Microsoft Store 0.12.0.0.
+**Version actuelle du code :** 1.0.0 — package Microsoft Store 1.0.0.0, publié sur le Microsoft Store.
 
 ### Fonctionnalités
 
@@ -57,7 +57,7 @@ Le projet inclut une suite de tests unitaires xUnit dans `src/AZERTYGlobal.Tests
 dotnet test src/AZERTYGlobal.Tests
 ```
 
-La version 0.12.0 compte 119 tests unitaires.
+La version 1.0.0 compte 127 tests unitaires.
 
 ## Structure du projet
 

@@ -1,6 +1,6 @@
 # Cahier des charges — AZERTY Global pour Windows
 
-> Application Windows .NET 8 AOT distribuée via Microsoft Store (MSIX bundle x64 + ARM64), avec installeur EXE autonome non signé pour la passe finale actuelle. Sans dépendance externe, sans droits administrateur pour l'application Store.
+> Application Windows .NET 8 AOT distribuée via Microsoft Store (MSIX bundle x64 + ARM64) et, à partir de la v1.0.0, via MSIX hors Store signé au nom de l'AMCF. Sans dépendance externe, sans droits administrateur pour l'application Store ou MSIX.
 
 ---
 
@@ -140,7 +140,7 @@ L'application reste active dans les jeux pour permettre à l'utilisateur de cont
 - [x] Auto-start au démarrage Windows (raccourci dans le dossier Startup, sans admin)
 - [ ] Détection de disposition native (éviter le double remapping)
 - [ ] Profils : charger d'autres dispositions (QWERTY Français, QWERTY Globale) depuis des JSON
-- [ ] Auto-update EXE portable post-Azure Trusted Signing (check version au démarrage + téléchargement)
+- [ ] Vérification de mise à jour optionnelle post-publication Store / MSIX signé AMCF
 - [ ] Mise à jour de la liste anti-cheat sans recompilation (fichier JSON téléchargé périodiquement)
 
 ---
@@ -150,7 +150,7 @@ L'application reste active dans les jeux pour permettre à l'utilisateur de cont
 ### 3.1 Sécurité et confiance
 
 - [x] **Zéro droits administrateur** requis
-- [ ] **Zéro alerte SmartScreen** (nécessite signature via Azure Trusted Signing)
+- [ ] **Réduire les alertes SmartScreen / Smart App Control** : signature AMCF via Artifact Signing opérationnelle, réputation éditeur/fichier à construire
 - [ ] **Zéro faux positif antivirus** (choix de technologie non flaggée + soumission aux éditeurs AV)
 - [x] **Pas de keylogger** : l'application ne doit jamais enregistrer, stocker ou transmettre les frappes
 - [x] **Pas d'accès réseau** sauf vérification de mise à jour optionnelle
@@ -173,7 +173,8 @@ L'application reste active dans les jeux pour permettre à l'utilisateur de cont
 ### 3.4 Distribution
 
 - [x] **Microsoft Store** : MSIX bundle x64 + ARM64 (~11 Mo bundle, ~5 Mo par architecture)
-- [x] **Installeur EXE autonome non signé** pour la passe finale actuelle ; signature Azure Trusted Signing à réévaluer plus tard
+- [ ] **MSIX hors Store signé AMCF** via Microsoft Artifact Signing pour les environnements sans accès Microsoft Store — à produire après la publication Store 1.0.0
+- [ ] **Installeur EXE autonome classique signé AMCF** à produire si le canal EXE reste nécessaire
 - [x] Le JSON `AZERTY Global 2026.json` est embarqué dans le binaire comme ressource, synchronisée depuis la disposition actuelle
 
 ---
@@ -264,4 +265,4 @@ L'application doit lire ce JSON au démarrage et construire ses tables de mappin
 
 ---
 
-*Dernière mise à jour : 2026-05-23*
+*Dernière mise à jour : 2026-06-27*

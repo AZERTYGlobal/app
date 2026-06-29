@@ -2,19 +2,67 @@
 
 Compte développeur Microsoft Partner Center créé. Nom réservé : **AZERTY Global**.
 
-Version cible : 0.12.0
-Version publiée Store : 0.11.0
-Package Store : 0.12.0.0
-Publication Store : 2026-05-26 — disponible à tous
+Version cible : 1.0.0
+Version publiée Store : 1.0.0
+Package Store : 1.0.0.0
+Publication Store : 2026-06-29 — v1.0.0 acceptée par Microsoft et publiée
+Canal hors Store signé AMCF : Artifact Signing opérationnel ; MSIX AMCF v1.0.0 à produire comme artefact distinct du Store
 
 **Audit sécurité indépendant 2026-05** appliqué (9 patches mineurs) — voir `Archives/audits/2026-05/reports/AUDIT-SECURITY-v0.10.0.md`.
 **Versions précédentes** : 0.9.8 (publiable, non soumise) — hashes archivés ci-dessous pour traçabilité.
-**Statut 0.12.0** : bundle Store produit et vérifié ; WACK PASS ; prêt pour préparation de soumission Partner Center, sans soumission effectuée.
+**Statut 1.0.0** : bundle Store `1.0.0.0` produit et vérifié le 2026-06-28 ; WACK PASS ; soumission acceptée par Microsoft et publiée le 2026-06-29. La signature AMCF hors Store reste à produire.
+**Statut RC 0.12.0** : bundle Store produit et vérifié ; WACK PASS ; non soumis. Sert de base technique à la promotion `1.0.0`.
 **Statut 0.11.2** : bundle Store produit et vérifié ; WACK PASS.
 **Statut 0.11.1** : bundle Store produit et vérifié ; WACK PASS.
 **Statut 0.11.0** : bundle Store produit et vérifié, WACK PASS, version publiée sur le Microsoft Store le 2026-05-26.
 
-## État vérifié au 2026-06-26 (v0.12.0 RC Store)
+## État vérifié au 2026-06-28 (v1.0.0 Store)
+
+- `dotnet restore "src/AZERTYGlobal.csproj"` : PASS.
+- `dotnet test "src/AZERTYGlobal.Tests/AZERTYGlobal.Tests.csproj" --no-restore --logger "console;verbosity=normal"` : PASS (127/127).
+- `dotnet publish -c Release -r win-x64 --no-restore` : PASS après ajout temporaire de `C:\Program Files (x86)\Microsoft Visual Studio\Installer` au `PATH` pour `vswhere.exe`.
+- `dotnet publish -c Release -r win-arm64 --no-restore` : PASS.
+- `scripts/Pack-MSIX.ps1` : PASS, bundle dual x64 + ARM64 produit.
+- `scripts/Verify-Release.ps1` : PASS, hashes publish = bundle.
+- WACK `Archives/wack/2026-06/wack-report-v1.0.0.xml` : `OVERALL_RESULT=PASS`, `APP_VERSION=1.0.0.0`.
+- Captures Store : dimensions réelles documentées le 2026-06-28 dans `msix/Fiche Store.md`; recapture 16:9 à faire seulement si Partner Center refuse ou rend mal les ratios non standards.
+
+### Artefacts v1.0.0
+
+- Bundle versionné à uploader : `msix/AZERTYGlobal-1.0.0.0.msixbundle`
+- Bundle stable local : `msix/AZERTYGlobal.msixbundle`
+- SHA-256 bundle : `E6BC370052CDFF26F8F3C6BD2526C338A749B67A2F48BE24B175C71C672C9855`
+
+| Architecture | SHA-256 de l'exe (publish = bundle) |
+|---|---|
+| x64 | `1B360D9ACB92AF4EC16FD148321DCEF116CEC4F89550C3E9863E4998316F6962` |
+| arm64 | `0E03BEE46D341882160E5E7BC124BE40E85BD5B30BAC208837E14A73261F1318` |
+
+### Résultat WACK v1.0.0 (2026-06-28)
+
+Rapports archivés : `Archives/wack/2026-06/wack-report-v1.0.0.xml` et `Archives/wack/2026-06/wack-report-v1.0.0.htm`. `OVERALL_RESULT=PASS`.
+
+Tous les tests obligatoires passent, dont `DPIAwarenessValidation`. Le test optionnel `Blocked executables` reste en `FAIL` pour des raisons connues et non bloquantes (`ShellExecuteW`, chaînes runtime .NET Native AOT `REg`, `cmD`, `MSBuild`) ; il est dans la section optionnelle du WACK et n'affecte pas le verdict global.
+
+### Soumission Partner Center 1.0.0
+
+- Package uploadé : `msix/AZERTYGlobal-1.0.0.0.msixbundle`.
+- Notes de version FR/EN : section `Version 1.0.0` de `msix/Fiche Store.md`.
+- Politique de confidentialité : `https://azerty.global/mentions-legales`, mise à jour le 2026-06-26 pour couvrir config locale, progression locale des leçons sans texte tapé ni caractères erronés saisis, logs, compatibilité par application, presse-papiers local et bug report.
+- Notes certification Microsoft : utiliser la section `Informations communes (Partner Center)` de `msix/Fiche Store.md`, notamment hook clavier, `runFullTrust`, privacy, WACK PASS et optional `Blocked executables`.
+- Résultat : soumission acceptée par Microsoft et v1.0.0 publiée le 2026-06-29.
+- Suite GitHub : clone public synchronisé localement ; commit et tag `v1.0.0` à pousser après validation explicite. GitHub Release et MSIX hors Store signé AMCF restent à produire.
+
+### Préparation MSIX hors Store signé AMCF 1.0.0
+
+- Signature : Microsoft Artifact Signing au nom de l'AMCF.
+- Objectif : distribution directe / entreprise lorsque le Microsoft Store est bloqué.
+- Archive prévue : `Archives/artifact-signing/1.0.0.0/`.
+- Artefact à produire : copie versionnée du bundle `1.0.0.0` signée AMCF, distincte du bundle destiné au Partner Center.
+- À documenter après signature : chemin exact, SHA-256 du bundle signé, résultat d'installation/smoke test sur machine propre.
+- Ne pas uploader cet artefact hors Store dans Partner Center sans validation explicite.
+
+## État vérifié au 2026-06-26 (RC v0.12.0 Store)
 
 - `dotnet test "src/AZERTYGlobal.Tests/AZERTYGlobal.Tests.csproj" --no-restore` : PASS (121 tests)
 - `dotnet restore "src/AZERTYGlobal.csproj"` : PASS après nettoyage `obj/`
@@ -29,7 +77,7 @@ Publication Store : 2026-05-26 — disponible à tous
 
 - Bundle versionné à uploader : `msix/AZERTYGlobal-0.12.0.0.msixbundle`
 - Bundle stable local : `msix/AZERTYGlobal.msixbundle`
-- SHA-256 bundle : `4590BA050B402EB43D9C3F81900AB7BBDA3F80D958B7BFD2404648C4ACCDE2B5`
+- SHA-256 bundle : `55CCEA2ADE02DAF0DFB7A46071B97E56A708038C3106B7CD10206C62EC5C8A5F`
 
 | Architecture | SHA-256 de l'exe (publish = bundle) |
 |---|---|
@@ -44,8 +92,8 @@ Tous les tests obligatoires passent, dont `DPIAwarenessValidation`. Le test opti
 
 ### Préparation Partner Center 0.12.0
 
-- Package à uploader : `msix/AZERTYGlobal-0.12.0.0.msixbundle`.
-- Notes de version FR/EN : section `Version 0.12.0` de `msix/Fiche Store.md`.
+- Package non soumis : `msix/AZERTYGlobal-0.12.0.0.msixbundle`.
+- Notes de version FR/EN : section historique `Version 0.12.0`.
 - Politique de confidentialité : `https://azerty.global/mentions-legales`, mise à jour le 2026-06-26 pour couvrir config locale, progression locale des leçons sans texte tapé ni caractères erronés saisis, logs, compatibilité par application, presse-papiers local et bug report.
 - Notes certification Microsoft : utiliser la section `Informations communes (Partner Center)` de `msix/Fiche Store.md`, notamment hook clavier, `runFullTrust`, privacy, WACK PASS et optional `Blocked executables`.
 - Non effectué dans cette passe : upload Partner Center, soumission Store, synchronisation du clone public GitHub, tag `v0.12.0`, push.
@@ -170,13 +218,13 @@ Les 22 autres tests passent (sur 24 au total).
 - IDM_ONBOARDING tray : injection des deps Mapper/Hook/AppLayout (correction du silent fail « Essayer maintenant » sans onboarding auto-déclenché)
 - LearningModule : `WS_CLIPCHILDREN` (anti-flicker boutons en frappe rapide), TIMER_CAPS_RESYNC 50 ms (anti-désync visuel Verr. Maj. après RequestCapsLockOff), suppression du refresh tooltip dans OnStateChanged
 
-## Suivi post-publication 0.11.0
+## Suivi post-publication 1.0.0
 
 - Vérifier la fiche publique Microsoft Store : textes FR/EN, captures, liens support, politique de confidentialité.
 - Vérifier l'installation depuis le Store sur une machine propre : menu Démarrer, tray, hook, recherche, clavier virtuel, autostart, onboarding.
-- Synchroniser le repo GitHub public et taguer `v0.11.0` si ce n'est pas déjà fait. Ne jamais pousser sans validation explicite.
+- Synchroniser le repo GitHub public et taguer `v1.0.0` si souhaité. Ne jamais pousser sans validation explicite.
 - Capturer de nouveaux screenshots si la fiche publique affiche des bandes noires ou un état d'UI dépassé.
-- Soumission VirusTotal préventive du `AZERTY Global.exe` x64 seulement pour une diffusion hors Store de l'EXE autonome.
+- Produire et smoke-tester le MSIX hors Store signé AMCF si ce canal est publié.
 
 ## Séquence de release à appliquer aux prochaines versions
 
@@ -212,13 +260,12 @@ Le clone local du repo est dans `AZERTY Global/Microsoft Store - app repo/` (en 
    - Mettre à jour `README.md` du clone si nouvelles fonctionnalités, modules ou structure
    - `git -C "AZERTY Global/Microsoft Store - app repo" status` → vérifier le diff
    - Vérifier qu'aucun fichier sensible n'est ajouté (pas de `.env`, pas de certificat, pas de clé)
-   - `git add -A`
-   - `git commit -m "Release v0.X.Y — <résumé>"`
-   - `git tag -a v0.X.Y -m "Version 0.X.Y publiée sur le Microsoft Store le YYYY-MM-DD"`
+   - Stager explicitement les familles de fichiers réellement synchronisées ; ne jamais stager tout le clone par réflexe
+   - Créer le commit de release seulement après vérification du diff
+   - Créer le tag annoté seulement après validation explicite d'Antoine
 
-2. **Après publication Store réussie** :
-   - `git push origin main`
-   - `git push origin v0.X.Y`
+2. **Après publication Store réussie et validation explicite d'Antoine** :
+   - Pousser la branche principale et le tag depuis le clone public
    - Vérifier sur GitHub que commit + tag sont visibles
    - Si la release Store a un changelog notable, créer une **GitHub Release** depuis le tag (UI ou `gh release create v0.X.Y --notes "..."`)
 
@@ -233,6 +280,12 @@ Le clone local du repo est dans `AZERTY Global/Microsoft Store - app repo/` (en 
 
 - Version 0.11.0 publiée sur le Microsoft Store.
 - À vérifier dans le clone public : commit et tag `v0.11.0` visibles avant de considérer la release GitHub close.
+
+### État post-publication 1.0.0 au 2026-06-29
+
+- Version 1.0.0 acceptée par Microsoft et publiée sur le Microsoft Store.
+- Bundle soumis : `msix/AZERTYGlobal-1.0.0.0.msixbundle`.
+- À vérifier dans le clone public : synchronisation du code, commit et tag `v1.0.0` avant de considérer la release GitHub close.
 - Topics GitHub configurés : `azerty`, `csharp`, `dotnet`, `french`, `keyboard-layout`, `microsoft-store`, `native-aot`, `windows`
 - Homepage : `https://azerty.global`
 
@@ -249,4 +302,4 @@ Objectif initial atteint le 2026-05-26 : publier sur le Microsoft Store pour con
 
 ---
 
-*Dernière mise à jour : 2026-06-26*
+*Dernière mise à jour : 2026-06-29*

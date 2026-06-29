@@ -1,14 +1,21 @@
 # TO-DO — Application AZERTY Global (Microsoft Store)
 
-Version actuelle : 0.12.0 — RC Store vérifiée le 2026-06-26 ; 0.11.0 publiée sur le Microsoft Store le 2026-05-26
+Version actuelle : 1.0.0 — publiée sur le Microsoft Store le 2026-06-29 ; MSIX hors Store signé AMCF encore à produire
 
 ---
 
-## Post-publication Store 0.11.0
+## Post-publication 1.0.0 — Store + MSIX signé AMCF
+
+- [ ] Produire le MSIX hors Store signé AMCF via Microsoft Artifact Signing.
+- [ ] Documenter le chemin et le SHA-256 du bundle signé AMCF dans `Publication Microsoft Store.md`.
+- [ ] Smoke test du MSIX signé AMCF sur machine propre ou profil propre : installation, menu Démarrer, tray, hook, recherche, clavier virtuel, autostart, onboarding.
+- [ ] Préparer les libellés publics : distinguer "Microsoft Store" et "MSIX hors Store signé par l'AMCF" sans promettre une absence totale d'alerte SmartScreen.
+- [ ] Pousser le commit et le tag `v1.0.0` vers GitHub, puis créer la GitHub Release si souhaité. Ne jamais pousser sans validation explicite.
+
+## Suivi Store 1.0.0
 
 - [ ] Vérifier la fiche publique Microsoft Store : textes FR/EN, captures, liens support, politique de confidentialité.
 - [ ] Vérifier l'installation depuis le Store sur une machine propre : menu Démarrer, tray, hook, recherche, clavier virtuel, autostart, onboarding.
-- [ ] Synchroniser le repo public `AZERTYGlobal/app`, créer le tag `v0.11.0` et la GitHub Release si souhaité. Ne jamais pousser sans validation explicite.
 - [ ] Suivre les premiers retours Store : installation, SmartScreen, antivirus, bugs clavier, avis utilisateurs.
 
 ---
@@ -70,4 +77,4 @@ Version nominale post-publication. Le Store est déjà public depuis la 0.11.0 ;
 
 ---
 
-*Dernière mise à jour : 2026-06-26*
+*Dernière mise à jour : 2026-06-29*

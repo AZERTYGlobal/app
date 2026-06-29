@@ -254,6 +254,7 @@ sealed class LearningModule : IDisposable
     // Données de highlight (character-index.json)
     private readonly Dictionary<string, CharacterSearch.MethodData> _charMethods = new();        // recommended (Shift pour majuscules)
     private readonly Dictionary<string, CharacterSearch.MethodData> _charMethodsCaps = new();    // alternative Caps (utilisée si l'exercice a KeepCapsHighlight=true)
+    private readonly Dictionary<string, List<CharacterSearch.MethodData>> _charDeadKeyMethods = new(); // toutes les méthodes DK d'un caractère
     private readonly Dictionary<string, (string key, string layer)> _dkActivations = new();
     private readonly Dictionary<string, string> _charNames = new(); // char → unicodeNameFr
 
@@ -316,7 +317,6 @@ sealed class LearningModule : IDisposable
     private readonly HashSet<string> _highlightedLabels = new();
     private readonly HashSet<string> _highlightedContextIds = new();
     private string _highlightType = ""; // "direct", "step1", "step2"
-    private CharacterSearch.MethodData? _pendingStep2;
 
     // Contrôles
     private IntPtr _hWndBtnQuit;
@@ -342,6 +342,7 @@ sealed class LearningModule : IDisposable
     private IntPtr _hFontStatus;
     private IntPtr _hFontButton;
     private IntPtr _hFontCharMain;
+    private IntPtr _hFontCharDeadKey;
     private IntPtr _hFontCharSmall;
     private IntPtr _hFontCtx;
     private IntPtr _hFontProgress;
@@ -650,6 +651,7 @@ sealed class LearningModule : IDisposable
             JsonElement? recommended = null;
             JsonElement? capsMethod = null;
             JsonElement? fallback = null;
+            var deadKeyMethods = new List<CharacterSearch.MethodData>();
             foreach (var method in methods.EnumerateArray())
             {
                 var layer = method.TryGetProperty("layer", out var l) ? l.GetString() ?? "" : "";
@@ -658,6 +660,10 @@ sealed class LearningModule : IDisposable
                     && method.TryGetProperty("recommended", out var rec) && rec.GetBoolean())
                     recommended = method;
                 fallback ??= method;
+
+                var methodData = CreateMethodData(method);
+                if (methodData.Type == "deadkey" && !string.IsNullOrEmpty(methodData.DeadKey))
+                    deadKeyMethods.Add(methodData);
             }
             // Méthode par défaut = recommended (généralement Shift pour les majuscules).
             // L'exercice peut décider d'utiliser la variante Caps si KeepCapsHighlight=true,
@@ -665,42 +671,14 @@ sealed class LearningModule : IDisposable
             JsonElement? chosen = recommended ?? fallback;
             if (!chosen.HasValue) continue;
 
-            var mType = chosen.Value.GetProperty("type").GetString() ?? "";
-            var mKey = chosen.Value.TryGetProperty("key", out var mk) ? mk.GetString() ?? "" : "";
-            var mLayer = chosen.Value.TryGetProperty("layer", out var ml) ? ml.GetString() ?? "" : "";
-            var md = new CharacterSearch.MethodData { Type = mType, Key = mKey, Layer = mLayer };
-
-            if (mType == "deadkey")
-            {
-                var dkName = chosen.Value.GetProperty("deadkey").GetString() ?? "";
-                md.DeadKey = dkName;
-                if (_dkActivations.TryGetValue(dkName, out var dkAct))
-                {
-                    md.DkActivationKey = dkAct.key;
-                    md.DkActivationLayer = dkAct.layer;
-                }
-            }
-
-            _charMethods[entry.Name] = md;
+            _charMethods[entry.Name] = CreateMethodData(chosen.Value);
+            if (deadKeyMethods.Count > 0)
+                _charDeadKeyMethods[entry.Name] = deadKeyMethods;
 
             // Méthode alternative Caps (utilisée pour les exercices KeepCapsHighlight=true)
             if (capsMethod.HasValue)
             {
-                var capsType = capsMethod.Value.GetProperty("type").GetString() ?? "";
-                var capsKey = capsMethod.Value.TryGetProperty("key", out var ck) ? ck.GetString() ?? "" : "";
-                var capsLayer = capsMethod.Value.TryGetProperty("layer", out var cl) ? cl.GetString() ?? "" : "";
-                var mdCaps = new CharacterSearch.MethodData { Type = capsType, Key = capsKey, Layer = capsLayer };
-                if (capsType == "deadkey")
-                {
-                    var dkName = capsMethod.Value.GetProperty("deadkey").GetString() ?? "";
-                    mdCaps.DeadKey = dkName;
-                    if (_dkActivations.TryGetValue(dkName, out var dkAct))
-                    {
-                        mdCaps.DkActivationKey = dkAct.key;
-                        mdCaps.DkActivationLayer = dkAct.layer;
-                    }
-                }
-                _charMethodsCaps[entry.Name] = mdCaps;
+                _charMethodsCaps[entry.Name] = CreateMethodData(capsMethod.Value);
             }
 
             // Nom français pour les tooltips (champ "unicodeNameFr" du character-index).
@@ -725,6 +703,7 @@ sealed class LearningModule : IDisposable
         _hFontButton = Win32.CreateFontW(-S(14), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
         // Caractères dans les touches — tailles ajustables via learning-tweaks.json (FontSizeMain/Small/Ctx).
         _hFontCharMain = Win32.CreateFontW(S(_tweaks.FontSizeMain), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 4, 0, "Consolas");
+        _hFontCharDeadKey = Win32.CreateFontW(S(Math.Max(1, (int)Math.Round(_tweaks.FontSizeMain * 0.85))), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 4, 0, "Consolas");
         _hFontCharSmall = Win32.CreateFontW(S(_tweaks.FontSizeSmall), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Consolas");
         _hFontCtx = Win32.CreateFontW(S(_tweaks.FontSizeCtx), 0, 0, 0, 500, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
         _hFontProgress = Win32.CreateFontW(-S(16), 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
@@ -740,6 +719,7 @@ sealed class LearningModule : IDisposable
         Win32.DeleteObject(_hFontStatus);
         Win32.DeleteObject(_hFontButton);
         Win32.DeleteObject(_hFontCharMain);
+        Win32.DeleteObject(_hFontCharDeadKey);
         Win32.DeleteObject(_hFontCharSmall);
         Win32.DeleteObject(_hFontCtx);
         Win32.DeleteObject(_hFontProgress);
@@ -1038,6 +1018,27 @@ sealed class LearningModule : IDisposable
             if (_hWnd != IntPtr.Zero)
                 Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
         }
+    }
+
+    private CharacterSearch.MethodData CreateMethodData(JsonElement method)
+    {
+        var mType = method.GetProperty("type").GetString() ?? "";
+        var mKey = method.TryGetProperty("key", out var mk) ? mk.GetString() ?? "" : "";
+        var mLayer = method.TryGetProperty("layer", out var ml) ? ml.GetString() ?? "" : "";
+        var methodData = new CharacterSearch.MethodData { Type = mType, Key = mKey, Layer = mLayer };
+
+        if (mType == "deadkey")
+        {
+            var dkName = method.GetProperty("deadkey").GetString() ?? "";
+            methodData.DeadKey = dkName;
+            if (_dkActivations.TryGetValue(dkName, out var dkAct))
+            {
+                methodData.DkActivationKey = dkAct.key;
+                methodData.DkActivationLayer = dkAct.layer;
+            }
+        }
+
+        return methodData;
     }
 
     private static bool IsPausedInputMessage(uint msg)
@@ -1527,9 +1528,13 @@ sealed class LearningModule : IDisposable
 
     private void OnBackspace()
     {
-        // Backspace volontairement desactive pendant les exercices : le reflexe d'effacer
-        // une frappe correcte cassait la progression. L'erreur courante (_currentCharError)
-        // est de toute facon effacee automatiquement au prochain bon caractere tape.
+        // Backspace reste neutre pour le texte, mais peut servir a annuler une mauvaise
+        // touche morte activee dans le mapper. On rafraichit alors le guidage vers l'etape 1.
+        if (_highlightedScancodes.Contains(0x0E))
+        {
+            UpdateHighlight();
+            Win32.InvalidateRect(_hWnd, IntPtr.Zero, false);
+        }
         return;
     }
 
@@ -1605,7 +1610,6 @@ sealed class LearningModule : IDisposable
         _highlightedLabels.Clear();
         _highlightedContextIds.Clear();
         _highlightType = "";
-        _pendingStep2 = null;
     }
 
     private void AddContextHighlight(string contextId)
@@ -1616,6 +1620,11 @@ sealed class LearningModule : IDisposable
     private void AddShiftHighlight()
     {
         AddContextHighlight(VirtualKeyboard.ContextShiftLeft);
+    }
+
+    private void AddBackspaceHighlight()
+    {
+        _highlightedScancodes.Add(0x0E);
     }
 
     private CharacterSearch.MethodData? CreateDeadKeyMethod(string deadKey, string key, string layer)
@@ -1696,11 +1705,22 @@ sealed class LearningModule : IDisposable
         }
         else if (method.Type == "deadkey" && !string.IsNullOrEmpty(method.DkActivationKey))
         {
-            // Si la touche morte est déjà active, montrer seulement l'étape 2
-            if (_mapper.ActiveDeadKey != null)
+            var activeDeadKey = _mapper.ActiveDeadKey;
+            // Si une touche morte est déjà active, guider selon la touche morte réellement active :
+            // - bonne DK, ou alternative qui produit le même caractère : étape 2 sur la touche compatible ;
+            // - mauvaise DK sans alternative : Backspace pour annuler avant de recommencer.
+            if (activeDeadKey != null)
             {
                 _highlightType = "step2";
-                AddKeyHighlight(method.Key, method.Layer);
+                var activeMethod = ResolveStep2MethodForActiveDeadKey(
+                    nextChar,
+                    method,
+                    activeDeadKey,
+                    _charDeadKeyMethods);
+                if (activeMethod != null)
+                    AddKeyHighlight(activeMethod.Key, activeMethod.Layer);
+                else
+                    AddBackspaceHighlight();
             }
             else
             {
@@ -1755,27 +1775,28 @@ sealed class LearningModule : IDisposable
         return false;
     }
 
+    internal static CharacterSearch.MethodData? ResolveStep2MethodForActiveDeadKey(
+        string character,
+        CharacterSearch.MethodData preferredMethod,
+        string activeDeadKey,
+        IReadOnlyDictionary<string, List<CharacterSearch.MethodData>> deadKeyMethodsByCharacter)
+    {
+        if (!string.Equals(preferredMethod.Type, "deadkey", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        if (string.Equals(preferredMethod.DeadKey, activeDeadKey, StringComparison.Ordinal))
+            return preferredMethod;
+
+        if (!deadKeyMethodsByCharacter.TryGetValue(character, out var methods))
+            return null;
+
+        return methods.FirstOrDefault(method =>
+            string.Equals(method.Type, "deadkey", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(method.DeadKey, activeDeadKey, StringComparison.Ordinal));
+    }
+
     private bool IsStep2Key(in VirtualKeyboard.VisualKey vk)
     {
-        if (_pendingStep2 == null || _highlightType != "step1") return false;
-        bool targetIsLetter = false;
-        if (VirtualKeyboard.KeyCodeToScancode.TryGetValue(_pendingStep2.Key, out var sc))
-        {
-            if (vk.Scancode != 0 && vk.Scancode == sc) return true;
-            targetIsLetter = LetterKeyScancodes.Contains(sc);
-        }
-        // Modificateurs de l'etape 2 — Smart Caps Lock : si Caps est active ET la cible est
-        // une lettre, le « Shift » du JSON devient redondant. On highlight Verr.Maj a la place.
-        var layer2 = _pendingStep2.Layer;
-        bool needsShift = layer2 == "Shift" || layer2 == "Shift+AltGr" || layer2 == "AltGr+Shift";
-        bool needsAltGr = layer2 == "AltGr" || layer2 == "Shift+AltGr" || layer2 == "AltGr+Shift";
-        bool capsCoversShift = needsShift && _mapper.CapsLockActive && targetIsLetter;
-        if (vk.IsContextual)
-        {
-            if (needsShift && !capsCoversShift && vk.ContextId == VirtualKeyboard.ContextShiftLeft) return true;
-            if (capsCoversShift && vk.Label == "Verr. Maj.") return true;
-            if (needsAltGr && vk.Label == "AltGr") return true;
-        }
         return false;
     }
 
@@ -2219,13 +2240,12 @@ sealed class LearningModule : IDisposable
             //  • Touche à appuyer pour le caractère courant → contour vert + fond normal (KEY/KEY_CTX)
             //  • Touche modificateur à appuyer ET déjà activée par l'utilisateur → fond vert plein + contour vert épaissi
             //  • Modificateur activé hors contexte exercice (rare, ex Caps toggled sans être à appuyer) → fond CLR_MOD_ACTIVE
-            //  • Touche Backspace (scancode 0x0E) → desactivee pendant les exercices, fond plus terne
-            //    pour signaler visuellement qu'elle est inutile (cf. OnBackspace l. 1290).
-            //    Court-circuite isPressed pour ne pas faire flasher la touche en cas d'appui reflexe.
+            //  • Touche Backspace (scancode 0x0E) → fond terne quand elle est inutile ; highlight
+            //    vert si une mauvaise touche morte doit être annulée.
             bool isDisabledKey = vk.IsContextual && vk.Scancode == 0x0E;
             uint bgColor, borderColor;
             int borderWidth = 1;
-            if (isDisabledKey)
+            if (isDisabledKey && !isHighlighted && !isStep2)
             {
                 bgColor = CLR_KEY_DISABLED;
                 borderColor = CLR_KEY_BORDER;
@@ -2326,9 +2346,9 @@ sealed class LearningModule : IDisposable
             {
                 // Label centré, toujours en blanc cassé. Pour Entrée ISO, centrer le texte
                 // dans la colonne droite (la partie commune du L) et non sur la pleine largeur.
-                // Backspace desactivee : label en gris fonce pour signaler qu'elle est inutile.
+                // Backspace inactive : label gris. Quand elle est highlightée, elle redevient lisible.
                 var hOldFont = Win32.SelectObject(hdc, _hFontCtx);
-                Win32.SetTextColor(hdc, isDisabledKey ? 0x00606060u : CLR_CTX_TEXT);
+                Win32.SetTextColor(hdc, isDisabledKey && !isHighlighted && !isStep2 ? 0x00606060u : CLR_CTX_TEXT);
                 int ctxLeft = isIsoEnter
                     ? geo.OffsetX + (int)((vk.X + (vk.W - 1.25f)) * geo.Scale)
                     : kx;
@@ -2475,7 +2495,7 @@ sealed class LearningModule : IDisposable
 
         if (!string.IsNullOrEmpty(result))
         {
-            var hOldFont = Win32.SelectObject(hdc, _hFontCharMain);
+            var hOldFont = Win32.SelectObject(hdc, _hFontCharDeadKey);
             Win32.SetTextColor(hdc, CLR_DK_RESULT);
             var charRect = new Win32.RECT
             {

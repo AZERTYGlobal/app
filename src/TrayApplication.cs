@@ -426,15 +426,11 @@ sealed class TrayApplication : IDisposable
                         case IDM_ONBOARDING:
                             if (_onboarding == null)
                             {
-                                _onboarding = new OnboardingWindow();
-                                // Injecter les deps : sans ça, LaunchLearningModule (« Essayer
-                                // maintenant ») retourne silencieusement sur Mapper == null.
-                                // Cas typique : l'onboarding n'a pas ete auto-declenche au
-                                // demarrage (LearningMaxStepCompleted >= 3) et l'utilisateur
-                                // ouvre la fenetre via le menu tray pour la 1ere fois.
-                                _onboarding.Mapper = _mapper;
-                                _onboarding.Hook = _hook;
-                                _onboarding.AppLayout = _layout;
+                                _onboarding = CreateOnboardingWindow();
+                            }
+                            else
+                            {
+                                ConfigureOnboardingWindow(_onboarding);
                             }
                             ApplyWindowInputState();
                             _onboarding.Show();
@@ -445,10 +441,7 @@ sealed class TrayApplication : IDisposable
                             _about.Show();
                             break;
                         case IDM_EXERCISES:
-                            if (_mapper == null || _hook == null || _layout == null) break;
-                            _lessons ??= new LessonsWindow(_layout, _mapper, _hook);
-                            ApplyWindowInputState();
-                            _lessons.Show();
+                            ShowLessonsWindow();
                             break;
                         case IDM_COMPAT_AUTO:
                             ApplyCompatibilityOverride(null);
@@ -464,8 +457,12 @@ sealed class TrayApplication : IDisposable
                             ConfigManager.LogCrashTraceDebug("IDM_RESET_ONBOARDING: enter");
                             if (_onboarding == null)
                             {
-                                ConfigManager.LogCrashTraceDebug("IDM_RESET_ONBOARDING: creating new OnboardingWindow (Mapper/Hook/AppLayout NOT injected)");
-                                _onboarding = new OnboardingWindow();
+                                ConfigManager.LogCrashTraceDebug("IDM_RESET_ONBOARDING: creating new OnboardingWindow");
+                                _onboarding = CreateOnboardingWindow();
+                            }
+                            else
+                            {
+                                ConfigureOnboardingWindow(_onboarding);
                             }
                             ConfigManager.LogCrashTraceDebug($"IDM_RESET_ONBOARDING: Mapper={(_onboarding.Mapper != null)}, Hook={(_onboarding.Hook != null)}, AppLayout={(_onboarding.AppLayout != null)}");
                             _onboarding.ResetState();
@@ -696,12 +693,32 @@ sealed class TrayApplication : IDisposable
     /// </summary>
     private void ShowOnboardingNow()
     {
-        _onboarding = new OnboardingWindow();
-        _onboarding.Mapper = _mapper;
-        _onboarding.Hook = _hook;
-        _onboarding.AppLayout = _layout;
+        _onboarding = CreateOnboardingWindow();
         ApplyWindowInputState();
         _onboarding.Show();
+    }
+
+    private OnboardingWindow CreateOnboardingWindow()
+    {
+        var onboarding = new OnboardingWindow();
+        ConfigureOnboardingWindow(onboarding);
+        return onboarding;
+    }
+
+    private void ConfigureOnboardingWindow(OnboardingWindow onboarding)
+    {
+        onboarding.Mapper = _mapper;
+        onboarding.Hook = _hook;
+        onboarding.AppLayout = _layout;
+        onboarding.OpenLessonsRequested = ShowLessonsWindow;
+    }
+
+    private void ShowLessonsWindow()
+    {
+        if (_mapper == null || _hook == null || _layout == null) return;
+        _lessons ??= new LessonsWindow(_layout, _mapper, _hook);
+        ApplyWindowInputState();
+        _lessons.Show();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -724,30 +741,30 @@ sealed class TrayApplication : IDisposable
         uint searchFlags = ShouldProcessHook || _characterSearch?.IsVisible == true ? MF_STRING : MF_STRING | MF_GRAYED;
         Win32.AppendMenuW(hMenu, searchFlags, IDM_SEARCH, $"Rechercher un caractère\tCtrl+Maj+{searchKey}");
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_EXERCISES, "Leçons");
+        Win32.AppendMenuW(hMenu, MF_STRING, IDM_ONBOARDING, "Fenêtre de bienvenue");
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
 
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_PRIVACY, "Confidentialité && sécurité");
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_DISCORD, "Rejoindre la communauté Discord");
 
         // Ressources et liens externes
         var hResourcesMenu = Win32.CreatePopupMenu();
-        Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_GUIDE_CHANGES, "Les 5 changements");
-        Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_RELEASE_NOTES, "Nouveautés de la version");
-        Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_GUIDE_PDF, "Guide utilisateur imprimable (PDF)");
-        Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_CARDS, "Cartes du clavier");
+        Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_GUIDE_PDF, "Guide utilisateur imprimable");
         Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_SITE, "Site web");
+        Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_GUIDE_CHANGES, "Les 5 changements");
+        Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_CARDS, "Cartes du clavier");
+        Win32.AppendMenuW(hResourcesMenu, MF_STRING, IDM_RELEASE_NOTES, "Nouveautés de la version");
         Win32.AppendMenuW(hMenu, MF_STRING | MF_POPUP, (nuint)hResourcesMenu, "Ressources");
 
         var hFeedbackMenu = Win32.CreatePopupMenu();
-        Win32.AppendMenuW(hFeedbackMenu, MF_STRING, IDM_FEEDBACK, "Donner son avis");
-        Win32.AppendMenuW(hFeedbackMenu, MF_STRING, IDM_BUG, "Signaler un bug");
         Win32.AppendMenuW(hFeedbackMenu, MF_STRING, IDM_SUPPORT, "Soutenir le projet");
-        Win32.AppendMenuW(hMenu, MF_STRING | MF_POPUP, (nuint)hFeedbackMenu, "Retours & soutien");
+        Win32.AppendMenuW(hFeedbackMenu, MF_STRING, IDM_FEEDBACK, "Donner son avis");
+        Win32.AppendMenuW(hFeedbackMenu, MF_STRING, IDM_DISCORD, "Rejoindre la communauté Discord");
+        Win32.AppendMenuW(hFeedbackMenu, MF_STRING, IDM_BUG, "Signaler un bug");
+        Win32.AppendMenuW(hMenu, MF_STRING | MF_POPUP, (nuint)hFeedbackMenu, "Retours et soutien");
         Win32.AppendMenuW(hMenu, MF_SEPARATOR, 0, null);
 
         // Configuration
         Win32.AppendMenuW(hMenu, MF_STRING, IDM_SETTINGS, "Paramètres");
-        Win32.AppendMenuW(hMenu, MF_STRING, IDM_ONBOARDING, "Revoir la fenêtre de bienvenue");
 
         // Sous-menu compatibilite du process foreground (conditionnel — n'apparait que si fg detecte).
         // Le separateur qui suit est aussi conditionnel pour eviter un separateur orphelin.

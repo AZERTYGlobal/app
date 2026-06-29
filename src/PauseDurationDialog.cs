@@ -10,6 +10,10 @@ sealed class PauseDurationDialog : IDisposable
     private const int IDCANCEL = 2;
     private const int IDC_EDIT_HOURS = 4301;
     private const int IDC_EDIT_MINUTES = 4302;
+    private const int IDC_HOURS_UP = 4303;
+    private const int IDC_HOURS_DOWN = 4304;
+    private const int IDC_MINUTES_UP = 4305;
+    private const int IDC_MINUTES_DOWN = 4306;
 
     private const uint ES_AUTOHSCROLL = 0x0080;
     private const uint ES_CENTER = 0x0001;
@@ -124,11 +128,15 @@ sealed class PauseDurationDialog : IDisposable
     private void CreateControls(IntPtr hInstance)
     {
         CreateStatic(hInstance, "Durée de pause temporaire", 18, 16, 280, 22);
-        CreateStatic(hInstance, "Heures", 28, 55, 78, 22);
-        CreateStatic(hInstance, "Minutes", 150, 55, 82, 22);
+        CreateStatic(hInstance, "Heures", 28, 60, 72, 22);
+        CreateStatic(hInstance, "Minutes", 150, 60, 82, 22);
 
-        _hEditHours = CreateEdit(hInstance, IDC_EDIT_HOURS, "0", 82, 51, 50, 28);
-        _hEditMinutes = CreateEdit(hInstance, IDC_EDIT_MINUTES, "5", 218, 51, 50, 28);
+        _hEditHours = CreateEdit(hInstance, IDC_EDIT_HOURS, "0", 82, 54, 50, 26);
+        _hEditMinutes = CreateEdit(hInstance, IDC_EDIT_MINUTES, "5", 218, 54, 50, 26);
+        CreateButton(hInstance, IDC_HOURS_UP, "▲", 82, 38, 50, 15, BS_PUSHBUTTON);
+        CreateButton(hInstance, IDC_HOURS_DOWN, "▼", 82, 81, 50, 15, BS_PUSHBUTTON);
+        CreateButton(hInstance, IDC_MINUTES_UP, "▲", 218, 38, 50, 15, BS_PUSHBUTTON);
+        CreateButton(hInstance, IDC_MINUTES_DOWN, "▼", 218, 81, 50, 15, BS_PUSHBUTTON);
 
         CreateButton(hInstance, IDOK, "Mettre en pause", 96, 106, 120, 32, BS_DEFPUSHBUTTON);
         CreateButton(hInstance, IDCANCEL, "Annuler", 224, 106, 84, 32, BS_PUSHBUTTON);
@@ -172,6 +180,26 @@ sealed class PauseDurationDialog : IDisposable
                     if (id == IDOK)
                     {
                         ValidateAndClose();
+                        return IntPtr.Zero;
+                    }
+                    if (id == IDC_HOURS_UP)
+                    {
+                        AdjustHours(1);
+                        return IntPtr.Zero;
+                    }
+                    if (id == IDC_HOURS_DOWN)
+                    {
+                        AdjustHours(-1);
+                        return IntPtr.Zero;
+                    }
+                    if (id == IDC_MINUTES_UP)
+                    {
+                        AdjustMinutes(1);
+                        return IntPtr.Zero;
+                    }
+                    if (id == IDC_MINUTES_DOWN)
+                    {
+                        AdjustMinutes(-1);
                         return IntPtr.Zero;
                     }
                     if (id == IDCANCEL)
@@ -220,11 +248,37 @@ sealed class PauseDurationDialog : IDisposable
         Close(TimeSpan.FromMinutes(totalMinutes));
     }
 
+    private void AdjustHours(int delta)
+    {
+        int hours = Math.Clamp(ReadInt(_hEditHours) + delta, 0, 23);
+        WriteInt(_hEditHours, hours);
+    }
+
+    private void AdjustMinutes(int direction)
+    {
+        int minutes = Math.Clamp(ReadInt(_hEditMinutes), 0, 59);
+        if (direction > 0)
+        {
+            minutes = minutes >= 55 ? 55 : ((minutes / 5) + 1) * 5;
+        }
+        else
+        {
+            minutes = minutes <= 0 ? 0 : minutes % 5 == 0 ? minutes - 5 : minutes - (minutes % 5);
+        }
+
+        WriteInt(_hEditMinutes, minutes);
+    }
+
     private static int ReadInt(IntPtr hwnd)
     {
         var sb = new StringBuilder(16);
         Win32.GetWindowTextW(hwnd, sb, sb.Capacity);
         return int.TryParse(sb.ToString(), out int value) ? value : 0;
+    }
+
+    private static void WriteInt(IntPtr hwnd, int value)
+    {
+        Win32.SetWindowTextW(hwnd, value.ToString());
     }
 
     private void Close(TimeSpan? result)

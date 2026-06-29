@@ -29,6 +29,7 @@ sealed class OnboardingWindow : IDisposable
     private const int IDC_LINK_FEEDBACK = 2008;
     private const int IDC_LINK_DISCORD = 2010;
     private const int IDC_BTN_TRY = 2011;       // « Essayer maintenant » — etape 1 uniquement
+    private const int IDC_LINK_LESSONS = 2012;
 
     // Dimensions de base (96 DPI)
     private const int BASE_WIN_W = 560;
@@ -104,6 +105,7 @@ sealed class OnboardingWindow : IDisposable
     public KeyMapper? Mapper { get; set; }
     public KeyboardHook? Hook { get; set; }
     public Layout? AppLayout { get; set; }
+    public Action? OpenLessonsRequested { get; set; }
 
     public void SetInputPaused(bool paused)
     {
@@ -123,6 +125,7 @@ sealed class OnboardingWindow : IDisposable
     private IntPtr _hWndLinkFeedbackBanner;
 
     // Contrôles — Étape 3
+    private IntPtr _hWndLinkLessons;
     private IntPtr _hWndLinkGuide;
     private IntPtr _hWndLinkFeedback;
     private IntPtr _hWndLinkDiscord;
@@ -263,6 +266,7 @@ sealed class OnboardingWindow : IDisposable
         Win32.SendMessageW(_hWndBtnNext, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
         Win32.SendMessageW(_hWndBtnPrev, Win32.WM_SETFONT, _hFontButton, (IntPtr)1);
         Win32.SendMessageW(_hWndLinkFeedbackBanner, Win32.WM_SETFONT, _hFontLink, (IntPtr)1);
+        Win32.SendMessageW(_hWndLinkLessons, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
         Win32.SendMessageW(_hWndLinkGuide, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
         Win32.SendMessageW(_hWndLinkFeedback, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
         Win32.SendMessageW(_hWndLinkDiscord, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
@@ -304,10 +308,11 @@ sealed class OnboardingWindow : IDisposable
         // possibles a l'etape 1 (jamais essaye / essaye non complete / complete).
         Win32.MoveWindow(_hWndBtnPrev, margin, bottomY, S(BASE_BTN_W_PREV), S(BASE_BTN_H), true);
 
-        // Étape 3 — 3 liens (Guide, feedback, Discord) dans une grille fixe
-        Win32.MoveWindow(_hWndLinkGuide, linksX, linkStartY, linksWidth, linkControlHeight, true);
-        Win32.MoveWindow(_hWndLinkFeedback, linksX, linkStartY + linkRowH, linksWidth, linkControlHeight, true);
-        Win32.MoveWindow(_hWndLinkDiscord, linksX, linkStartY + linkRowH * 2, linksWidth, linkControlHeight, true);
+        // Étape 3 — liens dans une grille fixe
+        Win32.MoveWindow(_hWndLinkLessons, linksX, linkStartY, linksWidth, linkControlHeight, true);
+        Win32.MoveWindow(_hWndLinkGuide, linksX, linkStartY + linkRowH, linksWidth, linkControlHeight, true);
+        Win32.MoveWindow(_hWndLinkFeedback, linksX, linkStartY + linkRowH * 2, linksWidth, linkControlHeight, true);
+        Win32.MoveWindow(_hWndLinkDiscord, linksX, linkStartY + linkRowH * 3, linksWidth, linkControlHeight, true);
 
         // Préférences
         Win32.MoveWindow(_hWndChkAutoStart, checkboxX, checkboxY, checkboxWidth, checkboxHeight, true);
@@ -436,6 +441,12 @@ sealed class OnboardingWindow : IDisposable
         // ══ Étape 3 — Liens et checkboxes ══
         // Positions initiales temporaires — repositionnés dans RepositionControls
         int y = 0;
+        _hWndLinkLessons = Win32.CreateWindowExW(0, "STATIC", "Continuer avec les leçons",
+            Win32.WS_CHILD | SS_NOTIFY | Win32.WS_TABSTOP, margin, y, S(240), linkH,
+            _hWnd, (IntPtr)IDC_LINK_LESSONS, hInstance, IntPtr.Zero);
+        Win32.SendMessageW(_hWndLinkLessons, Win32.WM_SETFONT, _hFontLinkStrong, (IntPtr)1);
+        Win32.SetWindowSubclass(_hWndLinkLessons, _linkSubclassProc, (UIntPtr)6, IntPtr.Zero);
+
         _hWndLinkGuide = Win32.CreateWindowExW(0, "STATIC", "Guide de prise en main",
             Win32.WS_CHILD | SS_NOTIFY | Win32.WS_TABSTOP, margin, y, S(200), linkH,
             _hWnd, (IntPtr)IDC_LINK_GUIDE, hInstance, IntPtr.Zero);
@@ -483,6 +494,7 @@ sealed class OnboardingWindow : IDisposable
         Win32.ShowWindow(_hWndLinkFeedbackBanner, 0);
 
         int step3Vis = _currentStep == 2 ? 1 : 0;
+        Win32.ShowWindow(_hWndLinkLessons, step3Vis);
         Win32.ShowWindow(_hWndLinkGuide, step3Vis);
         Win32.ShowWindow(_hWndLinkFeedback, step3Vis);
         Win32.ShowWindow(_hWndLinkDiscord, step3Vis);
@@ -677,6 +689,8 @@ sealed class OnboardingWindow : IDisposable
                         if (code == 0) OpenLink("https://azerty.global/guide"); break;
                     case IDC_LINK_DISCORD:
                         if (code == 0) OpenLink("https://discord.gg/nYknqshJz3"); break;
+                    case IDC_LINK_LESSONS:
+                        if (code == 0) OpenLessonsRequested?.Invoke(); break;
                 }
                 return IntPtr.Zero;
 
@@ -684,7 +698,8 @@ sealed class OnboardingWindow : IDisposable
             {
                 IntPtr hdcStatic = wParam;
                 IntPtr hCtrl = lParam;
-                if (hCtrl == _hWndLinkGuide ||
+                if (hCtrl == _hWndLinkLessons ||
+                    hCtrl == _hWndLinkGuide ||
                     hCtrl == _hWndLinkFeedback || hCtrl == _hWndLinkDiscord)
                 {
                     Win32.SetBkMode(hdcStatic, 1);
@@ -711,7 +726,8 @@ sealed class OnboardingWindow : IDisposable
             }
 
             case Win32.WM_SETCURSOR:
-                if (wParam == _hWndLinkGuide ||
+                if (wParam == _hWndLinkLessons ||
+                    wParam == _hWndLinkGuide ||
                     wParam == _hWndLinkFeedback || wParam == _hWndLinkDiscord ||
                     wParam == _hWndLinkFeedbackBanner)
                 {
@@ -1060,8 +1076,7 @@ sealed class OnboardingWindow : IDisposable
             int pageTitleHeight = MeasureSingleLineHeight(hdc, _hFontPageTitle);
             linkControlHeight = Math.Max(S(28), MeasureSingleLineHeight(hdc, _hFontLinkStrong) + S(6));
             linkRowH = linkControlHeight + S(2);
-            // Le panel ressources contient désormais 3 liens (Guide, feedback, Discord)
-            int resourcesHeight = resourcePaddingTop + linkRowH * 3 + resourcePaddingBottom;
+            int resourcesHeight = resourcePaddingTop + linkRowH * 4 + resourcePaddingBottom;
             int panelTop = topY + pageTitleHeight + S(12);
 
             resourcesPanel = new Win32.RECT
@@ -1431,8 +1446,8 @@ sealed class OnboardingWindow : IDisposable
         GdiHelpers.DrawPanel(hdc, resourcesPanel, CLR_PANEL_BG, CLR_PANEL_BORDER, CLR_BADGE_BG, S(4));
         GdiHelpers.DrawPanel(hdc, prefsPanel, CLR_PANEL_BG, CLR_PANEL_BORDER, CLR_BADGE_BG, S(4));
 
-        // Séparateurs entre les 3 liens (Guide, feedback, Discord)
-        for (int row = 1; row < 3; row++)
+        // Séparateurs entre les liens
+        for (int row = 1; row < 4; row++)
         {
             var rowSep = new Win32.RECT
             {
@@ -1454,6 +1469,7 @@ sealed class OnboardingWindow : IDisposable
         _learningModule = null;
 
         if (_hWndLinkFeedbackBanner != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkFeedbackBanner, _linkSubclassProc, (UIntPtr)10);
+        if (_hWndLinkLessons != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkLessons, _linkSubclassProc, (UIntPtr)6);
         if (_hWndLinkGuide != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkGuide, _linkSubclassProc, (UIntPtr)1);
         if (_hWndLinkFeedback != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkFeedback, _linkSubclassProc, (UIntPtr)3);
         if (_hWndLinkDiscord != IntPtr.Zero) Win32.RemoveWindowSubclass(_hWndLinkDiscord, _linkSubclassProc, (UIntPtr)5);

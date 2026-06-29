@@ -260,6 +260,7 @@ sealed class VirtualKeyboard : IDisposable
 
     // Polices cachées (recréées sur WM_SIZE)
     private IntPtr _hCharFont;
+    private IntPtr _hActiveDeadKeyCharFont;
     private IntPtr _hLabelFont;
     private IntPtr _hCtxFont;
     private IntPtr _hBadgeFont;
@@ -297,11 +298,12 @@ sealed class VirtualKeyboard : IDisposable
     /// <summary>Crée ou recrée les polices selon la taille client actuelle.</summary>
     private void EnsureFonts(int cw, int ch)
     {
-        if (cw == _cachedCw && ch == _cachedCh && _hCharFont != IntPtr.Zero)
+        if (cw == _cachedCw && ch == _cachedCh && _hCharFont != IntPtr.Zero && _hActiveDeadKeyCharFont != IntPtr.Zero)
             return;
 
         // Libérer les anciennes polices
         if (_hCharFont != IntPtr.Zero) Win32.DeleteObject(_hCharFont);
+        if (_hActiveDeadKeyCharFont != IntPtr.Zero) Win32.DeleteObject(_hActiveDeadKeyCharFont);
         if (_hLabelFont != IntPtr.Zero) Win32.DeleteObject(_hLabelFont);
         if (_hCtxFont != IntPtr.Zero) Win32.DeleteObject(_hCtxFont);
         if (_hBadgeFont != IntPtr.Zero) Win32.DeleteObject(_hBadgeFont);
@@ -309,11 +311,13 @@ sealed class VirtualKeyboard : IDisposable
         var geo = GetKeyboardGeometry(cw, ch);
 
         int charFontSize = Math.Max(14, (int)(geo.Scale * 0.72f));
+        int activeDeadKeyCharFontSize = Math.Max(12, (int)(charFontSize * 0.85f));
         int labelFontSize = Math.Max(9, (int)(geo.Scale * 0.30f));
         int ctxFontSize = Math.Max(10, (int)(geo.Scale * 0.35f));
         int badgeFontSize = Math.Max(11, (int)(geo.Scale * 0.30f));
 
         _hCharFont = Win32.CreateFontW(charFontSize, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Consolas");
+        _hActiveDeadKeyCharFont = Win32.CreateFontW(activeDeadKeyCharFontSize, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Consolas");
         _hLabelFont = Win32.CreateFontW(labelFontSize, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
         _hCtxFont = Win32.CreateFontW(ctxFontSize, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI");
         _hBadgeFont = Win32.CreateFontW(-badgeFontSize, 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 5, 0, "Segoe UI");
@@ -765,7 +769,7 @@ sealed class VirtualKeyboard : IDisposable
     {
         var (border, _) = GetHighlightColors();
         int size = Math.Clamp(Math.Min(kw, kh) / 3, 18, 28);
-        int pad = Math.Max(4, size / 5);
+        int pad = Math.Max(1, size / 12);
         var rect = new Win32.RECT
         {
             left = kx + kw - size - pad,
@@ -1157,7 +1161,7 @@ sealed class VirtualKeyboard : IDisposable
                 {
                     int bottomOffset = showLabel ? labelFontSize + 2 : 0;
                     var charRect = new Win32.RECT { left = kx, top = ky, right = kx + kw, bottom = ky + kh - bottomOffset };
-                    Win32.SelectObject(hdc, hCharFont);
+                    Win32.SelectObject(hdc, showLabel && _hActiveDeadKeyCharFont != IntPtr.Zero ? _hActiveDeadKeyCharFont : hCharFont);
                     // Texte sombre sur fond clair quand la touche est pressée
                     uint charColor = isPressed ? 0x00201C18 : (isDkOutput ? CLR_DK_CHAR : CLR_CHAR);
                     Win32.SetTextColor(hdc, charColor);
@@ -1349,6 +1353,7 @@ sealed class VirtualKeyboard : IDisposable
         }
         // Polices cachées
         if (_hCharFont != IntPtr.Zero) { Win32.DeleteObject(_hCharFont); _hCharFont = IntPtr.Zero; }
+        if (_hActiveDeadKeyCharFont != IntPtr.Zero) { Win32.DeleteObject(_hActiveDeadKeyCharFont); _hActiveDeadKeyCharFont = IntPtr.Zero; }
         if (_hLabelFont != IntPtr.Zero) { Win32.DeleteObject(_hLabelFont); _hLabelFont = IntPtr.Zero; }
         if (_hCtxFont != IntPtr.Zero) { Win32.DeleteObject(_hCtxFont); _hCtxFont = IntPtr.Zero; }
         if (_hBadgeFont != IntPtr.Zero) { Win32.DeleteObject(_hBadgeFont); _hBadgeFont = IntPtr.Zero; }

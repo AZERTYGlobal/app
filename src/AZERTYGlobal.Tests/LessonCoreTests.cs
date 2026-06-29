@@ -520,6 +520,49 @@ public class LessonCoreTests
     }
 
     [Fact]
+    public void LearningModule_ResolvesStep2FromActiveDeadKeyOrAsksForBackspace()
+    {
+        var strokeMethod = new CharacterSearch.MethodData
+        {
+            Type = "deadkey",
+            DeadKey = "dk_stroke",
+            Key = "KeyO",
+            Layer = "Base"
+        };
+        var acuteMethod = new CharacterSearch.MethodData
+        {
+            Type = "deadkey",
+            DeadKey = "dk_acute",
+            Key = "KeyA",
+            Layer = "Base"
+        };
+        var methodsByCharacter = new Dictionary<string, List<CharacterSearch.MethodData>>
+        {
+            ["ø"] = new() { strokeMethod, acuteMethod }
+        };
+
+        var preferred = LearningModule.ResolveStep2MethodForActiveDeadKey(
+            "ø",
+            strokeMethod,
+            "dk_stroke",
+            methodsByCharacter);
+        var alternative = LearningModule.ResolveStep2MethodForActiveDeadKey(
+            "ø",
+            strokeMethod,
+            "dk_acute",
+            methodsByCharacter);
+        var invalid = LearningModule.ResolveStep2MethodForActiveDeadKey(
+            "ø",
+            strokeMethod,
+            "dk_tilde",
+            methodsByCharacter);
+
+        Assert.Same(strokeMethod, preferred);
+        Assert.Same(acuteMethod, alternative);
+        Assert.Null(invalid);
+    }
+
+    [Fact]
     public void LessonHintProvider_RevealsDeadKeysRequiredByLessonCharacters()
     {
         var provider = new LessonHintProvider();
