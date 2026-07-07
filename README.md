@@ -1,5 +1,7 @@
 # AZERTY Global — Application Windows
 
+> 🇬🇧 Windows companion app for **AZERTY Global**, the free, open-source (EUPL 1.2) corrected French keyboard layout — available on the [Microsoft Store](https://apps.microsoft.com/detail/9N4BTS43SSSZ). C# / .NET 8.0, native AOT. Project home: [azerty.global](https://azerty.global). README in French below.
+
 Application AZERTY Global pour Windows, disponible sur le [Microsoft Store](https://apps.microsoft.com/detail/9N4BTS43SSSZ).
 
 ## Qu'est-ce qu'AZERTY Global ?
