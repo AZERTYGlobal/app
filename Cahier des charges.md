@@ -173,7 +173,7 @@ L'application reste active dans les jeux pour permettre à l'utilisateur de cont
 ### 3.4 Distribution
 
 - [x] **Microsoft Store** : MSIX bundle x64 + ARM64 (~11 Mo bundle, ~5 Mo par architecture)
-- [ ] **MSIX hors Store signé AMCF** via Microsoft Artifact Signing pour les environnements sans accès Microsoft Store — à produire après la publication Store 1.0.0
+- [x] **MSIX hors Store signé AMCF** via Microsoft Artifact Signing pour les environnements sans accès Microsoft Store — produit et signé le 2026-06-30
 - [ ] **Installeur EXE autonome classique signé AMCF** à produire si le canal EXE reste nécessaire
 - [x] Le JSON `AZERTY Global 2026.json` est embarqué dans le binaire comme ressource, synchronisée depuis la disposition actuelle
 

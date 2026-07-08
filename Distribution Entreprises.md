@@ -8,10 +8,10 @@ Beaucoup d'entreprises bloquent le Microsoft Store. Le canal hors Store priorita
 
 ## Statut actuel
 
-- Artifact Signing account AMCF : opérationnel (`amcfazerty`, West Europe, Basic).
-- Validation Organization / Public : terminée le 2026-06-24.
-- Signature au nom de l'AMCF : opérationnelle.
-- v1.0.0 est publiée sur le Microsoft Store ; le bundle MSIX hors Store signé AMCF reste à produire comme artefact séparé.
+- Signature au nom de l'AMCF via Microsoft Artifact Signing : opérationnelle depuis le 2026-06-24 (validation Organization / Public terminée).
+- v1.0.0 publiée sur le Microsoft Store depuis le 2026-06-29.
+- MSIX hors Store signé AMCF v1.0.0 : produit et disponible depuis le 2026-06-30, comme artefact distinct du bundle Store.
+- Signature vérifiée (chaîne Public Trust, éditeur AMCF, horodatage Microsoft) ; installable en sideload ou par déploiement géré (Intune / SCCM / GPO) selon les politiques internes.
 
 ## Contexte distribution
 
@@ -25,4 +25,4 @@ Les entreprises sont un public cible important (surtout via LDLC/SILL), et le St
 
 ---
 
-*Dernière mise à jour : 2026-06-29*
+*Dernière mise à jour : 2026-07-06*

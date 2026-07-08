@@ -6,11 +6,11 @@ Version cible : 1.0.0
 Version publiée Store : 1.0.0
 Package Store : 1.0.0.0
 Publication Store : 2026-06-29 — v1.0.0 acceptée par Microsoft et publiée
-Canal hors Store signé AMCF : Artifact Signing opérationnel ; MSIX AMCF v1.0.0 à produire comme artefact distinct du Store
+Canal hors Store signé AMCF : MSIX AMCF v1.0.0 produit, signé et vérifié le 2026-06-30, comme artefact distinct du Store
 
 **Audit sécurité indépendant 2026-05** appliqué (9 patches mineurs) — voir `Archives/audits/2026-05/reports/AUDIT-SECURITY-v0.10.0.md`.
 **Versions précédentes** : 0.9.8 (publiable, non soumise) — hashes archivés ci-dessous pour traçabilité.
-**Statut 1.0.0** : bundle Store `1.0.0.0` produit et vérifié le 2026-06-28 ; WACK PASS ; soumission acceptée par Microsoft et publiée le 2026-06-29. La signature AMCF hors Store reste à produire.
+**Statut 1.0.0** : bundle Store `1.0.0.0` produit et vérifié le 2026-06-28 ; WACK PASS ; soumission acceptée par Microsoft et publiée le 2026-06-29. Le MSIX hors Store signé AMCF a été produit et vérifié le 2026-06-30.
 **Statut RC 0.12.0** : bundle Store produit et vérifié ; WACK PASS ; non soumis. Sert de base technique à la promotion `1.0.0`.
 **Statut 0.11.2** : bundle Store produit et vérifié ; WACK PASS.
 **Statut 0.11.1** : bundle Store produit et vérifié ; WACK PASS.
@@ -51,15 +51,15 @@ Tous les tests obligatoires passent, dont `DPIAwarenessValidation`. Le test opti
 - Politique de confidentialité : `https://azerty.global/mentions-legales`, mise à jour le 2026-06-26 pour couvrir config locale, progression locale des leçons sans texte tapé ni caractères erronés saisis, logs, compatibilité par application, presse-papiers local et bug report.
 - Notes certification Microsoft : utiliser la section `Informations communes (Partner Center)` de `msix/Fiche Store.md`, notamment hook clavier, `runFullTrust`, privacy, WACK PASS et optional `Blocked executables`.
 - Résultat : soumission acceptée par Microsoft et v1.0.0 publiée le 2026-06-29.
-- Suite GitHub : clone public synchronisé localement ; commit et tag `v1.0.0` à pousser après validation explicite. GitHub Release et MSIX hors Store signé AMCF restent à produire.
+- Suite GitHub : clone public synchronisé localement ; commit et tag `v1.0.0` à pousser après validation explicite. GitHub Release à créer si souhaité ; le MSIX hors Store signé AMCF a été produit le 2026-06-30.
 
-### Préparation MSIX hors Store signé AMCF 1.0.0
+### MSIX hors Store signé AMCF 1.0.0
 
-- Signature : Microsoft Artifact Signing au nom de l'AMCF.
+- Signature : Microsoft Artifact Signing au nom de l'AMCF, effectuée le 2026-06-30.
 - Objectif : distribution directe / entreprise lorsque le Microsoft Store est bloqué.
-- Archive prévue : `Archives/artifact-signing/1.0.0.0/`.
-- Artefact à produire : copie versionnée du bundle `1.0.0.0` signée AMCF, distincte du bundle destiné au Partner Center.
-- À documenter après signature : chemin exact, SHA-256 du bundle signé, résultat d'installation/smoke test sur machine propre.
+- Artefact : bundle `1.0.0.0` reconstruit avec l'éditeur AMCF puis signé, distinct du bundle destiné au Partner Center.
+- Signature vérifiée (chaîne Public Trust, éditeur AMCF, horodatage Microsoft) ; disponible au téléchargement depuis le site officiel.
+- Smoke test d'installation sur machine propre à confirmer avant diffusion large.
 - Ne pas uploader cet artefact hors Store dans Partner Center sans validation explicite.
 
 ## État vérifié au 2026-06-26 (RC v0.12.0 Store)
@@ -224,7 +224,7 @@ Les 22 autres tests passent (sur 24 au total).
 - Vérifier l'installation depuis le Store sur une machine propre : menu Démarrer, tray, hook, recherche, clavier virtuel, autostart, onboarding.
 - Synchroniser le repo GitHub public et taguer `v1.0.0` si souhaité. Ne jamais pousser sans validation explicite.
 - Capturer de nouveaux screenshots si la fiche publique affiche des bandes noires ou un état d'UI dépassé.
-- Produire et smoke-tester le MSIX hors Store signé AMCF si ce canal est publié.
+- Smoke-tester le MSIX hors Store signé AMCF sur machine propre avant diffusion large.
 
 ## Séquence de release à appliquer aux prochaines versions
 
@@ -302,4 +302,4 @@ Objectif initial atteint le 2026-05-26 : publier sur le Microsoft Store pour con
 
 ---
 
-*Dernière mise à jour : 2026-06-29*
+*Dernière mise à jour : 2026-07-06*
