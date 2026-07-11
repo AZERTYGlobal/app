@@ -23,3 +23,6 @@ config.json
 # OS
 Thumbs.db
 .DS_Store
+
+# Suivi interne (audits, taches) — hors depot public
+TO-DO.md
